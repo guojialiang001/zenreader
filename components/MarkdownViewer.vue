@@ -25,16 +25,17 @@ const dateStr = computed(() => new Date(props.file.lastModified).toLocaleDateStr
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-white" :class="className">
+  <div class="h-full overflow-y-auto bg-gradient-to-b from-brand-50 to-white" :class="className">
     <div class="max-w-4xl mx-auto px-6 py-12 md:px-12 md:py-16">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 md:p-10">
       
       <!-- Header Metadata -->
       <div class="mb-10 pb-8 border-b border-slate-100">
-        <h1 class="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight leading-tight">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4 tracking-tight leading-tight">
           {{ file.name.replace(/\.(md|markdown|txt)$/i, '') }}
         </h1>
-        <div class="flex flex-wrap items-center gap-6 text-sm text-slate-400 font-medium">
-          <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-6 text-sm text-slate-500 font-medium">
+          <div class="flex items中心 gap-2">
             <Calendar class="w-4 h-4" />
             <span>{{ dateStr }}</span>
           </div>
@@ -59,6 +60,7 @@ const dateStr = computed(() => new Date(props.file.lastModified).toLocaleDateStr
       <!-- Footer -->
       <div class="mt-20 pt-10 border-t border-slate-100 text-center">
           <p class="text-slate-400 italic text-sm">End of document</p>
+      </div>
       </div>
     </div>
   </div>
