@@ -18,10 +18,10 @@ const showHeader = computed(() => route.name === 'home')
           <RouterLink class="hover:text-brand-600 font-medium" to="/">主页</RouterLink>
           <RouterLink class="hover:text-brand-600 font-medium" to="/json">JSON 工具</RouterLink>
           <RouterLink class="hover:text-brand-600 font-medium" to="/timestamp">时间戳工具</RouterLink>
+          <RouterLink class="hover:text-brand-600 font-medium" to="/case">大小写转换</RouterLink>
         </nav>
       </div>
     </header>
-
     <RouterView />
   </div>
 </template>

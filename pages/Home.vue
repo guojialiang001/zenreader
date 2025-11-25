@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type } from 'lucide-vue-next'
 
 const search = ref('')
 const tools = [
   { name: 'Markdown 阅读器', desc: '导入并阅读 Markdown，优雅排版', route: '/reader', icon: 'file' },
   { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces' },
   { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock' },
+  { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case' },
 ]
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -45,7 +46,7 @@ const filtered = computed(() => {
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <RouterLink v-for="t in filtered" :key="t.route" :to="t.route" class="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 hover:border-brand-200 hover:shadow-brand-500/10 transition">
           <div class="flex items-center gap-3 mb-2">
-            <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : Clock)" class="w-5 h-5 text-brand-600" />
+            <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : (t.icon === 'clock' ? Clock : Type))" class="w-5 h-5 text-brand-600" />
             <div class="font-semibold text-slate-900">{{ t.name }}</div>
           </div>
           <div class="text-slate-600">{{ t.desc }}</div>
