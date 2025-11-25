@@ -1,0 +1,5 @@
+{
+  "name": "ZenReader",
+  "description": "A minimalist, elegant Markdown file reader built with Vue 3 and Tailwind CSS. Features file history, clean typography, and instant preview.",
+  "requestFramePermissions": []
+}
