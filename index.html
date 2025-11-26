@@ -45,6 +45,15 @@
                 },
               },
             }),
+            // 添加更灵活的响应式工具类
+            height: {
+              'screen-safe': '100svh',
+              'screen-dynamic': '100dvh',
+            },
+            width: {
+              'screen-safe': '100svw',
+              'screen-dynamic': '100dvw',
+            },
           },
         },
       }
@@ -61,7 +70,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-50 text-slate-800 h-screen overflow-hidden">
+  <body class="bg-gray-50 text-slate-800 min-h-[100vh] overflow-x-hidden">
     <div id="app" class="h-full"></div>
     <script type="module" src="./main.ts"></script>
   <script type="module" src="/index.tsx"></script>

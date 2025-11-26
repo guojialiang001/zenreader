@@ -1,0 +1,170 @@
+/* 全局样式重置与基础设置 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 滚动条样式优化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 优化flex布局支持 */
+.flex-auto-height {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.flex-auto-width {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.flex-nowrap {
+  flex-wrap: nowrap;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+/* 优化grid布局支持 */
+.grid-auto-fit {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.grid-auto-fill {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.grid-responsive {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+/* 响应式容器类 */
+.container-responsive {
+  width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: 1rem;
+  padding-left: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container-responsive {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    max-width: 1024px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container-responsive {
+    max-width: 1280px;
+  }
+}
+
+/* 溢出处理工具类 */
+.overflow-x-hidden {
+  overflow-x: hidden;
+}
+
+.overflow-y-auto {
+  overflow-y: auto;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+/* 内容换行处理 */
+.break-words {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.break-all {
+  word-break: break-all;
+}
+
+/* 确保高度自适应 */
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.min-h-screen-dynamic {
+  min-height: 100dvh;
+}
+
+.min-h-screen-safe {
+  min-height: 100svh;
+}
+
+/* 灵活高度容器 */
+.flex-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.flex-grow-1 {
+  flex-grow: 1;
+  min-height: 0;
+}
+
+/* 响应式间距 */
+.gap-responsive {
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .gap-responsive {
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gap-responsive {
+    gap: 2rem;
+  }
+}
+
+/* 确保文本在任何容器中都能正常显示 */
+.text-container {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* 防止组件溢出其父容器 */
+.content-fit {
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+}

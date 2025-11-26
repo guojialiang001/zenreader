@@ -109,7 +109,7 @@ const colorClass = (text: string) => {
 </script>
 
 <template>
-  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto max-h-[520px]">
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto min-h-[100%] max-h-[calc(100vh-300px)]">
     <div class="grid min-w-full" style="grid-template-columns: 40px 24px 1fr">
       <div class="bg-slate-50 border-r border-slate-200">
         <div v-for="(line, i) in visibleLines" :key="line.id + '-' + i" class="px-2 text-slate-400 tabular-nums text-sm h-7 leading-7">

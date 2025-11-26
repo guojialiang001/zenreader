@@ -7,7 +7,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center h-full text-center p-8 bg-white/50 backdrop-blur-sm animate-fade-in">
+  <div class="flex flex-col items-center justify-center min-h-[100vh] h-full text-center p-8 bg-white/50 backdrop-blur-sm animate-fade-in overflow-y-auto">
     <div class="w-24 h-24 bg-brand-50 rounded-full flex items-center justify-center mb-6 shadow-sm">
       <FileText class="w-10 h-10 text-brand-500" />
     </div>

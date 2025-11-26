@@ -1,58 +1,77 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { FileText, Braces, Clock, Type } from 'lucide-vue-next'
 
-const search = ref('')
 const tools = [
-  { name: 'Markdown 阅读器', desc: '导入并阅读 Markdown，优雅排版', route: '/reader', icon: 'file' },
-  { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces' },
-  { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock' },
-  { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case' },
+  { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
+  { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces', tags: ['格式', '验证', '开发'], features: ['语法高亮', '错误检查', '压缩/美化'], usageCount: '9.3k+' },
+  { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock', tags: ['时间', '时区', '计算'], features: ['时区转换', '倒计时', '时间差计算'], usageCount: '7.8k+' },
+  { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case', tags: ['文本', '转换', '编辑'], features: ['大小写转换', '文本清洗', '字数统计'], usageCount: '5.2k+' },
 ]
 const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return tools
-  return tools.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q))
+  // Search functionality moved to App.vue
+  return tools
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-b from-brand-50 to-white">
-    <section class="relative overflow-hidden">
-      <div class="absolute inset-0 -z-10 opacity-50">
-        <div class="h-64 bg-gradient-to-r from-brand-100 via-brand-50 to-transparent"></div>
-      </div>
-      <div class="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-10 items-center">
-        <div>
-          <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 mb-6">优美、从容的工具集主页</h1>
-          <p class="text-lg text-slate-600 leading-relaxed mb-8">简洁大方的设计语言，承载众多实用工具的入口与概览。聚焦体验与效率，随心探索。</p>
-          <div class="relative max-w-xl">
-            <input v-model="search" type="text" placeholder="搜索工具，如 JSON、Markdown" class="w-full px-5 py-3 rounded-xl border border-slate-200 shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none" />
-            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">全局搜索</div>
-          </div>
-        </div>
-        <div class="hidden md:block">
-          <img 
-            src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&auto=format&fit=crop&q=80"
-            alt="工具集合概念插图"
-            class="rounded-3xl shadow-xl border border-slate-200"
-          />
-        </div>
-      </div>
-    </section>
+  <div class="min-h-[100vh] bg-gradient-to-b from-brand-50 to-white">
+    <!-- 主内容区域 -->
+    <main class="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <!-- 标题部分已移动到 App.vue 中 -->
 
-    <section class="max-w-6xl mx-auto px-6 pb-20">
-      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <RouterLink v-for="t in filtered" :key="t.route" :to="t.route" class="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 hover:border-brand-200 hover:shadow-brand-500/10 transition">
-          <div class="flex items-center gap-3 mb-2">
-            <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : (t.icon === 'clock' ? Clock : Type))" class="w-5 h-5 text-brand-600" />
-            <div class="font-semibold text-slate-900">{{ t.name }}</div>
+        <!-- 工具卡片网格 -->
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+          <RouterLink v-for="t in filtered" :key="t.route" :to="t.route" class="group rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-brand-200 hover:shadow-brand-500/10 transition duration-300">
+            <!-- 卡片头部 -->
+            <div class="p-6 border-b border-slate-100">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-600 group-hover:scale-110 transition-transform">
+                  <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : (t.icon === 'clock' ? Clock : Type))" class="w-5 h-5" />
+                </div>
+                <h2 class="text-xl font-bold text-slate-900">{{ t.name }}</h2>
+              </div>
+              <p class="text-slate-600 mb-3">{{ t.desc }}</p>
+              
+              <!-- 工具标签 -->
+              <div class="flex flex-wrap gap-2 mb-3">
+                <span v-for="(tag, idx) in t.tags" :key="idx" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                  {{ tag }}
+                </span>
+              </div>
+              
+              <!-- 核心功能 -->
+              <div class="space-y-1">
+                <div v-for="(feature, idx) in t.features.slice(0, 2)" :key="idx" class="flex items-center gap-1.5 text-sm text-slate-500">
+                  <svg class="w-3 h-3 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>{{ feature }}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 卡片底部 -->
+              <div class="p-4 bg-slate-50 flex items-center justify-end">
+                <span class="text-xs text-brand-600 font-medium flex items-center gap-1">
+                  开始使用
+                  <svg class="w-3 h-3 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                  </svg>
+                </span>
+              </div>
+          </RouterLink>
+        </div>
+
+        <!-- 底部装饰元素 -->
+        <div class="mt-16 flex justify-center">
+          <div class="flex gap-2">
+            <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+            <div class="w-2 h-2 rounded-full bg-brand-500"></div>
+            <div class="w-2 h-2 rounded-full bg-slate-300"></div>
           </div>
-          <div class="text-slate-600">{{ t.desc }}</div>
-          <div class="mt-4 text-brand-600 font-medium opacity-0 group-hover:opacity-100">进入</div>
-        </RouterLink>
-      </div>
-    </section>
-  </div>
-</template>
+        </div>
+      </main>
+    </div>
+  </template>

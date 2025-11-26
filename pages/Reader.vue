@@ -79,6 +79,50 @@ const handleDeleteFile = (id: string) => {
 };
 
 const activeFile = computed(() => files.value.find(f => f.id === activeFileId.value) || null);
+const isEditMode = ref(false);
+
+const handleContentUpdate = (fileId: string, newContent: string) => {
+  const fileIndex = files.value.findIndex(f => f.id === fileId);
+  if (fileIndex !== -1) {
+    files.value[fileIndex] = {
+      ...files.value[fileIndex],
+      content: newContent,
+      lastModified: Date.now()
+    };
+  }
+};
+
+const handleTitleUpdate = (newTitle: string) => {
+  if (activeFile) {
+    const fileIndex = files.value.findIndex(f => f.id === activeFile.id);
+    if (fileIndex !== -1) {
+      // 保留文件扩展名
+      const extension = activeFile.name.match(/\.(md|markdown|txt)$/i)?.[0] || '';
+      const newFileName = extension ? `${newTitle}${extension}` : newTitle;
+      files.value[fileIndex] = {
+        ...activeFile,
+        name: newFileName,
+        lastModified: Date.now()
+      };
+    }
+  }
+};
+
+const toggleEditMode = () => {
+  isEditMode.value = !isEditMode.value;
+};
+
+// 处理文件名重命名
+const handleRenameFile = (id: string, newName: string) => {
+  const fileIndex = files.value.findIndex(f => f.id === id);
+  if (fileIndex !== -1) {
+    files.value[fileIndex] = {
+      ...files.value[fileIndex],
+      name: newName,
+      lastModified: Date.now()
+    };
+  }
+};
 
 const triggerUpload = () => {
   const input = document.getElementById('global-upload-trigger') as HTMLInputElement;
@@ -91,7 +135,7 @@ const toggleSidebar = () => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-50 overflow-hidden font-sans">
+  <div class="flex min-h-screen h-screen w-full bg-gray-50 font-sans">
     <input
       id="global-upload-trigger"
       type="file"
@@ -109,9 +153,10 @@ const toggleSidebar = () => {
       @upload="handleFileUpload"
       @delete-file="handleDeleteFile"
       @toggle="toggleSidebar"
+      @rename-file="handleRenameFile"
     />
 
-    <main class="flex-1 h-full relative flex flex-col min-w-0 transition-all duration-300">
+    <main class="flex-1 relative flex flex-col min-w-0 transition-all duration-300">
       <button 
         v-if="!sidebarOpen"
         @click="sidebarOpen = true"
@@ -127,8 +172,20 @@ const toggleSidebar = () => {
         <Home class="w-5 h-5" />
         <span class="hidden md:inline">返回主页</span>
       </RouterLink>
-      <MarkdownViewer v-if="activeFile" :key="activeFile.id" :file="activeFile" class="animate-fade-in" />
-      <EmptyState v-else @upload-trigger="triggerUpload" />
+      <div class="flex-1 overflow-hidden">
+        <div v-if="activeFile" class="h-full">
+          <MarkdownViewer 
+            :key="activeFile.id" 
+            :file="activeFile" 
+            :is-edit-mode="isEditMode"
+            @update-content="handleContentUpdate"
+            @toggle-edit-mode="toggleEditMode"
+            @update-title="handleTitleUpdate"
+            class="animate-fade-in h-full w-full overflow-y-auto overflow-x-hidden"
+          />
+        </div>
+        <EmptyState v-else @upload-trigger="triggerUpload" />
+      </div>
     </main>
   </div>
   
