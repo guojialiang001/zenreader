@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, Image as ImageIcon, Wand2, Upload, Download } from 'lucide-vue-next'
+import { Home, Image as ImageIcon, Wand2, Upload, Download, Zap } from 'lucide-vue-next'
 import JSZip from 'jszip'
 
 interface Pic {
@@ -13,7 +13,8 @@ interface Pic {
   canvas?: HTMLCanvasElement
   processedUrl?: string
   processedBlob?: Blob
-  status: 'pending' | 'processed' | 'error'
+  status: 'pending' | 'processed' | 'error' | 'processing'
+  error?: string
 }
 
 const pics = ref<Pic[]>([])
@@ -21,6 +22,84 @@ const activeId = ref<string | null>(null)
 const mode = ref<'manual' | 'corner' | 'advanced'>('manual')
 const corner = ref<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>('bottom-right')
 const selection = reactive({ x: 50, y: 50, w: 200, h: 80 })
+
+// ImgBB API配置
+const IMGBB_API_KEY = '220f559f00abe3a002d2e6c6802e72d5'
+const IMGBB_BASE_URL = 'https://api.imgbb.com/1/upload'
+
+// 上传图片到ImgBB
+const uploadToImgBB = async (file: File): Promise<string | null> => {
+  try {
+    const formData = new FormData()
+    formData.append('image', file)
+    
+    const response = await fetch(`${IMGBB_BASE_URL}?expiration=600&key=${IMGBB_API_KEY}`, {
+      method: 'POST',
+      body: formData
+    })
+    
+    const result = await response.json()
+    
+    // 根据响应示例调整：检查 success 和 status 字段
+    if (result.success === true && result.status === 200 && result.data && result.data.url) {
+      return result.data.url
+    } else {
+      console.error('ImgBB upload failed:', result)
+      return null
+    }
+  } catch (error) {
+    console.error('Error uploading to ImgBB:', error)
+    return null
+  }
+}
+
+// 批量上传所有图片到ImgBB
+const uploadAllToImgBB = async (picList: Pic[]) => {
+  console.log(`开始上传 ${picList.length} 张图片到ImgBB...`)
+  
+  for (let i = 0; i < picList.length; i++) {
+    const pic = picList[i]
+    console.log(`上传第 ${i + 1}/${picList.length} 张图片: ${pic.name}`)
+    
+    try {
+      const imgbbUrl = await uploadToImgBB(pic.file)
+      if (imgbbUrl) {
+        // 更新图片的URL为ImgBB地址
+        pic.url = imgbbUrl
+        console.log(`✓ ${pic.name} 上传成功`)
+      } else {
+        console.warn(`✗ ${pic.name} 上传失败，继续使用本地URL`)
+      }
+    } catch (error) {
+      console.error(`✗ ${pic.name} 上传出错:`, error)
+    }
+  }
+  
+  console.log('所有图片上传完成')
+}
+
+// 处理状态计算属性
+const completedCount = computed(() => pics.value.filter(p => p.status === 'processed' && p.processedUrl).length)
+const errorCount = computed(() => pics.value.filter(p => p.status === 'error').length)
+const pendingCount = computed(() => pics.value.filter(p => p.status === 'pending').length)
+const processingCount = computed(() => pics.value.filter(p => p.status === 'processing').length)
+const processedCount = computed(() => completedCount.value + errorCount.value)
+
+// 状态文本函数
+const getStatusText = (p: Pic) => {
+  if (p.status === 'processed' && p.processedUrl) return '已完成'
+  if (p.status === 'processing') return '处理中'
+  if (p.status === 'error') return '失败'
+  return '待处理'
+}
+
+// 重试处理函数
+const retryProcessing = async (p: Pic) => {
+  p.status = 'pending'
+  p.error = undefined
+  activeId.value = p.id
+  await processActive()
+}
 
 const onUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement
@@ -32,8 +111,15 @@ const onUpload = async (e: Event) => {
   pics.value = [...added, ...pics.value]
   activeId.value = added[0].id
   input.value = ''
+  
+  // 处理ZIP文件
   for (const z of zips) {
     await importZip(z)
+  }
+  
+  // 批量上传所有新添加的图片到ImgBB
+  if (added.length > 0) {
+    await uploadAllToImgBB(added)
   }
 }
 
@@ -345,7 +431,21 @@ const applyAdvanced = async () => {
   await updateProcessed(p)
 }
 
-const processActive = async () => { const p = activePic(); if (p) p.status = 'pending'; if (mode.value === 'manual') await applyManual(); else if (mode.value === 'corner') await applyCorner(); else await applyAdvanced(); if (p) p.status = 'processed' }
+const processActive = async () => { 
+  const p = activePic(); 
+  if (!p) return
+  try {
+    p.status = 'processing'
+    p.error = undefined
+    if (mode.value === 'manual') await applyManual()
+    else if (mode.value === 'corner') await applyCorner()
+    else await applyAdvanced()
+    p.status = 'processed'
+  } catch (error) {
+    p.status = 'error'
+    p.error = error instanceof Error ? error.message : '处理失败'
+  }
+}
 
 const processAll = async () => { for (const p of pics.value) { activeId.value = p.id; await processActive() } }
 
@@ -393,6 +493,11 @@ const importZip = async (file: File) => {
   })
   pics.value = [...added, ...pics.value]
   if (!activeId.value && added.length) activeId.value = added[0].id
+  
+  // 批量上传ZIP中新添加的图片到ImgBB
+  if (added.length > 0) {
+    await uploadAllToImgBB(added)
+  }
 }
 const previewOpen = ref(false)
 const previewMode = ref<'side' | 'slider'>('side')
@@ -487,53 +592,56 @@ const singleSelection = reactive({ x: 50, y: 50, w: 200, h: 80 })
       <label for="img-upload" class="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg cursor-pointer"><Upload class="w-4 h-4" /> 上传图片</label>
       <input id="zip-upload" type="file" accept=".zip" class="hidden" @change="onUpload" />
       <label for="zip-upload" class="flex items-center gap-2 px-4 py-2 bg-slate-900/80 hover:bg-slate-800 text-white rounded-lg cursor-pointer"><Upload class="w-4 h-4" /> 导入 ZIP</label>
-      <button @click="processActive" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg"><Wand2 class="w-4 h-4 inline" /> 去除当前水印</button>
-        <button @click="processAll" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg">批量去水印</button>
-        <button @click="openBatchSelect" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg" v-if="mode==='manual'">批量选取位置</button>
-        <button @click="exportAll" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg"><Download class="w-4 h-4 inline" /> 批量导出</button>
-        <button @click="exportZip" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg"><Download class="w-4 h-4 inline" /> 导出 ZIP</button>
-      <div class="ml-auto flex items-center gap-3">
-        <select v-model="mode" class="px-3 py-2 border border-slate-200 rounded-lg text-sm">
-          <option value="manual">手动选择区域</option>
-          <option value="corner">角落自动识别</option>
-          <option value="advanced">高级融合</option>
-        </select>
-        <select v-model="repairMode" class="px-3 py-2 border border-slate-200 rounded-lg text-sm" v-if="mode==='manual'">
-          <option value="copy">复制补</option>
-          <option value="smooth">平滑补</option>
-          <option value="smart">智能模式</option>
-        </select>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-slate-500">平滑度</span>
-          <input type="range" min="0" max="6" v-model="smooth" />
+      <button @click="exportAll" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg"><Download class="w-4 h-4 inline" /> 批量导出</button>
+      <button @click="exportZip" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg"><Download class="w-4 h-4 inline" /> 导出 ZIP</button>
+    </div>
+  </div>
+
+  <!-- 独立区域放置的批量处理按钮 -->
+  <div class="relative mb-8">
+    <!-- 背景装饰 -->
+    <div class="absolute inset-0 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-3xl opacity-60"></div>
+    <div class="absolute inset-0 bg-gradient-to-br from-brand-400/10 via-transparent to-brand-600/10 rounded-3xl"></div>
+    
+    <!-- 主要按钮区域 -->
+    <div class="relative flex justify-center items-center py-8 px-6">
+      <button 
+        @click="processAll" 
+        class="group relative px-16 py-5 bg-gradient-to-r from-brand-600 via-brand-700 to-brand-800 hover:from-brand-700 hover:via-brand-800 hover:to-brand-900 text-white rounded-2xl text-2xl font-extrabold shadow-xl hover:shadow-2xl transform hover:scale-110 transition-all duration-500 ease-out flex items-center gap-4 border border-brand-300/50 hover:border-brand-200/80 backdrop-blur-sm"
+      >
+        <!-- 按钮光晕效果 -->
+        <div class="absolute inset-0 bg-gradient-to-r from-white/20 via-white/10 to-white/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        
+        <!-- 左侧图标 -->
+        <div class="relative z-10 flex items-center justify-center w-10 h-10 bg-white/20 rounded-xl group-hover:bg-white/30 transition-colors duration-300">
+          <Zap class="w-6 h-6 group-hover:animate-pulse" />
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-slate-500">质量</span>
-          <input type="range" min="1" max="5" v-model="quality" />
+        
+        <!-- 文字内容 -->
+        <span class="relative z-10 flex items-center gap-3">
+          🚀 批量去水印
+        </span>
+        
+        <!-- 右侧图标 -->
+        <div class="relative z-10 flex items-center justify-center w-10 h-10 bg-white/20 rounded-xl group-hover:bg-white/30 transition-colors duration-300">
+          <Zap class="w-6 h-6 group-hover:animate-pulse" />
         </div>
-        <select v-model="corner" class="px-3 py-2 border border-slate-200 rounded-lg text-sm" v-if="mode==='corner'">
-          <option value="top-left">左上角</option>
-          <option value="top-right">右上角</option>
-          <option value="bottom-left">左下角</option>
-          <option value="bottom-right">右下角</option>
-        </select>
+        
+        <!-- 装饰性光点 -->
+        <div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div>
+        <div class="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+      </button>
+      
+      <!-- 提示文字 -->
+      <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-slate-500 bg-white/80 px-3 py-1 rounded-full shadow-sm">
+        点击开始智能去水印处理
       </div>
     </div>
   </div>
 
-      <div class="w-full">
-        <div class="w-full">
-          <div v-if="activeId" class="relative" tabindex="0">
-            <canvas ref="onCanvasMounted" class="max-h-[60vh] w-full border border-slate-200 rounded-xl"></canvas>
-          </div>
-          <div v-else class="text-slate-400">请先上传并选择一张图片</div>
-        </div>
-      </div>
+   
 
-      <div v-if="activeId" class="mt-6">
-        <button @click="openPreviewWithActive('side')" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg">预览图片</button>
-        <button @click="openPreviewWithActive('slider')" class="ml-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg">预览对比</button>
-      </div>
+   
 
       <div v-if="pics.length" class="mt-6">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
@@ -541,35 +649,74 @@ const singleSelection = reactive({ x: 50, y: 50, w: 200, h: 80 })
             <div class="text-sm font-semibold text-slate-700">文件队列</div>
             <div class="text-xs text-slate-500">共 {{ pics.length }} 项</div>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div v-for="p in pics" :key="p.id" class="rounded-2xl border border-slate-200 hover:border-brand-200 shadow-sm overflow-hidden">
-              <div class="flex h-40">
-                <div class="flex-1 relative group cursor-pointer border-r border-white/20" @click="onSelectThumb(p.id)">
-                  <img :src="p.url" class="w-full h-full object-cover" />
+          
+          <!-- 总处理状态 -->
+          <div class="bg-slate-50 rounded-lg p-4 mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-slate-700">总体处理状态</span>
+              <span class="text-sm text-slate-600">{{ processedCount }}/{{ pics.length }} 已处理</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-2">
+              <div class="bg-brand-600 h-2 rounded-full transition-all duration-300" :style="{ width: (processedCount / pics.length * 100) + '%' }"></div>
+            </div>
+            <div class="flex gap-4 mt-2 text-xs">
+              <span class="text-green-600">✓ 已完成: {{ completedCount }}</span>
+              <span class="text-amber-600">⏳ 处理中: {{ processingCount }}</span>
+              <span class="text-red-600">✗ 失败: {{ errorCount }}</span>
+              <span class="text-slate-500">⏸️ 待处理: {{ pendingCount }}</span>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div v-for="p in pics" :key="p.id" class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:border-brand-200">
+              <!-- 缩略图 -->
+              <div class="flex gap-2">
+                <div class="relative group cursor-pointer" @click="onSelectThumb(p.id)">
+                  <img :src="p.url" class="w-14 h-10 object-cover rounded border" />
                   <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span class="text-white text-xs bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100">原图</span>
+                    <span class="text-white text-sm bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100">原</span>
                   </div>
                 </div>
-                <div v-if="p.processedUrl" class="flex-1 relative group cursor-pointer" @click="onSelectThumb(p.id)">
-                  <img :src="p.processedUrl" class="w-full h-full object-cover" />
+                <div v-if="p.processedUrl" class="relative group cursor-pointer" @click="onSelectThumb(p.id)">
+                  <img :src="p.processedUrl" class="w-14 h-10 object-cover rounded border" />
                   <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span class="text-white text-xs bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100">处理后</span>
+                    <span class="text-white text-sm bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100">处</span>
                   </div>
                 </div>
               </div>
-              <div class="p-4">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="text-sm font-semibold text-slate-800 truncate">{{ p.name }}</div>
-                  <span class="text-xs px-2 py-0.5 rounded-full" :class="p.status==='processed' ? 'bg-green-100 text-green-700' : (p.status==='error' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600')">{{ p.status }}</span>
+              
+              <!-- 文件信息 -->
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-slate-800 truncate">{{ p.name }}</div>
+                <div class="flex items-center gap-2 mt-1 mb-2">
+                  <span class="text-sm px-2 py-0.5 rounded font-medium" :class="{
+                    'bg-green-100 text-green-700': p.status==='processed' && p.processedUrl,
+                    'bg-red-100 text-red-700': p.status==='error',
+                    'bg-amber-100 text-amber-700': p.status==='processing',
+                    'bg-slate-100 text-slate-600': p.status==='pending'
+                  }">
+                    {{ getStatusText(p) }}
+                  </span>
+                  <span v-if="p.status==='processing'" class="text-xs text-slate-500">正在处理...</span>
+                  <span v-if="p.error" class="text-xs text-red-500">错误: {{ p.error }}</span>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                  <button @click="openPreview(p)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs">预览</button>
-                  <button @click="openSingleSelect(p)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs" v-if="mode==='manual'">选取位置</button>
-                  <button @click="downloadOriginal(p)" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs">下载原图</button>
-                  <button @click="downloadProcessed(p)" :disabled="!p.processedUrl" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs disabled:opacity-50">下载处理后</button>
-                  <button @click="removeOne(p)" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs">移除</button>
+                
+                <!-- 处理进度条 -->
+                <div v-if="p.status==='processing'" class="w-full bg-slate-200 rounded-full h-1.5 mb-2">
+                  <div class="bg-amber-500 h-1.5 rounded-full transition-all duration-300 animate-pulse" style="width: 60%"></div>
+                </div>
+                
+                <!-- 文件操作按钮 -->
+                <div class="flex gap-1">
+                  <button @click="openPreview(p)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs">预览</button>
+                  <button @click="openSingleSelect(p)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs" v-if="mode==='manual' && p.status!=='processing'">选取</button>
+                  <button @click="downloadOriginal(p)" class="px-2 py-1 bg-white border border-slate-200 text-slate-700 rounded text-xs">原图</button>
+                  <button @click="downloadProcessed(p)" :disabled="!p.processedUrl" class="px-2 py-1 bg-white border border-slate-200 text-slate-700 rounded text-xs disabled:opacity-50">处理后</button>
+                  <button v-if="p.status==='error'" @click="retryProcessing(p)" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs">重试</button>
                 </div>
               </div>
+              
+              <!-- 删除按钮 -->
+              <button @click="removeOne(p)" class="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs">删除</button>
             </div>
           </div>
         </div>

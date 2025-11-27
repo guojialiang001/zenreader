@@ -10,7 +10,7 @@ const tools = [
   { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case', tags: ['文本', '转换', '编辑'], features: ['大小写转换', '文本清洗', '字数统计'], usageCount: '5.2k+' },
   { name: '图片转BASE64', desc: '上传图片生成BASE64编码，支持一键复制', route: '/image-to-base64', icon: 'code', tags: ['图片', '编码', '转换'], features: ['拖拽上传', '实时预览', '一键复制'], usageCount: '2.3k+' },
   { name: '字符串拼接', desc: '灵活拼接字符串，支持模板和变量替换', route: '/string', icon: 'string', tags: ['文本', '拼接', '模板'], features: ['模板变量', '批量处理', '实时预览'], usageCount: '1.8k+' },
-  // { name: '图片去水印', desc: '无损预览，批量去水印与导出', route: '/images', icon: 'image', tags: ['图片', '去水印', '批量'], features: ['多图上传', '手动选择', '角落识别'], usageCount: '3.1k+' },
+  { name: '图片去水印', desc: '无损预览，批量去水印与导出', route: '/images', icon: 'image', tags: ['图片', '去水印', '批量'], features: ['多图上传', '手动选择', '角落识别'], usageCount: '3.1k+' },
 ]
 const filtered = computed(() => {
   // Search functionality moved to App.vue
