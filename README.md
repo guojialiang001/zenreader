@@ -2,19 +2,91 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# ZenReader - 多功能在线工具集合
 
-This contains everything you need to run your app locally.
+一个基于 Vue 3 + TypeScript 的现代化在线工具平台，集成了多种实用工具。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1SZb111bWuijO4j6dt39-leSu7VKJLo6l
+## 功能特性
 
-## Run Locally
+- 📖 Markdown 阅读器
+- 🔧 JSON 格式化工具
+- ⏰ 时间戳转换器
+- 🔠 大小写转换器
+- 🖼️ 图片转 BASE64
+- 🔗 字符串拼接工具
+- 🌐 完整的 API 请求支持 (Axios)
 
-**Prerequisites:**  Node.js
+## 技术栈
 
+- **前端框架**: Vue 3 + TypeScript
+- **路由**: Vue Router 4
+- **HTTP 客户端**: Axios
+- **构建工具**: Vite
+- **UI 组件**: Tailwind CSS + Lucide 图标
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## API 集成
+
+项目已集成 Axios，提供完整的 HTTP 请求解决方案：
+
+### 配置说明
+
+1. 复制环境配置文件：
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. 在 `.env.local` 中配置 API 地址：
+   ```env
+   VITE_API_BASE_URL=http://localhost:3000/api
+   ```
+
+### 使用方法
+
+1. **导入 API 工具**：
+   ```typescript
+   import { api } from '@/utils/api'
+   ```
+
+2. **发起请求**：
+   ```typescript
+   // GET 请求
+   const userInfo = await api.getUserInfo()
+   
+   // POST 请求
+   const result = await api.convertText('hello', 'upper')
+   
+   // 文件上传
+   const uploadResult = await api.uploadFile(file)
+   ```
+
+3. **直接使用 HTTP 实例**：
+   ```typescript
+   import { http } from '@/utils/api'
+   
+   const response = await http.get('/some-endpoint')
+   ```
+
+## 运行项目
+
+**环境要求**: Node.js 16+
+
+1. 安装依赖：
+   ```bash
+   npm install
+   ```
+
+2. 配置环境变量（可选）：
+   ```bash
+   cp .env.example .env.local
+   # 编辑 .env.local 文件
+   ```
+
+3. 启动开发服务器：
+   ```bash
+   npm run dev
+   ```
+
+4. 构建生产版本：
+   ```bash
+   npm run build
+   ```

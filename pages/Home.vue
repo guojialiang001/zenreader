@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock, Type } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash } from 'lucide-vue-next'
 
 const tools = [
   { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
   { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces', tags: ['格式', '验证', '开发'], features: ['语法高亮', '错误检查', '压缩/美化'], usageCount: '9.3k+' },
   { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock', tags: ['时间', '时区', '计算'], features: ['时区转换', '倒计时', '时间差计算'], usageCount: '7.8k+' },
   { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case', tags: ['文本', '转换', '编辑'], features: ['大小写转换', '文本清洗', '字数统计'], usageCount: '5.2k+' },
+  { name: '图片转BASE64', desc: '上传图片生成BASE64编码，支持一键复制', route: '/image-to-base64', icon: 'code', tags: ['图片', '编码', '转换'], features: ['拖拽上传', '实时预览', '一键复制'], usageCount: '2.3k+' },
+  { name: '字符串拼接', desc: '灵活拼接字符串，支持模板和变量替换', route: '/string', icon: 'string', tags: ['文本', '拼接', '模板'], features: ['模板变量', '批量处理', '实时预览'], usageCount: '1.8k+' },
+  // { name: '图片去水印', desc: '无损预览，批量去水印与导出', route: '/images', icon: 'image', tags: ['图片', '去水印', '批量'], features: ['多图上传', '手动选择', '角落识别'], usageCount: '3.1k+' },
 ]
 const filtered = computed(() => {
   // Search functionality moved to App.vue
@@ -23,12 +26,12 @@ const filtered = computed(() => {
 
         <!-- 工具卡片网格 -->
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-          <RouterLink v-for="t in filtered" :key="t.route" :to="t.route" class="group rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-brand-200 hover:shadow-brand-500/10 transition duration-300">
+          <RouterLink v-for="t in filtered" :key="t.route" :to="t.route" class="group rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-brand-200 hover:shadow-brand-500/10 transition duration-300 flex flex-col">
             <!-- 卡片头部 -->
-            <div class="p-6 border-b border-slate-100">
+            <div class="p-6 border-b border-slate-100 flex-1">
               <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-600 group-hover:scale-110 transition-transform">
-                  <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : (t.icon === 'clock' ? Clock : Type))" class="w-5 h-5" />
+                  <component :is="t.icon === 'file' ? FileText : (t.icon === 'braces' ? Braces : (t.icon === 'clock' ? Clock : (t.icon === 'case' ? Type : (t.icon === 'code' ? Code : (t.icon === 'string' ? Hash : ImageIcon)))))" class="w-5 h-5" />
                 </div>
                 <h2 class="text-xl font-bold text-slate-900">{{ t.name }}</h2>
               </div>
@@ -53,7 +56,7 @@ const filtered = computed(() => {
             </div>
             
             <!-- 卡片底部 -->
-              <div class="p-4 bg-slate-50 flex items-center justify-end">
+              <div class="p-4 bg-slate-50 flex items-center justify-end mt-auto">
                 <span class="text-xs text-brand-600 font-medium flex items-center gap-1">
                   开始使用
                   <svg class="w-3 h-3 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
