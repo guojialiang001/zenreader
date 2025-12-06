@@ -6,7 +6,9 @@ import TimestampTool from './pages/TimestampTool.vue'
 import CaseConverter from './pages/CaseConverter.vue'
 import StringAssembler from './pages/StringAssembler.vue'
 import ImageTools from './pages/ImageTools.vue'
+import ImageToolsNew from './pages/ImageToolsNew.vue'
 import ImageToBase64 from './pages/ImageToBase64.vue'
+import ScriptWriter from './pages/ScriptWriter.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -16,7 +18,9 @@ const routes = [
   { path: '/case', name: 'case', component: CaseConverter },
   { path: '/string', name: 'string', component: StringAssembler },
   { path: '/images', name: 'images', component: ImageTools },
-  { path: '/image-to-base64', name: 'image-to-base64', component: ImageToBase64 }
+  { path: '/images-new', name: 'images-new', component: ImageToolsNew },
+  { path: '/image-to-base64', name: 'image-to-base64', component: ImageToBase64 },
+  { path: '/script-writer', name: 'script-writer', component: ScriptWriter }
 ]
 
 export const router = createRouter({
