@@ -9,6 +9,7 @@ const tools = [
   { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock', tags: ['时间', '时区', '计算'], features: ['时区转换', '倒计时', '时间差计算'], usageCount: '7.8k+' },
   { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case', tags: ['文本', '转换', '编辑'], features: ['大小写转换', '文本清洗', '字数统计'], usageCount: '5.2k+' },
   { name: 'AI编剧工具', desc: '基于AI生成完整剧本，包括章纲和详细章节内容', route: '/script-writer', icon: 'file', tags: ['剧本', 'AI', '生成'], features: ['智能生成', '章节管理', '一键复制'], usageCount: '0.8k+' },
+  { name: '3D动作生成器', desc: '输入提示词生成3D动作，支持关节调节和动画播放', route: '/3d-action', icon: 'image', tags: ['3D', '动作', 'AI'], features: ['提示词生成', '关节调节', '动画播放', '截图保存'], usageCount: '0.5k+' },
   { name: '图片转BASE64', desc: '上传图片生成BASE64编码，支持一键复制', route: '/image-to-base64', icon: 'code', tags: ['图片', '编码', '转换'], features: ['拖拽上传', '实时预览', '一键复制'], usageCount: '2.3k+' },
   { name: '字符串拼接', desc: '灵活拼接字符串，支持模板和变量替换', route: '/string', icon: 'string', tags: ['文本', '拼接', '模板'], features: ['模板变量', '批量处理', '实时预览'], usageCount: '1.8k+' },
   { name: '图片去水印', desc: '无损预览，批量去水印与导出', route: '/images', icon: 'image', tags: ['图片', '去水印', '批量'], features: ['多图上传', '手动选择', '角落识别'], usageCount: '3.1k+' },

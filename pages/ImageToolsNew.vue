@@ -335,8 +335,10 @@ const startAreaSelection = (e: MouseEvent) => {
   const rect = panelRef.value?.getBoundingClientRect()
   if (!rect) return
   
-  const mouseX = (e.clientX - rect.left) / scale.value
-  const mouseY = (e.clientY - rect.top) / scale.value
+  // 计算鼠标在缩放和偏移后的面板中的实际位置
+  // 需要考虑：1. 鼠标在视口中的位置 2. 面板的偏移量 3. 当前缩放比例
+  const mouseX = (e.clientX - rect.left) / scale.value - panelOffset.value.x / scale.value
+  const mouseY = (e.clientY - rect.top) / scale.value - panelOffset.value.y / scale.value
   
   // 开始区域选择
   selectionState.isSelecting = true
@@ -359,8 +361,10 @@ const onAreaSelectionMove = (e: MouseEvent) => {
   const rect = panelRef.value?.getBoundingClientRect()
   if (!rect) return
   
-  selectionState.currentX = (e.clientX - rect.left) / scale.value
-  selectionState.currentY = (e.clientY - rect.top) / scale.value
+  // 计算鼠标在缩放和偏移后的面板中的实际位置
+  // 需要考虑：1. 鼠标在视口中的位置 2. 面板的偏移量 3. 当前缩放比例
+  selectionState.currentX = (e.clientX - rect.left) / scale.value - panelOffset.value.x / scale.value
+  selectionState.currentY = (e.clientY - rect.top) / scale.value - panelOffset.value.y / scale.value
 }
 
 const endAreaSelection = (e: MouseEvent) => {

@@ -148,6 +148,57 @@ export const api = {
     
     return fixedJson
   },
+  
+  // 生成3D动作数据
+  generate3DAction: async (prompt: string): Promise<{
+    name: string;
+    description: string;
+    duration: number;
+    keyframes: Array<{
+      time: number;
+      joints: Array<{
+        name: string;
+        rotation: { x: number; y: number; z: number };
+        position: { x: number; y: number; z: number };
+      }>;
+    }>;
+  }> => {
+    const messages = [
+      {
+        role: 'system',
+        content: '你是一个专业的3D动画设计师，请根据用户提供的动作提示词生成详细的3D动作数据。返回格式为纯JSON，不要包含任何代码块标记，不要包含任何解释性文字，只返回JSON数据，包含：1. 动作名称 2. 动作描述 3. 持续时间（秒）4. 关键帧数组，每个关键帧包含时间点、关节名称、旋转角度和位置。' + 
+        '\n关节名称必须从以下列表中选择：spine1, spine2, head, leftUpperArm, leftLowerArm, rightUpperArm, rightLowerArm, leftUpperLeg, leftLowerLeg, rightUpperLeg, rightLowerLeg。' +
+        '\n返回示例：{"name":"挥手","description":"简单的挥手动作","duration":2,"keyframes":[{"time":0,"joints":[{"name":"rightUpperArm","rotation":{"x":0,"y":0,"z":0},"position":{"x":0,"y":0,"z":0}}]}]}'
+      },
+      {
+        role: 'user',
+        content: `请生成以下动作的3D数据：${prompt}`
+      }
+    ]
+    
+    const response = await api.callGLMAPI(messages, 3000)
+    try {
+      // 从响应中提取JSON部分
+      let jsonStr = response.trim()
+      
+      // 移除任何代码块标记
+      jsonStr = jsonStr.replace(/^```json|```$/g, '').trim()
+      
+      // 查找JSON的开始和结束位置
+      const jsonStart = jsonStr.indexOf('{')
+      const jsonEnd = jsonStr.lastIndexOf('}')
+      
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1)
+      }
+      
+      // 修复可能的JSON格式问题
+      const fixedResponse = api.fixTruncatedJSON(jsonStr)
+      return JSON.parse(fixedResponse)
+    } catch (error) {
+      throw new Error(`3D动作数据解析失败: ${response}`)
+    }
+  },
 
   // 生成章节列表
   generateChapterList: async (outline: string): Promise<Array<{ title: string; summary: string }>> => {
