@@ -194,7 +194,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Home } from 'lucide-vue-next'
 import { Terminal } from '@xterm/xterm'
@@ -368,6 +368,12 @@ class SSHTerminal {
   private isConnecting = false
   private websocketDomains: string[] = []
   private currentDomainIndex = 0
+  
+  // 命令历史相关
+  private commandHistory: string[] = []
+  private historyIndex = -1
+  private currentInput = ''
+  private inputBuffer = ''
 
   constructor(
     terminalContainer: HTMLElement,
@@ -396,18 +402,35 @@ class SSHTerminal {
     
     this.terminal = new Terminal({
       theme: {
-        background: '#000000',
-        foreground: '#00ff00',
-        cursor: '#00ff00',
-        selection: '#ffffff40'
+        background: '#0a0e27', // 深蓝黑色背景
+        foreground: '#98d1ce', // 浅蓝色前景
+        cursor: '#98d1ce', // 浅蓝色光标
+        cursorAccent: '#0a0e27',
+        selection: '#2d3b55', // 深蓝色选择
+        black: '#0a0e27',
+        red: '#ff5c57',
+        green: '#5af78e',
+        yellow: '#f3f99d',
+        blue: '#57c7ff',
+        magenta: '#ff6ac1',
+        cyan: '#9aedfe',
+        white: '#f8f8f2',
+        brightBlack: '#6272a4',
+        brightRed: '#ff6e67',
+        brightGreen: '#69ff94',
+        brightYellow: '#ffffa5',
+        brightBlue: '#d6acff',
+        brightMagenta: '#ff92df',
+        brightCyan: '#a4ffff',
+        brightWhite: '#ffffff'
       },
       fontSize: 16,
       fontFamily: 'Consolas, "Courier New", monospace',
       cursorBlink: true,
       allowTransparency: false,
       disableStdin: false,
-      // 禁用鼠标事件以避免第三方库错误
-      allowProposedApi: false
+      allowProposedApi: false,
+      rendererType: 'canvas' // 使用canvas渲染器，支持更多视觉效果
     })
 
     this.fitAddon = new FitAddon()
@@ -429,42 +452,98 @@ class SSHTerminal {
     this.terminal.write('输入 \x1b[33mhelp\x1b[0m 查看可用命令\r\n\r\n')
 
     // 处理用户输入 - 实现行缓冲机制
-    let inputBuffer = ''
+    this.inputBuffer = ''
+    this.commandHistory = []
+    this.historyIndex = -1
+    this.currentInput = ''
     
     this.terminal.onData((data) => {
       try {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
         
         // 处理特殊按键
-        if (data === '\r' || data === '\n') { // 回车键
-          // 发送完整的命令行
-          this.ws.send(JSON.stringify({
-            type: 'command',
-            data: { command: inputBuffer + '\n' }
-          }))
-          inputBuffer = ''
-          this.terminal.write('\r\n')
-        } else if (data === '\x7f' || data === '\b') { // 退格键
-          if (inputBuffer.length > 0) {
-            inputBuffer = inputBuffer.slice(0, -1)
-            this.terminal.write('\b \b')
-          }
-        } else if (data === '\x03') { // Ctrl+C
-          // 发送中断信号
-          this.ws.send(JSON.stringify({
-            type: 'command',
-            data: { command: '\x03' }
-          }))
-          inputBuffer = ''
-        } else if (data >= ' ' && data <= '~') { // 可打印字符
-          inputBuffer += data
-          this.terminal.write(data)
-        } else {
-          // 其他控制字符直接发送到服务器
-          this.ws.send(JSON.stringify({
-            type: 'command',
-            data: { command: data }
-          }))
+        switch (data) {
+          case '\r':
+          case '\n': // 回车键
+            // 保存命令到历史记录（如果非空）
+            if (this.inputBuffer.trim()) {
+              // 避免重复命令
+              if (this.commandHistory[this.commandHistory.length - 1] !== this.inputBuffer) {
+                this.commandHistory.push(this.inputBuffer)
+                // 限制历史记录长度
+                if (this.commandHistory.length > 50) {
+                  this.commandHistory.shift()
+                }
+              }
+            }
+            
+            // 发送完整的命令行
+            this.ws.send(JSON.stringify({
+              type: 'command',
+              data: { command: this.inputBuffer + '\n' }
+            }))
+            
+            // 重置状态
+            this.inputBuffer = ''
+            this.historyIndex = -1
+            this.currentInput = ''
+            
+            this.terminal.write('\r\n')
+            break
+            
+          case '\x7f':
+          case '\b': // 退格键
+            if (this.inputBuffer.length > 0) {
+              this.inputBuffer = this.inputBuffer.slice(0, -1)
+              this.terminal.write('\b \b')
+            }
+            break
+            
+          case '\x03': // Ctrl+C
+            // 发送中断信号
+            this.ws.send(JSON.stringify({
+              type: 'command',
+              data: { command: '\x03' }
+            }))
+            this.inputBuffer = ''
+            this.historyIndex = -1
+            this.currentInput = ''
+            break
+            
+          case '\x1b[A': // 上箭头键
+            this.handleUpArrow()
+            break
+            
+          case '\x1b[B': // 下箭头键
+            this.handleDownArrow()
+            break
+            
+          case '\t': // TAB键 - 自动补全
+            this.handleTabCompletion()
+            break
+            
+          case '\x1b[C': // 右箭头键
+          case '\x1b[D': // 左箭头键
+            // 直接发送到服务器，由服务器处理光标移动
+            this.ws.send(JSON.stringify({
+              type: 'command',
+              data: { command: data }
+            }))
+            break
+            
+          default:
+            if (data >= ' ' && data <= '~') { // 可打印字符
+              this.inputBuffer += data
+              this.terminal.write(data)
+              // 如果正在浏览历史，重置历史索引
+              this.historyIndex = -1
+            } else {
+              // 其他控制字符直接发送到服务器
+              this.ws.send(JSON.stringify({
+                type: 'command',
+                data: { command: data }
+              }))
+            }
         }
       } catch (error) {
         console.warn('终端数据处理错误:', error)
@@ -495,6 +574,83 @@ class SSHTerminal {
     } catch (error) {
       console.warn('终端大小调整错误:', error)
     }
+  }
+  
+  // 处理上箭头键 - 浏览命令历史
+  private handleUpArrow(): void {
+    if (this.commandHistory.length === 0) return
+    
+    if (this.historyIndex === -1) {
+      // 保存当前输入
+      this.currentInput = this.inputBuffer
+      // 从最新的命令开始
+      this.historyIndex = this.commandHistory.length - 1
+    } else if (this.historyIndex > 0) {
+      // 向上浏览历史
+      this.historyIndex--
+    }
+    
+    // 显示历史命令
+    this.displayHistoryCommand()
+  }
+  
+  // 处理下箭头键 - 浏览命令历史
+  private handleDownArrow(): void {
+    if (this.commandHistory.length === 0 || this.historyIndex === -1) return
+    
+    if (this.historyIndex < this.commandHistory.length - 1) {
+      // 向下浏览历史
+      this.historyIndex++
+      this.displayHistoryCommand()
+    } else {
+      // 回到当前输入
+      this.historyIndex = -1
+      const previousInput = this.inputBuffer
+      this.inputBuffer = this.currentInput
+      // 使用替换逻辑，保持提示符不变
+      const backspaceSequence = '\b \b'.repeat(previousInput.length)
+      this.terminal?.write(backspaceSequence)
+      this.terminal?.write(this.inputBuffer)
+    }
+  }
+  
+  // 处理TAB键 - 自动补全
+  private handleTabCompletion(): void {
+    // 发送TAB补全请求到服务器
+    this.ws?.send(JSON.stringify({
+      type: 'tab_complete',
+      data: { 
+        command: this.inputBuffer,
+        cursor_pos: this.inputBuffer.length 
+      }
+    }))
+  }
+  
+  // 显示历史命令
+  private displayHistoryCommand(): void {
+    if (this.historyIndex >= 0 && this.historyIndex < this.commandHistory.length) {
+      const newCommand = this.commandHistory[this.historyIndex]
+      this.replaceCurrentCommand(newCommand)
+      this.inputBuffer = newCommand
+    }
+  }
+  
+  // 显示当前输入
+  private displayCurrentInput(): void {
+    // 清空当前行
+    this.terminal?.write('\r\x1b[K')
+    // 重新显示当前输入
+    this.terminal?.write(this.inputBuffer)
+  }
+  
+  // 替换当前命令，保持提示符不变
+  private replaceCurrentCommand(newCommand: string): void {
+    // 发送退格键序列删除当前命令
+    const backspaceSequence = '\b \b'.repeat(this.inputBuffer.length)
+    this.terminal?.write(backspaceSequence)
+    
+    // 写入新命令
+    this.terminal?.write(newCommand)
   }
 
   private log(message: string): void {
@@ -533,7 +689,7 @@ class SSHTerminal {
         const wsUrl = this.websocketDomains[this.currentDomainIndex]
         this.currentDomainIndex++
         
-        this.log(`正在尝试连接到服务器 ${wsUrl}...`)
+        this.log(`正在尝试连接到服务器...`)
         
         // 创建WebSocket连接
         this.ws = new WebSocket(wsUrl)
@@ -1228,3 +1384,138 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 })
 </script>
+
+<style scoped>
+/* 终端容器样式 - 蓝黑经典纹理质感 */
+:deep(.xterm) {
+  background-color: #0a0e27 !important;
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(97, 114, 161, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(97, 114, 161, 0.1) 0%, transparent 50%);
+  background-size: 200px 200px;
+  border-radius: 8px;
+  box-shadow: 
+    inset 0 0 20px rgba(0, 0, 0, 0.5),
+    0 4px 20px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(97, 114, 161, 0.3);
+}
+
+/* 终端文字样式 */
+:deep(.xterm-rows) {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+/* 终端光标样式 */
+:deep(.xterm-cursor) {
+  background-color: #98d1ce !important;
+  border-color: #98d1ce !important;
+}
+
+/* 终端选择样式 */
+:deep(.xterm-selection) {
+  background-color: #2d3b55 !important;
+}
+
+/* 终端滚动条样式 */
+:deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(97, 114, 161, 0.5) rgba(10, 14, 39, 0.5);
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-track) {
+  background: rgba(10, 14, 39, 0.5);
+  border-radius: 4px;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-thumb) {
+  background: rgba(97, 114, 161, 0.5);
+  border-radius: 4px;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+  background: rgba(97, 114, 161, 0.7);
+}
+
+/* 终端容器 */
+.terminal-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+/* 终端标题栏样式 */
+.terminal-header {
+  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
+  border-bottom: 1px solid rgba(97, 114, 161, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 终端底部样式 */
+.terminal-footer {
+  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
+  border-top: 1px solid rgba(97, 114, 161, 0.3);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 连接状态指示器 */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection-status.online {
+  color: #5af78e;
+}
+
+.connection-status.offline {
+  color: #ff5c57;
+}
+
+/* 按钮样式 */
+button {
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* 输入框样式 */
+input {
+  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
+  border: 1px solid rgba(97, 114, 161, 0.3);
+  transition: all 0.2s ease;
+}
+
+input:focus {
+  border-color: #57c7ff;
+  box-shadow: 0 0 0 2px rgba(87, 199, 255, 0.2);
+}
+
+/* 卡片样式 */
+.card {
+  background: linear-gradient(135deg, rgba(26, 31, 58, 0.8) 0%, rgba(10, 14, 39, 0.8) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(97, 114, 161, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  transform: translateY(-2px);
+}
+</style>
