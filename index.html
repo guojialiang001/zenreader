@@ -4,59 +4,66 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZenReader - Markdown Viewer</title>
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                900: '#0c4a6e',
-              }
-            },
-            typography: (theme) => ({
-              DEFAULT: {
-                css: {
-                  maxWidth: 'none',
-                  color: theme('colors.slate.700'),
-                  a: {
-                    color: theme('colors.brand.600'),
-                    '&:hover': {
-                      color: theme('colors.brand.500'),
+      // 等待DOM加载完成后再配置Tailwind
+      document.addEventListener('DOMContentLoaded', function() {
+        const script = document.createElement('script');
+        script.src = "https://cdn.tailwindcss.com?plugins=typography";
+        script.onload = function() {
+          tailwind.config = {
+            theme: {
+              extend: {
+                colors: {
+                  brand: {
+                    50: '#f0f9ff',
+                    100: '#e0f2fe',
+                    500: '#0ea5e9',
+                    600: '#0284c7',
+                    900: '#0c4a6e',
+                  }
+                },
+                typography: (theme) => ({
+                  DEFAULT: {
+                    css: {
+                      maxWidth: 'none',
+                      color: theme('colors.slate.700'),
+                      a: {
+                        color: theme('colors.brand.600'),
+                        '&:hover': {
+                          color: theme('colors.brand.500'),
+                        },
+                      },
+                      code: {
+                        color: theme('colors.pink.600'),
+                        backgroundColor: theme('colors.slate.100'),
+                        padding: '2px 4px',
+                        borderRadius: '4px',
+                        fontWeight: '500',
+                      },
+                      'code::before': {
+                        content: '""',
+                      },
+                      'code::after': {
+                        content: '""',
+                      },
                     },
                   },
-                  code: {
-                    color: theme('colors.pink.600'),
-                    backgroundColor: theme('colors.slate.100'),
-                    padding: '2px 4px',
-                    borderRadius: '4px',
-                    fontWeight: '500',
-                  },
-                  'code::before': {
-                    content: '""',
-                  },
-                  'code::after': {
-                    content: '""',
-                  },
+                }),
+                // 添加更灵活的响应式工具类
+                height: {
+                  'screen-safe': '100svh',
+                  'screen-dynamic': '100dvh',
+                },
+                width: {
+                  'screen-safe': '100svw',
+                  'screen-dynamic': '100dvw',
                 },
               },
-            }),
-            // 添加更灵活的响应式工具类
-            height: {
-              'screen-safe': '100svh',
-              'screen-dynamic': '100dvh',
             },
-            width: {
-              'screen-safe': '100svw',
-              'screen-dynamic': '100dvw',
-            },
-          },
-        },
-      }
+          }
+        };
+        document.head.appendChild(script);
+      });
     </script>
   <script type="importmap">
 {

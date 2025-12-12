@@ -40,6 +40,15 @@
    VITE_API_BASE_URL=http://localhost:3000/api
    ```
 
+3. SSH终端配置（可选）：
+   ```env
+   # SSH默认连接配置
+   VITE_SSH_DEFAULT_HOST=localhost        # 默认SSH主机地址
+   VITE_SSH_DEFAULT_PORT=22               # 默认SSH端口
+   VITE_SSH_WEBSOCKET_URL=ws://localhost:8002/ws/ssh      # SSH交互式终端WebSocket地址
+   VITE_SSH_EXECUTE_URL=ws://localhost:8002/ws/ssh/execute  # SSH单次命令执行WebSocket地址
+   ```
+
 ### 使用方法
 
 1. **导入 API 工具**：

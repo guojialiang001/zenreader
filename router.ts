@@ -10,6 +10,7 @@ import ImageToolsNew from './pages/ImageToolsNew.vue'
 import ImageToBase64 from './pages/ImageToBase64.vue'
 import ScriptWriter from './pages/ScriptWriter.vue'
 import Action3DTool from './pages/3DActionTool.vue'
+import SshTerminal from './pages/SshTerminal.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -22,7 +23,8 @@ const routes = [
   { path: '/images-new', name: 'images-new', component: ImageToolsNew },
   { path: '/image-to-base64', name: 'image-to-base64', component: ImageToBase64 },
   { path: '/script-writer', name: 'script-writer', component: ScriptWriter },
-  { path: '/3d-action', name: '3d-action', component: Action3DTool }
+  // { path: '/3d-action', name: '3d-action', component: Action3DTool },
+  { path: '/ssh', name: 'ssh', component: SshTerminal }
 ]
 
 export const router = createRouter({

@@ -149,6 +149,51 @@ export const api = {
     return fixedJson
   },
   
+  // SSH连接工具API接口
+  ssh: {
+    // 建立SSH连接
+    connect: (config: {
+      host: string;
+      port?: number;
+      username: string;
+      password: string;
+    }): Promise<ApiResponse<{ connectionId: string; status: string }>> => {
+      return axios.post('http://localhost:8001/ssh/connect', config)
+    },
+
+    // 执行SSH命令
+    execute: (connectionId: string, command: string): Promise<ApiResponse<{ output: string; exitCode: number }>> => {
+      return axios.post('http://localhost:8001/ssh/execute', { connectionId, command })
+    },
+
+    // 断开SSH连接
+    disconnect: (connectionId: string): Promise<ApiResponse<{ status: string }>> => {
+      return axios.post('http://localhost:8001/ssh/disconnect', { connectionId })
+    },
+
+    // 文件传输
+    fileTransfer: (config: {
+      connectionId: string;
+      localPath: string;
+      remotePath: string;
+      direction: 'upload' | 'download';
+    }): Promise<ApiResponse<{ status: string; progress: number }>> => {
+      return axios.post('http://localhost:8001/ssh/file/transfer', config)
+    },
+
+    // 获取连接列表
+    getConnections: (): Promise<ApiResponse<Array<{
+      connectionId: string;
+      host: string;
+      port: number;
+      username: string;
+      status: string;
+      connectedAt: string;
+    }>>> => {
+      return axios.get('http://localhost:8001/ssh/connections')
+    }
+  },
+
   // 生成3D动作数据
   generate3DAction: async (prompt: string): Promise<{
     name: string;
