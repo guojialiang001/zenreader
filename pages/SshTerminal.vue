@@ -144,7 +144,7 @@
         </div>
 
         <!-- 交互式终端内容 -->
-        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg"></div>
+        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg box-sizing: border-box overflow: hidden"></div>
 
         <!-- 终端底部 -->
         <div class="px-4 py-3 md:px-6 md:py-4 bg-slate-800 border-t border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
@@ -711,12 +711,16 @@ class SSHTerminal {
             
             switch (message.type) {
               case 'connected':
-                this.sessionId = message.session_id
-                this.onConnectionChange(true)
-                this.log('SSH连接成功！')
-                this.isConnecting = false
-                resolve()
-                break
+              this.sessionId = message.session_id
+              this.onConnectionChange(true)
+              this.log('SSH连接成功！')
+              this.isConnecting = false
+              // 连接成功后再次调整终端大小，确保光标在框内
+              setTimeout(() => {
+                this.resizeTerminal()
+              }, 100)
+              resolve()
+              break
                 
               case 'output':
               case 'data':
@@ -924,11 +928,28 @@ function disconnect() {
 
 // 重置配置方法
 function resetConfig() {
+  // 如果当前已连接，先断开连接
+  if (isConnected.value) {
+    disconnect()
+  }
+  
+  // 重置连接配置（使用正确的属性名hostname）
   connectionConfig.value = {
-    host: '',
+    hostname: '',
     port: 22,
     username: '',
     password: ''
+  }
+  
+  // 重置状态
+  isConnected.value = false
+  errorMessage.value = ''
+  showError.value = false
+  
+  // 清理终端管理器实例
+  if (window.sshTerminalManager) {
+    window.sshTerminalManager.disconnect()
+    window.sshTerminalManager = null
   }
 }
 
