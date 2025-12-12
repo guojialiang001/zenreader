@@ -225,12 +225,24 @@ const connectionConfig = ref({
 
 
 // 环境变量配置
-const envConfig = computed(() => ({
-  defaultHost: import.meta.env.VITE_SSH_DEFAULT_HOST || 'localhost',
-  defaultPort: import.meta.env.VITE_SSH_DEFAULT_PORT || '22',
-  websocketUrl: import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh',
-  executeUrl: import.meta.env.VITE_SSH_EXECUTE_URL || 'ws://localhost:8002/ws/ssh/execute'
-}))
+const envConfig = computed(() => {
+  // 解析SSH WebSocket域名列表
+  const websocketDomains = import.meta.env.VITE_SSH_WEBSOCKET_DOMAINS || ''
+  const domains = websocketDomains.split(',').map(domain => domain.trim()).filter(domain => domain)
+  
+  // 如果没有配置域名列表，使用单个默认域名
+  if (domains.length === 0) {
+    domains.push(import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh')
+  }
+  
+  return {
+    defaultHost: import.meta.env.VITE_SSH_DEFAULT_HOST || 'localhost',
+    defaultPort: import.meta.env.VITE_SSH_DEFAULT_PORT || '22',
+    websocketUrl: import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh',
+    executeUrl: import.meta.env.VITE_SSH_EXECUTE_URL || 'ws://localhost:8002/ws/ssh/execute',
+    websocketDomains: domains // 轮训域名列表
+  }
+})
 
 
 
@@ -354,17 +366,26 @@ class SSHTerminal {
   private onConnectionChange: (connected: boolean) => void
   private onError: (error: string) => void
   private isConnecting = false
+  private websocketDomains: string[] = []
+  private currentDomainIndex = 0
 
   constructor(
     terminalContainer: HTMLElement,
     connectionConfig: any,
     onConnectionChange: (connected: boolean) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    websocketDomains: string[] = []
   ) {
     this.terminalContainer = terminalContainer
     this.connectionConfig = connectionConfig
     this.onConnectionChange = onConnectionChange
     this.onError = onError
+    this.websocketDomains = websocketDomains
+    
+    // 如果没有提供域名列表，使用默认域名
+    if (this.websocketDomains.length === 0) {
+      this.websocketDomains.push(import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh')
+    }
     
     // 自动连接
     this.connect()
@@ -386,7 +407,6 @@ class SSHTerminal {
       allowTransparency: false,
       disableStdin: false,
       // 禁用鼠标事件以避免第三方库错误
-      disableStdin: false,
       allowProposedApi: false
     })
 
@@ -500,97 +520,136 @@ class SSHTerminal {
       // 初始化终端
       this.initTerminal()
       
-      // WebSocket连接地址 - 从环境变量获取，匹配后端Python FastAPI端点
-      const wsUrl = envConfig.value.websocketUrl
-      this.ws = new WebSocket(wsUrl)
-      
-      this.ws.onopen = () => {
-        console.log('WebSocket连接已建立')
-        this.log('正在连接SSH服务器...')
+      // 域名轮训连接函数
+      const tryNextDomain = () => {
+        // 检查是否所有域名都已尝试过
+        if (this.currentDomainIndex >= this.websocketDomains.length) {
+          this.isConnecting = false
+          reject(new Error('所有SSH服务器连接失败'))
+          return
+        }
         
-        // 发送SSH连接配置
-        this.ws?.send(JSON.stringify({
-          type: 'connect',
-          data: this.connectionConfig
-        }))
-      }
-      
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data)
+        // 获取当前要尝试的域名
+        const wsUrl = this.websocketDomains[this.currentDomainIndex]
+        this.currentDomainIndex++
+        
+        this.log(`正在尝试连接到服务器 ${wsUrl}...`)
+        
+        // 创建WebSocket连接
+        this.ws = new WebSocket(wsUrl)
+        
+        this.ws.onopen = () => {
+          console.log('WebSocket连接已建立:', wsUrl)
+          this.log('正在连接SSH服务器...')
           
-          switch (message.type) {
-            case 'connected':
-              this.sessionId = message.session_id
-              this.onConnectionChange(true)
-              this.log('SSH连接成功！')
-              this.isConnecting = false
-              resolve()
-              break
-              
-            case 'output':
-            case 'data':
-              // 接收SSH服务器返回的数据
-              try {
-                if (this.terminal) {
-                  this.terminal.write(message.data || message.output)
+          // 发送SSH连接配置
+          this.ws?.send(JSON.stringify({
+            type: 'connect',
+            data: this.connectionConfig
+          }))
+        }
+        
+        this.ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data)
+            
+            switch (message.type) {
+              case 'connected':
+                this.sessionId = message.session_id
+                this.onConnectionChange(true)
+                this.log('SSH连接成功！')
+                this.isConnecting = false
+                resolve()
+                break
+                
+              case 'output':
+              case 'data':
+                // 接收SSH服务器返回的数据
+                try {
+                  if (this.terminal) {
+                    this.terminal.write(message.data || message.output)
+                  }
+                } catch (writeError) {
+                  console.warn('终端数据写入错误:', writeError)
                 }
-              } catch (writeError) {
-                console.warn('终端数据写入错误:', writeError)
-              }
-              break
-              
-            case 'error':
-              const errorMsg = message.message || '未知错误'
-              this.onError(errorMsg)
-              try {
-                if (this.terminal) {
-                  this.terminal.write(`\r\n\x1b[31m错误: ${errorMsg}\x1b[0m\r\n`)
+                break
+                
+              case 'error':
+                const errorMsg = message.message || '未知错误'
+                this.onError(errorMsg)
+                try {
+                  if (this.terminal) {
+                    this.terminal.write(`\r\n\x1b[31m错误: ${errorMsg}\x1b[0m\r\n`)
+                  }
+                } catch (writeError) {
+                  console.warn('错误信息写入失败:', writeError)
                 }
-              } catch (writeError) {
-                console.warn('错误信息写入失败:', writeError)
-              }
-              this.isConnecting = false
-              reject(new Error(errorMsg))
-              break
-              
-            case 'completed':
-              this.log(`命令执行完成，退出码: ${message.exit_code}`)
-              break
-              
-            case 'disconnected':
-              this.onConnectionChange(false)
-              this.log('SSH连接已断开')
-              break
+                this.isConnecting = false
+                reject(new Error(errorMsg))
+                break
+                
+              case 'completed':
+                this.log(`命令执行完成，退出码: ${message.exit_code}`)
+                break
+                
+              case 'disconnected':
+                this.onConnectionChange(false)
+                this.log('SSH连接已断开')
+                break
+            }
+          } catch (error) {
+            console.error('消息解析错误:', error)
+            this.onError('消息解析错误')
+            this.isConnecting = false
           }
-        } catch (error) {
-          console.error('消息解析错误:', error)
-          this.onError('消息解析错误')
-          this.isConnecting = false
         }
-      }
-      
-      this.ws.onerror = (error) => {
-        console.error('WebSocket错误:', error)
-        this.onError('WebSocket连接失败')
-        this.isConnecting = false
-        reject(new Error('WebSocket连接失败'))
-      }
-      
-      this.ws.onclose = () => {
-        console.log('WebSocket连接已关闭')
-        this.onConnectionChange(false)
-        this.log('连接已断开')
-        this.isConnecting = false
-      }
-      
-      // 设置超时
-      setTimeout(() => {
-        if (this.ws?.readyState !== WebSocket.OPEN && this.isConnecting) {
-          this.isConnecting = false
-          reject(new Error('连接超时'))
+        
+        this.ws.onerror = (error) => {
+          console.error(`WebSocket错误 (${wsUrl}):`, error)
+          this.log(`连接失败，正在尝试下一个服务器... (${this.currentDomainIndex}/${this.websocketDomains.length})`)
+          
+          // 关闭当前连接
+          if (this.ws) {
+            this.ws.close()
+            this.ws = null
+          }
+          
+          // 尝试下一个域名
+          setTimeout(tryNextDomain, 500) // 延迟500ms后尝试下一个域名
         }
-      }, 10000)
+        
+        this.ws.onclose = () => {
+          console.log(`WebSocket连接已关闭 (${wsUrl})`)
+          // 如果还在连接过程中，尝试下一个域名
+          if (this.isConnecting) {
+            this.log(`连接关闭，正在尝试下一个服务器... (${this.currentDomainIndex}/${this.websocketDomains.length})`)
+            setTimeout(tryNextDomain, 500)
+          } else {
+            this.onConnectionChange(false)
+            this.log('连接已断开')
+          }
+        }
+        
+        // 设置超时
+        setTimeout(() => {
+          if (this.ws?.readyState !== WebSocket.OPEN && this.isConnecting) {
+            console.log(`连接超时 (${wsUrl})`)
+            this.log(`连接超时，正在尝试下一个服务器... (${this.currentDomainIndex}/${this.websocketDomains.length})`)
+            
+            // 关闭当前连接
+            if (this.ws) {
+              this.ws.close()
+              this.ws = null
+            }
+            
+            // 尝试下一个域名
+            tryNextDomain()
+          }
+        }, 10000) // 10秒超时
+      }
+      
+      // 开始尝试第一个域名
+      tryNextDomain()
     })
   }
 
@@ -655,12 +714,15 @@ async function connectRealSSH() {
         userFriendlyMessage = '连接失败：连接超时，请检查服务器地址和端口'
       } else if (error.includes('WebSocket')) {
         userFriendlyMessage = '连接失败：无法连接到服务器，请检查服务器状态'
+      } else if (error.includes('所有SSH服务器连接失败')) {
+        userFriendlyMessage = '连接失败：所有SSH服务器都无法连接，请检查网络状态'
       } else {
         userFriendlyMessage = `连接失败：${error}`
       }
       
       showErrorMessage(userFriendlyMessage)
-    }
+    },
+    envConfig.value.websocketDomains // 传递域名列表用于轮训
   )
 
   try {
