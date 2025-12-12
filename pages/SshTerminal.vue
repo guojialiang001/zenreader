@@ -56,80 +56,16 @@
           <div class="mb-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
             <div class="flex items-center gap-2 mb-2">
               <span class="text-blue-400 text-sm">ℹ️</span>
-              <span class="text-slate-300 text-sm font-medium">当前环境配置</span>
+              <span class="text-slate-300 text-sm font-medium">SSH连接配置</span>
             </div>
             <div class="text-slate-400 text-xs space-y-1">
-              <div>默认主机: <span class="text-slate-300">{{ envConfig.defaultHost }}</span></div>
-              <div>默认端口: <span class="text-slate-300">{{ envConfig.defaultPort }}</span></div>
-              <div>WebSocket: <span class="text-slate-300">{{ envConfig.websocketUrl.replace('ws://', '') }}</span></div>
+              <div>配置状态: <span class="text-green-400">已就绪</span></div>
             </div>
           </div>
 
-          <!-- 预设配置选择 -->
-          <div class="mb-4 md:mb-6">
-            <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">快速选择配置</label>
-            <div class="flex flex-wrap gap-2">
-              <select 
-                v-model="selectedPreset" 
-                @change="applyPresetConfig"
-                class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-500 text-base"
-              >
-                <option value="">自定义配置</option>
-                <option v-for="preset in presetConfigs" :key="preset.name" :value="preset.name">
-                  {{ preset.name }}
-                </option>
-              </select>
-              <button 
-                v-if="selectedPreset"
-                @click="selectedPreset = ''; connectionConfig.hostname = ''; connectionConfig.port = 22"
-                class="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white transition-colors text-sm"
-              >
-                清除
-              </button>
-              <button 
-                @click="clearSavedConfig"
-                class="px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-white transition-colors text-sm"
-              >
-                清除保存
-              </button>
-            </div>
-          </div>
+          <!-- 连接配置 -->
           
-          <!-- 连接模式选择 -->
-          <div class="mb-4 md:mb-6">
-            <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">连接模式</label>
-            <div class="flex flex-col sm:flex-row gap-3 md:gap-4">
-              <label class="flex items-center">
-                <input 
-                  v-model="connectionMode" 
-                  type="radio" 
-                  value="interactive" 
-                  class="mr-3 w-4 h-4"
-                />
-                <span class="text-slate-300 text-base md:text-lg">交互式终端</span>
-              </label>
-              <label class="flex items-center">
-                <input 
-                  v-model="connectionMode" 
-                  type="radio" 
-                  value="execute" 
-                  class="mr-3 w-4 h-4"
-                />
-                <span class="text-slate-300 text-base md:text-lg">单次命令执行</span>
-              </label>
-            </div>
-          </div>
 
-          <!-- 单次命令执行模式下的命令输入 -->
-          <div v-if="connectionMode === 'execute'" class="mb-4 md:mb-6">
-            <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">执行命令</label>
-            <textarea 
-              v-model="executeCommand"
-              placeholder="输入要执行的命令，例如：ls -la"
-              rows="3"
-              class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
-            ></textarea>
-          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             <div>
@@ -171,19 +107,12 @@
           </div>
           <div class="mt-6 flex flex-col sm:flex-row gap-3 md:gap-4">
             <button 
-              v-if="connectionMode === 'interactive' || !isConnected"
+              v-if="!isConnected"
               @click="connect"
               :disabled="!canConnect"
               :class="['px-6 py-3 md:px-8 md:py-4 rounded-lg font-bold text-lg md:text-xl transition-colors', canConnect ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-slate-600 text-slate-400 cursor-not-allowed']"
             >
-              {{ connectionMode === 'interactive' ? '连接' : '执行命令' }}
-            </button>
-            <button 
-              v-if="connectionMode === 'execute' && isConnected"
-              @click="isConnected = false"
-              class="px-6 py-3 md:px-8 md:py-4 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors text-lg md:text-xl font-bold"
-            >
-              返回配置
+              连接
             </button>
             <button 
               @click="resetConfig"
@@ -206,37 +135,21 @@
               <div class="w-3 h-3 rounded-full bg-green-500"></div>
             </div>
             <span class="text-sm text-slate-300">
-              <template v-if="connectionMode === 'interactive'">
-                ssh {{ connectionConfig.username }}@{{ connectionConfig.hostname }}:{{ connectionConfig.port }}
-              </template>
-              <template v-else>
-                命令执行: {{ executeCommand }}
-              </template>
+              ssh {{ connectionConfig.username }}@{{ connectionConfig.hostname }}:{{ connectionConfig.port }}
             </span>
           </div>
           <div class="text-sm md:text-base text-slate-500">
-            {{ connectionMode === 'interactive' ? 'SSH连接工具 v3.0' : '单次命令执行' }}
+            SSH连接工具 v3.0
           </div>
         </div>
 
         <!-- 交互式终端内容 -->
-        <div v-if="connectionMode === 'interactive'" ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg"></div>
-
-        <!-- 单次命令执行输出 -->
-        <div v-else class="h-64 md:h-96 w-full p-4 bg-black text-green-400 font-mono text-base md:text-lg overflow-auto">
-          <div class="mb-2 text-slate-300 text-lg md:text-xl">命令执行结果:</div>
-          <pre class="whitespace-pre-wrap">{{ executeOutput }}</pre>
-        </div>
+        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg"></div>
 
         <!-- 终端底部 -->
         <div class="px-4 py-3 md:px-6 md:py-4 bg-slate-800 border-t border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
           <div class="text-sm md:text-base text-slate-500">
-            <template v-if="connectionMode === 'interactive'">
-              输入 <span class="text-slate-300">help</span> 查看可用命令
-            </template>
-            <template v-else>
-              命令执行完成
-            </template>
+            输入 <span class="text-slate-300">help</span> 查看可用命令
           </div>
           <div class="text-sm md:text-base text-slate-500">
             {{ currentTime }}
@@ -309,27 +222,7 @@ const connectionConfig = ref({
   password: ''
 })
 
-// 预设配置
-const presetConfigs = ref([
-  {
-    name: '本地环境',
-    hostname: '',
-    port: 22
-  },
-  {
-    name: '开发环境',
-    hostname: 'dev.example.com',
-    port: 22
-  },
-  {
-    name: '生产环境',
-    hostname: 'prod.example.com',
-    port: 22
-  }
-])
 
-// 当前选中的预设配置
-const selectedPreset = ref('')
 
 // 环境变量配置
 const envConfig = computed(() => ({
@@ -339,10 +232,7 @@ const envConfig = computed(() => ({
   executeUrl: import.meta.env.VITE_SSH_EXECUTE_URL || 'ws://localhost:8002/ws/ssh/execute'
 }))
 
-// 连接模式：interactive 或 execute
-const connectionMode = ref<'interactive' | 'execute'>('interactive')
-const executeCommand = ref('')
-const executeOutput = ref('')
+
 
 // 计算属性：检查是否可以连接
 const canConnect = computed(() => {
@@ -351,25 +241,7 @@ const canConnect = computed(() => {
          connectionConfig.value.password.trim() !== ''
 })
 
-// 应用预设配置
-function applyPresetConfig() {
-  const preset = presetConfigs.value.find(p => p.name === selectedPreset.value)
-  if (preset) {
-    if (preset.name === '本地环境') {
-      connectionConfig.value.hostname = envConfig.value.defaultHost
-      connectionConfig.value.port = parseInt(envConfig.value.defaultPort)
-    } else {
-      connectionConfig.value.hostname = preset.hostname
-      connectionConfig.value.port = preset.port
-    }
-  }
-}
 
-// 清除保存的配置
-function clearSavedConfig() {
-  localStorage.removeItem('ssh_config')
-  showErrorMessage('已清除保存的配置')
-}
 
 // 保存配置到本地存储
 function saveConfig() {
@@ -418,26 +290,20 @@ async function connect() {
   saveConfig()
   
   try {
-    if (connectionMode.value === 'interactive') {
-      // 交互式终端模式 - 先设置连接状态，让终端容器渲染
-      isConnected.value = true
-      
-      // 等待DOM更新，确保终端容器已渲染
-      await nextTick()
-      
-      // 检查终端容器是否已准备好
-      if (!terminalContainer.value) {
-        console.error('终端容器未找到')
-        throw new Error('终端容器未找到，请确保终端界面已加载')
-      }
-      
-      // 建立SSH连接，SSHTerminal类会自动初始化终端
-      await connectRealSSH()
-    } else {
-      // 单次命令执行模式
-      await executeSingleCommand()
-      isConnected.value = true
+    // 交互式终端模式 - 先设置连接状态，让终端容器渲染
+    isConnected.value = true
+    
+    // 等待DOM更新，确保终端容器已渲染
+    await nextTick()
+    
+    // 检查终端容器是否已准备好
+    if (!terminalContainer.value) {
+      console.error('终端容器未找到')
+      throw new Error('终端容器未找到，请确保终端界面已加载')
     }
+    
+    // 建立SSH连接，SSHTerminal类会自动初始化终端
+    await connectRealSSH()
   } catch (error) {
     console.error('SSH连接失败:', error)
     // 重置连接状态
@@ -475,73 +341,7 @@ async function connect() {
   }
 }
 
-// WebSocket连接
-let ws: WebSocket | null = null
 
-// 单次命令执行
-async function executeSingleCommand() {
-  return new Promise((resolve, reject) => {
-    // 使用单次命令执行端点 - 从环境变量获取
-    const wsUrl = envConfig.value.executeUrl
-    
-    ws = new WebSocket(wsUrl)
-    
-    ws.onopen = () => {
-      console.log('WebSocket连接已建立')
-      
-      // 发送SSH连接配置和命令
-      ws?.send(JSON.stringify({
-        type: 'execute',
-        config: connectionConfig.value,
-        command: executeCommand.value
-      }))
-    }
-    
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        
-        switch (data.type) {
-          case 'success':
-            console.log('命令执行成功')
-            executeOutput.value = data.output
-            resolve(data)
-            break
-            
-          case 'error':
-            console.error('命令执行错误:', data.message)
-            executeOutput.value = `错误: ${data.message}`
-            reject(new Error(data.message))
-            break
-            
-          case 'data':
-            // 累积输出
-            executeOutput.value += data.data
-            break
-        }
-      } catch (error) {
-        console.error('消息解析错误:', error)
-      }
-    }
-    
-    ws.onerror = (error) => {
-      console.error('WebSocket错误:', error)
-      reject(new Error('WebSocket连接失败'))
-    }
-    
-    ws.onclose = () => {
-      console.log('WebSocket连接已关闭')
-      isConnected.value = false
-    }
-    
-    // 设置超时
-    setTimeout(() => {
-      if (ws?.readyState !== WebSocket.OPEN) {
-        reject(new Error('连接超时'))
-      }
-    }, 30000) // 30秒超时
-  })
-}
 
 // 现代化的SSH终端类（基于用户提供的SSHTerminal类改进）
 class SSHTerminal {
@@ -912,9 +712,6 @@ function resetConfig() {
     username: '',
     password: ''
   }
-  executeCommand.value = ''
-  executeOutput.value = ''
-  connectionMode.value = 'interactive'
 }
 
 // 终端管理器实例
