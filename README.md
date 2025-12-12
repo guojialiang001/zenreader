@@ -45,8 +45,14 @@
    # SSH默认连接配置
    VITE_SSH_DEFAULT_HOST=localhost        # 默认SSH主机地址
    VITE_SSH_DEFAULT_PORT=22               # 默认SSH端口
-   VITE_SSH_WEBSOCKET_URL=ws://localhost:8002/ws/ssh      # SSH交互式终端WebSocket地址
-   VITE_SSH_EXECUTE_URL=ws://localhost:8002/ws/ssh/execute  # SSH单次命令执行WebSocket地址
+   
+   # WebSocket配置 - ⚠️ HTTPS网站必须使用wss://协议
+   VITE_SSH_WEBSOCKET_URL=wss://localhost:8002/ws/ssh      # SSH交互式终端WebSocket地址
+   VITE_SSH_EXECUTE_URL=wss://localhost:8002/ws/ssh/execute  # SSH单次命令执行WebSocket地址
+   
+   # HTTP网站可以使用ws://协议
+   # VITE_SSH_WEBSOCKET_URL=ws://localhost:8002/ws/ssh
+   # VITE_SSH_EXECUTE_URL=ws://localhost:8002/ws/ssh/execute
    ```
 
 ### 使用方法

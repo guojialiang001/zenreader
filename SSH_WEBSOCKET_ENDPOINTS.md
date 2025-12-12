@@ -4,26 +4,33 @@
 
 前端SSH终端现在支持以下两个WebSocket端点，都连接到运行在8002端口的后端服务：
 
-### 1. 实时SSH终端 (`ws://localhost:8002/ws/ssh`)
+### 1. 实时SSH终端 (`wss://localhost:8002/ws/ssh`)
 - **功能**：提供完整的交互式终端功能
 - **用途**：实时命令输入和输出、终端大小调整、会话保持、实时错误处理
 - **使用场景**：需要持续交互的SSH会话
 
-### 2. 单次命令执行 (`ws://localhost:8002/ws/ssh/execute`)
+### 2. 单次命令执行 (`wss://localhost:8002/ws/ssh/execute`)
 - **功能**：执行单次命令并实时返回输出
 - **用途**：批量命令执行、脚本运行、监控任务
 - **使用场景**：只需要执行单个命令并获取结果
+
+## ⚠️ 重要安全提示
+
+**当网站通过HTTPS访问时，必须使用WSS协议！**
+- 浏览器会阻止HTTPS页面使用不安全的WS连接
+- 生产环境请使用`wss://`协议
+- 开发环境如果使用`http://`可以使用`ws://`
 
 ## 前端配置
 
 在 `pages/SshTerminal.vue` 文件中，WebSocket连接地址已更新为：
 
 ```typescript
-// 交互式终端
-const wsUrl = `ws://localhost:8002/ws/ssh`
+// 交互式终端 (HTTPS网站必须使用wss://)
+const wsUrl = `wss://localhost:8002/ws/ssh`
 
-// 单次命令执行
-const wsUrl = `ws://localhost:8002/ws/ssh/execute`
+// 单次命令执行 (HTTPS网站必须使用wss://)
+const wsUrl = `wss://localhost:8002/ws/ssh/execute`
 ```
 
 ## 使用说明
