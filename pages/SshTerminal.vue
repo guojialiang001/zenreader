@@ -566,9 +566,13 @@ class SSHTerminal {
         const cols = this.terminal.cols
         const rows = this.terminal.rows
         
+        // 发送resize消息到后端，使用width/height格式
         this.ws.send(JSON.stringify({
           type: 'resize',
-          data: { cols: cols, rows: rows }
+          data: { 
+            width: cols,
+            height: rows
+          }
         }))
       }
     } catch (error) {
