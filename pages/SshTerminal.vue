@@ -398,7 +398,12 @@ class SSHTerminal {
   }
 
   private initTerminal(): void {
-    if (!this.terminalContainer) return
+    console.debug('initTerminal called')
+    if (!this.terminalContainer) {
+      console.debug('terminalContainer not found, returning')
+      return
+    }
+    console.debug('terminalContainer found, initializing terminal')
     
     this.terminal = new Terminal({
       theme: {
@@ -441,13 +446,22 @@ class SSHTerminal {
 
     this.fitAddon = new FitAddon()
     this.terminal.loadAddon(this.fitAddon)
+    console.debug('Opening terminal with container:', this.terminalContainer)
     this.terminal.open(this.terminalContainer)
+    console.debug('Terminal opened successfully')
     this.fitAddon.fit()
+    
+    // 检查终端尺寸
+    console.debug('Terminal dimensions after fit:', {
+      cols: this.terminal.cols,
+      rows: this.terminal.rows
+    })
     
     // 设置终端焦点
     setTimeout(() => {
       try {
         this.terminal?.focus()
+        console.debug('Terminal focused in setTimeout')
       } catch (error) {
         console.warn('终端焦点设置失败:', error)
       }
@@ -465,12 +479,17 @@ class SSHTerminal {
     
     this.terminal.onData((data) => {
       try {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+        console.debug('Terminal onData received:', JSON.stringify(data))
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+          console.debug('Cannot process input - WebSocket not ready')
+          return
+        }
         
         // 处理特殊按键
         switch (data) {
           case '\r':
           case '\n': // 回车键
+            console.debug('Enter key pressed, processing command')
             // 保存命令到历史记录（如果非空）
             if (this.inputBuffer.trim()) {
               // 避免重复命令
@@ -484,10 +503,12 @@ class SSHTerminal {
             }
             
             // 发送完整的命令行
+            console.debug('Sending command to server:', this.inputBuffer)
             this.ws.send(JSON.stringify({
               type: 'command',
               data: { command: this.inputBuffer + '\n' }
             }))
+            console.debug('Command sent to server')
             
             // 重置状态
             this.inputBuffer = ''
@@ -499,6 +520,7 @@ class SSHTerminal {
             
           case '\x7f':
           case '\b': // 退格键
+            console.debug('Backspace key pressed')
             if (this.inputBuffer.length > 0) {
               this.inputBuffer = this.inputBuffer.slice(0, -1)
               this.terminal.write('\b \b')
@@ -506,6 +528,7 @@ class SSHTerminal {
             break
             
           case '\x03': // Ctrl+C
+            console.debug('Ctrl+C pressed')
             // 发送中断信号
             this.ws.send(JSON.stringify({
               type: 'command',
@@ -517,19 +540,23 @@ class SSHTerminal {
             break
             
           case '\x1b[A': // 上箭头键
+            console.debug('Up arrow pressed')
             this.handleUpArrow()
             break
             
           case '\x1b[B': // 下箭头键
+            console.debug('Down arrow pressed')
             this.handleDownArrow()
             break
             
           case '\t': // TAB键 - 自动补全
+            console.debug('Tab key pressed')
             this.handleTabCompletion()
             break
             
           case '\x1b[C': // 右箭头键
           case '\x1b[D': // 左箭头键
+            console.debug('Arrow key pressed, sending to server')
             // 直接发送到服务器，由服务器处理光标移动
             this.ws.send(JSON.stringify({
               type: 'command',
@@ -539,11 +566,13 @@ class SSHTerminal {
             
           default:
             if (data >= ' ' && data <= '~') { // 可打印字符
+              console.debug('Regular character input:', data)
               this.inputBuffer += data
               this.terminal.write(data)
               // 如果正在浏览历史，重置历史索引
               this.historyIndex = -1
             } else {
+              console.debug('Other control character:', JSON.stringify(data))
               // 其他控制字符直接发送到服务器
               this.ws.send(JSON.stringify({
                 type: 'command',
@@ -564,13 +593,20 @@ class SSHTerminal {
 
   private resizeTerminal(): void {
     try {
+      console.debug('resizeTerminal called')
       if (this.fitAddon) {
+        console.debug('Fitting terminal with fitAddon')
         this.fitAddon.fit()
+        console.debug('Terminal fitted, new dimensions:', {
+          cols: this.terminal?.cols,
+          rows: this.terminal?.rows
+        })
       }
       
       if (this.ws && this.ws.readyState === WebSocket.OPEN && this.terminal) {
         const cols = this.terminal.cols
         const rows = this.terminal.rows
+        console.debug('Sending resize message to backend:', { width: cols, height: rows })
         
         // 发送resize消息到后端，使用width/height格式
         this.ws.send(JSON.stringify({
@@ -580,6 +616,13 @@ class SSHTerminal {
             height: rows
           }
         }))
+        console.debug('Resize message sent successfully')
+      } else {
+        console.debug('Cannot send resize message - conditions not met:', {
+          wsExists: !!this.ws,
+          wsOpen: this.ws?.readyState === WebSocket.OPEN,
+          terminalExists: !!this.terminal
+        })
       }
     } catch (error) {
       console.warn('终端大小调整错误:', error)
@@ -714,8 +757,13 @@ class SSHTerminal {
 
   private log(message: string): void {
     try {
+      console.debug('Log function called with message:', message)
+      console.debug('Terminal exists:', !!this.terminal)
       if (this.terminal) {
         this.terminal.write(`\r\n\x1b[33m${message}\x1b[0m\r\n`)
+        console.debug('Message written to terminal')
+      } else {
+        console.debug('Terminal not found, cannot write message')
       }
     } catch (error) {
       console.warn('终端日志写入错误:', error)
@@ -725,15 +773,19 @@ class SSHTerminal {
   public async connect(): Promise<void> {
     if (this.isConnecting) return
     this.isConnecting = true
+    console.debug('SSH connect method called')
 
     return new Promise((resolve, reject) => {
       if (!this.terminalContainer) {
+        console.debug('Terminal container not found')
         reject(new Error('终端容器未找到'))
         return
       }
 
+      console.debug('Initializing terminal before connection')
       // 初始化终端
       this.initTerminal()
+      console.debug('Terminal initialized, starting WebSocket connection')
       
       // 域名轮训连接函数
       const tryNextDomain = () => {
@@ -767,11 +819,31 @@ class SSHTerminal {
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data)
+            console.debug('WebSocket message received:', message)
+            console.debug('Message type:', message.type)
+            console.debug('Message data:', message.data)
             
             switch (message.type) {
               case 'connected':
                 this.sessionId = message.session_id
                 this.onConnectionChange(true)
+                console.debug('Connected message received, terminal exists:', !!this.terminal)
+                console.debug('Terminal container exists:', !!this.terminalContainer)
+                console.debug('Terminal container element:', this.terminalContainer)
+                
+                // 确保终端已初始化并聚焦
+                if (this.terminal) {
+                  console.debug('Terminal instance exists, checking focus')
+                  try {
+                    this.terminal.focus()
+                    console.debug('Terminal focused successfully')
+                  } catch (focusError) {
+                    console.debug('Error focusing terminal:', focusError)
+                  }
+                } else {
+                  console.debug('Terminal instance not found, cannot focus')
+                }
+                
                 this.log('SSH连接成功！')
                 this.isConnecting = false
                 // 连接成功后再次调整终端大小，确保光标在框内
@@ -781,42 +853,130 @@ class SSHTerminal {
                 resolve()
                 break
                 
+              case 'welcome':
+              case 'banner':
+              case 'motd':
+                console.debug('Welcome/banner message received:', message.type)
+                // 处理欢迎信息（如Ubuntu登录欢迎信息）
+                if (this.terminal && message.data) {
+                  console.debug('Writing welcome message to terminal')
+                  this.terminal.write(message.data)
+                }
+                break
+                
               case 'tab_completion_options':
                 this.handleTabCompletionResponse(message.data)
                 break;
 
+              case 'ls_output':
+                // 处理ls命令的结构化输出（带颜色支持）
+                console.debug('=== LS_OUTPUT MESSAGE START ===')
+                console.debug('LS output data:', message.data)
+                
+                try {
+                  if (!this.terminal) {
+                    console.error('TERMINAL NOT FOUND - cannot write ls output!')
+                    break
+                  }
+                  
+                  // 检查数据格式
+                  if (!message.data || typeof message.data !== 'object') {
+                    console.warn('Invalid ls_output data format, falling back to normal output')
+                    // 降级处理：尝试作为普通输出处理
+                    if (message.data && typeof message.data === 'string') {
+                      this.terminal.write(message.data)
+                    }
+                    break
+                  }
+                  
+                  // 使用颜色格式化函数处理ls输出
+                  if (typeof formatLsOutputWithColors === 'function') {
+                    const formattedOutput = formatLsOutputWithColors(message.data, this.terminal)
+                    console.debug('Formatted ls output with colors, length:', formattedOutput.length)
+                    this.terminal.write(formattedOutput)
+                  } else {
+                    // 如果格式化函数不存在，降级为简单显示
+                    console.warn('formatLsOutputWithColors function not found, using fallback')
+                    const files = message.data.files || []
+                    const prompt = message.data.prompt || ''
+                    const fileList = files.map((f: any) => f.name || '').join('\n')
+                    this.terminal.write(fileList + (fileList ? '\n' : '') + prompt)
+                  }
+                  
+                  console.debug('LS output written successfully')
+                } catch (lsError) {
+                  console.error('LS输出处理错误:', lsError)
+                  console.error('Error details:', lsError.message)
+                  console.error('Error stack:', lsError.stack)
+                  // 降级处理：尝试显示原始数据
+                  try {
+                    if (message.data && message.data.files) {
+                      const fileList = message.data.files.map((f: any) => f.name || '').join('\n')
+                      this.terminal.write(fileList + '\n' + (message.data.prompt || ''))
+                    }
+                  } catch (fallbackError) {
+                    console.error('降级处理也失败:', fallbackError)
+                  }
+                }
+                console.debug('=== LS_OUTPUT MESSAGE END ===')
+                break
+
               case 'output':
               case 'data':
                 // 接收SSH服务器返回的数据
+                console.debug('=== OUTPUT/DATA MESSAGE START ===')
+                console.debug('Raw message:', message)
+                console.debug('Message type:', message.type)
+                console.debug('Message data length:', message.data?.length)
+                console.debug('Message data preview:', message.data?.substring(0, 100))
+                console.debug('Message output length:', message.output?.length)
+                console.debug('Message output preview:', message.output?.substring(0, 100))
+                console.debug('Terminal exists:', !!this.terminal)
+                
                 try {
                   if (this.terminal) {
                     // 直接写入原始数据，让xterm处理ANSI转义序列
                     const outputData = message.data || message.output || ''
+                    console.debug('Total output data length:', outputData.length)
+                    console.debug('Output data preview:', outputData.substring(0, 200))
                     
                     // 处理可能的Unicode编码问题
                     if (typeof outputData === 'string') {
+                      console.debug('Output is string type, processing...')
                       // 检查是否是简单的ls输出（每行一个项目，没有颜色编码）
                       if (this.isSimpleLsOutput(outputData)) {
+                        console.debug('Detected simple ls output, formatting...')
                         // 将简单输出格式化为列对齐格式
                         const formattedOutput = this.formatSimpleLsOutput(outputData)
+                        console.debug('Formatted output length:', formattedOutput.length)
                         this.terminal.write(formattedOutput)
                       } else {
-                        // 对于其他输出（包括带ANSI颜色的），直接写入
+                        console.debug('Complex output detected, writing raw data')
+                        console.debug('First 500 characters:', outputData.substring(0, 500))
                         this.terminal.write(outputData)
                       }
+                      console.debug('Output written successfully to terminal')
                     } else if (outputData instanceof ArrayBuffer) {
+                      console.debug('Output is ArrayBuffer, decoding...')
                       // 处理二进制数据
                       const decoder = new TextDecoder('utf-8')
                       const text = decoder.decode(outputData)
+                      console.debug('Decoded text length:', text.length)
                       this.terminal.write(text)
                     } else {
+                      console.debug('Output is other type:', typeof outputData)
                       // 处理其他格式的数据
                       this.terminal.write(String(outputData))
                     }
+                  } else {
+                    console.debug('TERMINAL NOT FOUND - cannot write output!')
                   }
                 } catch (writeError) {
-                  console.warn('终端数据写入错误:', writeError)
+                  console.error('终端数据写入错误:', writeError)
+                  console.error('Error details:', writeError.message)
+                  console.error('Error stack:', writeError.stack)
                 }
+                console.debug('=== OUTPUT/DATA MESSAGE END ===')
                 break
                 
               case 'error':
@@ -840,6 +1000,11 @@ class SSHTerminal {
               case 'disconnected':
                 this.onConnectionChange(false)
                 this.log('SSH连接已断开')
+                break
+                
+              default:
+                console.debug('Unknown message type received:', message.type)
+                console.debug('Full message:', message)
                 break
             }
           } catch (error) {
@@ -1265,6 +1430,104 @@ function handleCommand(input: string) {
 // 更新时间显示
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN')
+}
+
+// 文件颜色方案定义（根据 ssh_output_standards.md）
+const FILE_COLORS = {
+  // 目录 - 蓝色
+  directory: '\x1b[34m',      // 蓝色
+  // 普通文件 - 默认颜色（白色）
+  file: '\x1b[0m',            // 重置
+  // 可执行文件 - 绿色
+  executable: '\x1b[32m',     // 绿色
+  // 符号链接 - 青色
+  symlink: '\x1b[36m',        // 青色
+  // BASE路径 - 黄色加粗
+  base: '\x1b[33;1m',         // 黄色加粗
+  // 特殊文件类型
+  socket: '\x1b[35m',         // 紫色
+  pipe: '\x1b[33m',           // 黄色
+  block: '\x1b[34;46m',       // 蓝色背景
+  char: '\x1b[34;43m',        // 蓝色背景
+  // 重置颜色
+  reset: '\x1b[0m'
+}
+
+// 格式化ls输出（带颜色）
+function formatLsOutputWithColors(lsData: any, terminal?: any): string {
+  const { files, prompt } = lsData
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return prompt || ''
+  }
+  
+  // 获取终端宽度
+  const terminalWidth = terminal?.cols || 120
+  
+  // 计算最大文件名宽度（不考虑颜色代码）
+  const maxNameWidth = Math.max(...files.map((f: any) => f.name?.length || 0))
+  const columnWidth = maxNameWidth + 2  // 文件名宽度 + 2个空格间距
+  const columns = Math.max(1, Math.floor(terminalWidth / columnWidth))
+  const actualColumns = Math.min(columns, 8)  // 限制最大列数
+  
+  // 格式化每个文件名，添加颜色
+  const coloredFiles = files.map((file: any) => {
+    let color = FILE_COLORS.reset
+    
+    // 确定颜色（优先级：BASE > 类型 > 可执行）
+    if (file.is_base) {
+      color = FILE_COLORS.base
+    } else if (file.type === 'directory') {
+      color = FILE_COLORS.directory
+    } else if (file.is_executable) {
+      color = FILE_COLORS.executable
+    } else if (file.type === 'symlink') {
+      color = FILE_COLORS.symlink
+    } else if (file.type === 'socket') {
+      color = FILE_COLORS.socket
+    } else if (file.type === 'pipe') {
+      color = FILE_COLORS.pipe
+    } else if (file.type === 'block' || file.type === 'char') {
+      color = FILE_COLORS.block
+    } else {
+      color = FILE_COLORS.file
+    }
+    
+    const fileName = file.name || ''
+    return {
+      name: fileName,
+      colored: color + fileName + FILE_COLORS.reset,
+      width: fileName.length
+    }
+  })
+  
+  // 多列排列（行优先：从左到右，从上到下）
+  let result = ''
+  const totalRows = Math.ceil(coloredFiles.length / actualColumns)
+  
+  for (let row = 0; row < totalRows; row++) {
+    let rowContent = ''
+    for (let col = 0; col < actualColumns; col++) {
+      const index = row * actualColumns + col
+      if (index < coloredFiles.length) {
+        const item = coloredFiles[index]
+        if (col < actualColumns - 1) {
+          // 使用原始文件名长度计算填充（不考虑颜色代码）
+          const padding = columnWidth - item.width
+          rowContent += item.colored + ' '.repeat(padding)
+        } else {
+          rowContent += item.colored
+        }
+      }
+    }
+    result += rowContent.trimEnd() + '\n'
+  }
+  
+  // 添加提示符（不换行）
+  if (prompt) {
+    result += prompt
+  }
+  
+  return result
 }
 
 // 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
