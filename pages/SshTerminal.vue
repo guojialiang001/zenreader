@@ -144,7 +144,7 @@
         </div>
 
         <!-- 交互式终端内容 -->
-        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg box-sizing: border-box overflow: hidden"></div>
+        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg"></div>
 
         <!-- 终端底部 -->
         <div class="px-4 py-3 md:px-6 md:py-4 bg-slate-800 border-t border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
@@ -620,10 +620,59 @@ class SSHTerminal {
     this.ws?.send(JSON.stringify({
       type: 'tab_complete',
       data: { 
-        command: this.inputBuffer,
-        cursor_pos: this.inputBuffer.length 
+        command: this.inputBuffer
       }
     }))
+  }
+  
+  // 处理TAB补全响应
+  private handleTabCompletionResponse(data: any): void {
+    const options = data.options || []
+    const base = data.base || ''
+    
+    if (options.length === 0) return
+    
+    if (options.length === 1) {
+      // 单个补全选项 - 直接补全
+      const completion = options[0]
+      // 检查当前输入是否以base结尾
+       if (this.inputBuffer.endsWith(base)) {
+         // 计算新的输入：移除base，加上completion
+         // 比如输入 "ls /tm"，base="/tm"，completion="/tmp/" -> prefix="ls "
+         const prefix = base.length > 0 ? this.inputBuffer.slice(0, -base.length) : this.inputBuffer
+         const finalInput = prefix + completion
+         
+         this.replaceCurrentCommand(finalInput)
+         this.inputBuffer = finalInput
+       } else {
+        // 如果base不匹配（罕见），尝试直接追加或替换
+        // 这里假设后端返回的正确补全
+        this.replaceCurrentCommand(completion)
+        this.inputBuffer = completion
+      }
+    } else {
+      // 多个补全选项 - 显示列表
+      if (this.terminal) {
+        // 获取当前行内容（包含提示符和输入）以备恢复
+        const buffer = this.terminal.buffer.active
+        const currentLineY = buffer.cursorY
+        const currentLineContent = buffer.getLine(currentLineY)?.translateToString(true) || ''
+        
+        this.terminal.write('\r\n')
+        // 格式化输出选项，尝试适配屏幕宽度
+        // 简单实现：空格分隔
+        this.terminal.write(options.join('  '))
+        this.terminal.write('\r\n')
+        
+        // 恢复提示符和输入
+        if (currentLineContent) {
+          this.terminal.write(currentLineContent)
+        } else {
+          // 降级方案：只显示输入内容
+          this.terminal.write(this.inputBuffer)
+        }
+      }
+    }
   }
   
   // 显示历史命令
@@ -711,17 +760,21 @@ class SSHTerminal {
             
             switch (message.type) {
               case 'connected':
-              this.sessionId = message.session_id
-              this.onConnectionChange(true)
-              this.log('SSH连接成功！')
-              this.isConnecting = false
-              // 连接成功后再次调整终端大小，确保光标在框内
-              setTimeout(() => {
-                this.resizeTerminal()
-              }, 100)
-              resolve()
-              break
+                this.sessionId = message.session_id
+                this.onConnectionChange(true)
+                this.log('SSH连接成功！')
+                this.isConnecting = false
+                // 连接成功后再次调整终端大小，确保光标在框内
+                setTimeout(() => {
+                  this.resizeTerminal()
+                }, 100)
+                resolve()
+                break
                 
+              case 'tab_completion_options':
+                this.handleTabCompletionResponse(message.data)
+                break;
+
               case 'output':
               case 'data':
                 // 接收SSH服务器返回的数据
@@ -1407,21 +1460,31 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 终端容器样式 - 蓝黑经典纹理质感 */
+/* 简化样式，确保基本边框和背景正常显示 */
 :deep(.xterm) {
   background-color: #0a0e27 !important;
-  background-image: 
-    radial-gradient(circle at 25% 25%, rgba(97, 114, 161, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 75% 75%, rgba(97, 114, 161, 0.1) 0%, transparent 50%);
-  background-size: 200px 200px;
-  border-radius: 8px;
-  box-shadow: 
-    inset 0 0 20px rgba(0, 0, 0, 0.5),
-    0 4px 20px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(97, 114, 161, 0.3);
+  border: none !important;
 }
 
-/* 终端文字样式 */
+/* 终端外部容器样式 */
+.bg-black.rounded-lg.shadow-2xl {
+  border: 1px solid #4a5568 !important;
+  background-color: #0a0e27 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 终端标题栏样式 */
+.bg-slate-800 {
+  background-color: #1a1f3a !important;
+  border-color: #4a5568 !important;
+}
+
+/* 终端底部样式 */
+.border-t {
+  border-top: 1px solid #4a5568 !important;
+}
+
+/* 基本终端文字样式 */
 :deep(.xterm-rows) {
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 16px;
@@ -1431,18 +1494,11 @@ onMounted(() => {
 /* 终端光标样式 */
 :deep(.xterm-cursor) {
   background-color: #98d1ce !important;
-  border-color: #98d1ce !important;
 }
 
-/* 终端选择样式 */
-:deep(.xterm-selection) {
-  background-color: #2d3b55 !important;
-}
-
-/* 终端滚动条样式 */
+/* 简化滚动条样式 */
 :deep(.xterm-viewport) {
   scrollbar-width: thin;
-  scrollbar-color: rgba(97, 114, 161, 0.5) rgba(10, 14, 39, 0.5);
 }
 
 :deep(.xterm-viewport::-webkit-scrollbar) {
@@ -1450,93 +1506,8 @@ onMounted(() => {
   height: 8px;
 }
 
-:deep(.xterm-viewport::-webkit-scrollbar-track) {
-  background: rgba(10, 14, 39, 0.5);
-  border-radius: 4px;
-}
-
 :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
   background: rgba(97, 114, 161, 0.5);
   border-radius: 4px;
-}
-
-:deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
-  background: rgba(97, 114, 161, 0.7);
-}
-
-/* 终端容器 */
-.terminal-container {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-/* 终端标题栏样式 */
-.terminal-header {
-  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
-  border-bottom: 1px solid rgba(97, 114, 161, 0.3);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-/* 终端底部样式 */
-.terminal-footer {
-  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
-  border-top: 1px solid rgba(97, 114, 161, 0.3);
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
-}
-
-/* 连接状态指示器 */
-.connection-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.connection-status.online {
-  color: #5af78e;
-}
-
-.connection-status.offline {
-  color: #ff5c57;
-}
-
-/* 按钮样式 */
-button {
-  transition: all 0.2s ease;
-}
-
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-button:active {
-  transform: translateY(0);
-}
-
-/* 输入框样式 */
-input {
-  background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
-  border: 1px solid rgba(97, 114, 161, 0.3);
-  transition: all 0.2s ease;
-}
-
-input:focus {
-  border-color: #57c7ff;
-  box-shadow: 0 0 0 2px rgba(87, 199, 255, 0.2);
-}
-
-/* 卡片样式 */
-.card {
-  background: linear-gradient(135deg, rgba(26, 31, 58, 0.8) 0%, rgba(10, 14, 39, 0.8) 100%);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(97, 114, 161, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
-}
-
-.card:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-  transform: translateY(-2px);
 }
 </style>
