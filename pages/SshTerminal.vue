@@ -144,7 +144,7 @@
         </div>
 
         <!-- 交互式终端内容 -->
-        <div ref="terminalContainer" class="h-64 md:h-96 w-full text-base md:text-lg"></div>
+        <div ref="terminalContainer" class="h-96 w-full text-sm font-mono overflow-hidden"></div>
 
         <!-- 终端底部 -->
         <div class="px-4 py-3 md:px-6 md:py-4 bg-slate-800 border-t border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
@@ -424,13 +424,17 @@ class SSHTerminal {
         brightCyan: '#a4ffff',
         brightWhite: '#ffffff'
       },
-      fontSize: 16,
+      fontSize: 14,
       fontFamily: 'Consolas, "Courier New", monospace',
       cursorBlink: true,
       allowTransparency: false,
       disableStdin: false,
       allowProposedApi: false,
-      rendererType: 'canvas' // 使用canvas渲染器，支持更多视觉效果
+      rendererType: 'canvas',
+      // 关键配置：确保正确处理输出格式
+      convertEol: true,
+      rows: 24,
+      cols: 80
     })
 
     this.fitAddon = new FitAddon()
@@ -784,7 +788,21 @@ class SSHTerminal {
                 // 接收SSH服务器返回的数据
                 try {
                   if (this.terminal) {
-                    this.terminal.write(message.data || message.output)
+                    // 直接写入原始数据，让xterm处理ANSI转义序列
+                    const outputData = message.data || message.output || ''
+                    
+                    // 处理可能的Unicode编码问题
+                    if (typeof outputData === 'string') {
+                      this.terminal.write(outputData)
+                    } else if (outputData instanceof ArrayBuffer) {
+                      // 处理二进制数据
+                      const decoder = new TextDecoder('utf-8')
+                      const text = decoder.decode(outputData)
+                      this.terminal.write(text)
+                    } else {
+                      // 处理其他格式的数据
+                      this.terminal.write(String(outputData))
+                    }
                   }
                 } catch (writeError) {
                   console.warn('终端数据写入错误:', writeError)
