@@ -434,7 +434,9 @@ class SSHTerminal {
       // 关键配置：确保正确处理输出格式
       convertEol: true,
       rows: 24,
-      cols: 80
+      cols: 120, // 增加列数，更好地显示长文件名
+      scrollback: 1000, // 增加滚动缓冲区
+      tabStopWidth: 8 // 设置制表符宽度
     })
 
     this.fitAddon = new FitAddon()
@@ -793,7 +795,15 @@ class SSHTerminal {
                     
                     // 处理可能的Unicode编码问题
                     if (typeof outputData === 'string') {
-                      this.terminal.write(outputData)
+                      // 检查是否是简单的ls输出（每行一个项目，没有颜色编码）
+                      if (this.isSimpleLsOutput(outputData)) {
+                        // 将简单输出格式化为列对齐格式
+                        const formattedOutput = this.formatSimpleLsOutput(outputData)
+                        this.terminal.write(formattedOutput)
+                      } else {
+                        // 对于其他输出（包括带ANSI颜色的），直接写入
+                        this.terminal.write(outputData)
+                      }
                     } else if (outputData instanceof ArrayBuffer) {
                       // 处理二进制数据
                       const decoder = new TextDecoder('utf-8')
@@ -1255,6 +1265,60 @@ function handleCommand(input: string) {
 // 更新时间显示
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN')
+}
+
+// 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
+function isSimpleLsOutput(output: string): boolean {
+  // 检查输出格式：每行一个文件名，没有ANSI颜色代码
+  const lines = output.trim().split('\n')
+  if (lines.length === 0) return false
+  
+  // 检查是否每行都是一个简单的文件名（没有颜色代码）
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (trimmedLine === '') continue
+    
+    // 如果有ANSI颜色代码，返回false
+    if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
+      return false
+    }
+    
+    // 如果包含特殊字符或格式，返回false
+    if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
+      return false
+    }
+  }
+  
+  return true
+}
+
+// 格式化简单的ls输出为多列对齐格式
+function formatSimpleLsOutput(output: string): string {
+  const lines = output.trim().split('\n').filter(line => line.trim() !== '')
+  if (lines.length === 0) return output
+  
+  // 计算每列的最大宽度
+  const maxWidth = Math.max(...lines.map(line => line.trim().length))
+  const columnWidth = maxWidth + 2 // 添加一些间距
+  
+  // 计算列数（假设终端宽度为120字符）
+  const terminalWidth = 120
+  const columns = Math.floor(terminalWidth / columnWidth)
+  const actualColumns = Math.max(1, columns)
+  
+  // 重新排列为列格式
+  let result = ''
+  for (let i = 0; i < lines.length; i += actualColumns) {
+    let row = ''
+    for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
+      const item = lines[i + j].trim()
+      // 使用制表符或空格对齐
+      row += item.padEnd(columnWidth)
+    }
+    result += row.trimEnd() + '\r\n'
+  }
+  
+  return result
 }
 
 // 清理函数
