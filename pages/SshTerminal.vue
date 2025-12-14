@@ -529,10 +529,10 @@ class SSHTerminal {
             
           case '\x03': // Ctrl+C
             console.debug('Ctrl+C pressed')
-            // 发送中断信号
+            // 发送中断信号 - 使用interrupt类型而不是command类型
             this.ws.send(JSON.stringify({
-              type: 'command',
-              data: { command: '\x03' }
+              type: 'interrupt',
+              data: { signal: 'SIGINT' }
             }))
             this.inputBuffer = ''
             this.historyIndex = -1
@@ -556,12 +556,16 @@ class SSHTerminal {
             
           case '\x1b[C': // 右箭头键
           case '\x1b[D': // 左箭头键
-            console.debug('Arrow key pressed, sending to server')
-            // 直接发送到服务器，由服务器处理光标移动
-            this.ws.send(JSON.stringify({
-              type: 'command',
-              data: { command: data }
-            }))
+            console.debug('Arrow key pressed, local handling')
+            // 本地处理光标移动，不发送到服务器
+            // 右箭头 - 移动光标到输入缓冲区末尾
+            if (data === '\x1b[C') {
+              // 右箭头 - 仅在本地处理，不发送到服务器
+              // 这里可以添加光标位置管理逻辑
+            } else if (data === '\x1b[D') {
+              // 左箭头 - 仅在本地处理，不发送到服务器
+              // 这里可以添加光标位置管理逻辑
+            }
             break
             
           default:
@@ -573,11 +577,17 @@ class SSHTerminal {
               this.historyIndex = -1
             } else {
               console.debug('Other control character:', JSON.stringify(data))
-              // 其他控制字符直接发送到服务器
-              this.ws.send(JSON.stringify({
-                type: 'command',
-                data: { command: data }
-              }))
+              // 只有回车键才发送command类型消息，其他控制字符本地处理或使用特定类型
+              // 这里可以添加其他控制字符的本地处理逻辑
+              // 例如：Ctrl+D可以发送EOF信号
+              if (data === '\x04') { // Ctrl+D
+                this.ws.send(JSON.stringify({
+                  type: 'eof'
+                }))
+              } else {
+                // 其他控制字符暂时忽略或本地处理
+                console.debug('Control character ignored:', JSON.stringify(data))
+              }
             }
         }
       } catch (error) {
@@ -680,8 +690,33 @@ class SSHTerminal {
   
   // 处理TAB补全响应
   private handleTabCompletionResponse(data: any): void {
-    const options = data.options || []
+    let options = data.options || []
     const base = data.base || ''
+    
+    // 过滤掉无效的补全选项，避免显示不相关内容
+    // 1. 确保options是数组
+    if (!Array.isArray(options)) {
+      console.warn('Invalid tab completion options - not an array:', options)
+      return
+    }
+    
+    // 2. 过滤掉无效值和不相关内容
+    options = options.filter(option => {
+      // 过滤掉非字符串值
+      if (typeof option !== 'string') {
+        return false
+      }
+      
+      // 过滤掉包含不相关内容的选项
+      const invalidKeywords = [
+        'just raised the bar',
+        'K8s',
+        'cluster deployment',
+        'resilient and secure'
+      ]
+      
+      return !invalidKeywords.some(keyword => option.includes(keyword))
+    })
     
     if (options.length === 0) return
     
@@ -869,53 +904,20 @@ class SSHTerminal {
                 break;
 
               case 'ls_output':
-                // 处理ls命令的结构化输出（带颜色支持）
+                // 处理 ls 命令的结构化输出
                 console.debug('=== LS_OUTPUT MESSAGE START ===')
-                console.debug('LS output data:', message.data)
-                
                 try {
-                  if (!this.terminal) {
-                    console.error('TERMINAL NOT FOUND - cannot write ls output!')
-                    break
-                  }
-                  
-                  // 检查数据格式
-                  if (!message.data || typeof message.data !== 'object') {
-                    console.warn('Invalid ls_output data format, falling back to normal output')
-                    // 降级处理：尝试作为普通输出处理
-                    if (message.data && typeof message.data === 'string') {
-                      this.terminal.write(message.data)
-                    }
-                    break
-                  }
-                  
-                  // 使用颜色格式化函数处理ls输出
-                  if (typeof formatLsOutputWithColors === 'function') {
+                  if (this.terminal) {
                     const formattedOutput = formatLsOutputWithColors(message.data, this.terminal)
-                    console.debug('Formatted ls output with colors, length:', formattedOutput.length)
                     this.terminal.write(formattedOutput)
                   } else {
-                    // 如果格式化函数不存在，降级为简单显示
-                    console.warn('formatLsOutputWithColors function not found, using fallback')
-                    const files = message.data.files || []
-                    const prompt = message.data.prompt || ''
-                    const fileList = files.map((f: any) => f.name || '').join('\n')
-                    this.terminal.write(fileList + (fileList ? '\n' : '') + prompt)
+                    console.error('TERMINAL NOT FOUND - cannot write ls output!')
                   }
-                  
-                  console.debug('LS output written successfully')
                 } catch (lsError) {
-                  console.error('LS输出处理错误:', lsError)
-                  console.error('Error details:', lsError.message)
-                  console.error('Error stack:', lsError.stack)
-                  // 降级处理：尝试显示原始数据
-                  try {
-                    if (message.data && message.data.files) {
-                      const fileList = message.data.files.map((f: any) => f.name || '').join('\n')
-                      this.terminal.write(fileList + '\n' + (message.data.prompt || ''))
-                    }
-                  } catch (fallbackError) {
-                    console.error('降级处理也失败:', fallbackError)
+                  console.error('LS 输出处理错误:', lsError)
+                  // 降级处理：如果格式化失败，尝试打印原始数据
+                  if (this.terminal && message.data) {
+                      this.terminal.write(JSON.stringify(message.data))
                   }
                 }
                 console.debug('=== LS_OUTPUT MESSAGE END ===')
@@ -925,56 +927,16 @@ class SSHTerminal {
               case 'data':
                 // 接收SSH服务器返回的数据
                 console.debug('=== OUTPUT/DATA MESSAGE START ===')
-                console.debug('Raw message:', message)
-                console.debug('Message type:', message.type)
-                console.debug('Message data length:', message.data?.length)
-                console.debug('Message data preview:', message.data?.substring(0, 100))
-                console.debug('Message output length:', message.output?.length)
-                console.debug('Message output preview:', message.output?.substring(0, 100))
-                console.debug('Terminal exists:', !!this.terminal)
-                
                 try {
                   if (this.terminal) {
-                    // 直接写入原始数据，让xterm处理ANSI转义序列
                     const outputData = message.data || message.output || ''
-                    console.debug('Total output data length:', outputData.length)
-                    console.debug('Output data preview:', outputData.substring(0, 200))
-                    
-                    // 处理可能的Unicode编码问题
-                    if (typeof outputData === 'string') {
-                      console.debug('Output is string type, processing...')
-                      // 检查是否是简单的ls输出（每行一个项目，没有颜色编码）
-                      if (this.isSimpleLsOutput(outputData)) {
-                        console.debug('Detected simple ls output, formatting...')
-                        // 将简单输出格式化为列对齐格式
-                        const formattedOutput = this.formatSimpleLsOutput(outputData)
-                        console.debug('Formatted output length:', formattedOutput.length)
-                        this.terminal.write(formattedOutput)
-                      } else {
-                        console.debug('Complex output detected, writing raw data')
-                        console.debug('First 500 characters:', outputData.substring(0, 500))
-                        this.terminal.write(outputData)
-                      }
-                      console.debug('Output written successfully to terminal')
-                    } else if (outputData instanceof ArrayBuffer) {
-                      console.debug('Output is ArrayBuffer, decoding...')
-                      // 处理二进制数据
-                      const decoder = new TextDecoder('utf-8')
-                      const text = decoder.decode(outputData)
-                      console.debug('Decoded text length:', text.length)
-                      this.terminal.write(text)
-                    } else {
-                      console.debug('Output is other type:', typeof outputData)
-                      // 处理其他格式的数据
-                      this.terminal.write(String(outputData))
-                    }
+                    // 直接写入数据，不做任何格式化
+                    this.terminal.write(outputData)
                   } else {
                     console.debug('TERMINAL NOT FOUND - cannot write output!')
                   }
                 } catch (writeError) {
                   console.error('终端数据写入错误:', writeError)
-                  console.error('Error details:', writeError.message)
-                  console.error('Error stack:', writeError.stack)
                 }
                 console.debug('=== OUTPUT/DATA MESSAGE END ===')
                 break
@@ -1094,6 +1056,8 @@ class SSHTerminal {
     return this.terminal
   }
 }
+
+
 
 // 建立真实SSH连接
 async function connectRealSSH() {
