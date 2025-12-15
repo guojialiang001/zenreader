@@ -284,12 +284,172 @@ function loadConfig() {
 function showErrorMessage(message: string) {
   errorMessage.value = message
   showError.value = true
-  
+
   // 3秒后自动隐藏错误消息
   setTimeout(() => {
     showError.value = false
   }, 3000)
 }
+
+// ============================================
+// 工具函数：必须在 SSHTerminal 类之前定义
+// ============================================
+
+// 文件颜色方案定义（根据 ssh_output_standards.md）
+const FILE_COLORS = {
+  // 目录 - 蓝色
+  directory: '\x1b[34m',      // 蓝色
+  // 普通文件 - 默认颜色（白色）
+  file: '\x1b[0m',            // 重置
+  // 可执行文件 - 绿色
+  executable: '\x1b[32m',     // 绿色
+  // 符号链接 - 青色
+  symlink: '\x1b[36m',        // 青色
+  // BASE路径 - 黄色加粗
+  base: '\x1b[33;1m',         // 黄色加粗
+  // 特殊文件类型
+  socket: '\x1b[35m',         // 紫色
+  pipe: '\x1b[33m',           // 黄色
+  block: '\x1b[34;46m',       // 蓝色背景
+  char: '\x1b[34;43m',        // 蓝色背景
+  // 重置颜色
+  reset: '\x1b[0m'
+}
+
+// 格式化ls输出（带颜色）
+function formatLsOutputWithColors(lsData: any, terminal?: any): string {
+  const { files, prompt } = lsData
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return prompt || ''
+  }
+
+  // 获取终端宽度
+  const terminalWidth = terminal?.cols || 120
+
+  // 计算最大文件名宽度（不考虑颜色代码）
+  const maxNameWidth = Math.max(...files.map((f: any) => f.name?.length || 0))
+  const columnWidth = maxNameWidth + 2  // 文件名宽度 + 2个空格间距
+  const columns = Math.max(1, Math.floor(terminalWidth / columnWidth))
+  const actualColumns = Math.min(columns, 8)  // 限制最大列数
+
+  // 格式化每个文件名，添加颜色
+  const coloredFiles = files.map((file: any) => {
+    let color = FILE_COLORS.reset
+
+    // 确定颜色（优先级：BASE > 类型 > 可执行）
+    if (file.is_base) {
+      color = FILE_COLORS.base
+    } else if (file.type === 'directory') {
+      color = FILE_COLORS.directory
+    } else if (file.is_executable) {
+      color = FILE_COLORS.executable
+    } else if (file.type === 'symlink') {
+      color = FILE_COLORS.symlink
+    } else if (file.type === 'socket') {
+      color = FILE_COLORS.socket
+    } else if (file.type === 'pipe') {
+      color = FILE_COLORS.pipe
+    } else if (file.type === 'block' || file.type === 'char') {
+      color = FILE_COLORS.block
+    } else {
+      color = FILE_COLORS.file
+    }
+
+    const fileName = file.name || ''
+    return {
+      name: fileName,
+      colored: color + fileName + FILE_COLORS.reset,
+      width: fileName.length
+    }
+  })
+
+  // 多列排列（行优先：从左到右，从上到下）
+  let result = ''
+  const totalRows = Math.ceil(coloredFiles.length / actualColumns)
+
+  for (let row = 0; row < totalRows; row++) {
+    let rowContent = ''
+    for (let col = 0; col < actualColumns; col++) {
+      const index = row * actualColumns + col
+      if (index < coloredFiles.length) {
+        const item = coloredFiles[index]
+        if (col < actualColumns - 1) {
+          // 使用原始文件名长度计算填充（不考虑颜色代码）
+          const padding = columnWidth - item.width
+          rowContent += item.colored + ' '.repeat(padding)
+        } else {
+          rowContent += item.colored
+        }
+      }
+    }
+    result += rowContent.trimEnd() + '\n'
+  }
+
+  // 添加提示符（不换行）
+  if (prompt) {
+    result += prompt
+  }
+
+  return result
+}
+
+// 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
+function isSimpleLsOutput(output: string): boolean {
+  // 检查输出格式：每行一个文件名，没有ANSI颜色代码
+  const lines = output.trim().split('\n')
+  if (lines.length === 0) return false
+
+  // 检查是否每行都是一个简单的文件名（没有颜色代码）
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (trimmedLine === '') continue
+
+    // 如果有ANSI颜色代码，返回false
+    if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
+      return false
+    }
+
+    // 如果包含特殊字符或格式，返回false
+    if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
+      return false
+    }
+  }
+
+  return true
+}
+
+// 格式化简单的ls输出为多列对齐格式
+function formatSimpleLsOutput(output: string): string {
+  const lines = output.trim().split('\n').filter(line => line.trim() !== '')
+  if (lines.length === 0) return output
+
+  // 计算每列的最大宽度
+  const maxWidth = Math.max(...lines.map(line => line.trim().length))
+  const columnWidth = maxWidth + 2 // 添加一些间距
+
+  // 计算列数（假设终端宽度为120字符）
+  const terminalWidth = 120
+  const columns = Math.floor(terminalWidth / columnWidth)
+  const actualColumns = Math.max(1, columns)
+
+  // 重新排列为列格式
+  let result = ''
+  for (let i = 0; i < lines.length; i += actualColumns) {
+    let row = ''
+    for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
+      const item = lines[i + j].trim()
+      // 使用制表符或空格对齐
+      row += item.padEnd(columnWidth)
+    }
+    result += row.trimEnd() + '\r\n'
+  }
+
+  return result
+}
+
+// ============================================
+// SSHTerminal 类定义
+// ============================================
 
 // 连接方法
 async function connect() {
@@ -374,6 +534,7 @@ class SSHTerminal {
   private historyIndex = -1
   private currentInput = ''
   private inputBuffer = ''
+  private resizeTimer: NodeJS.Timeout | null = null
 
   constructor(
     terminalContainer: HTMLElement,
@@ -604,6 +765,13 @@ class SSHTerminal {
   private resizeTerminal(): void {
     try {
       console.debug('resizeTerminal called')
+
+      // 清除之前的防抖timer
+      if (this.resizeTimer) {
+        clearTimeout(this.resizeTimer)
+      }
+
+      // 立即调整终端显示大小
       if (this.fitAddon) {
         console.debug('Fitting terminal with fitAddon')
         this.fitAddon.fit()
@@ -612,28 +780,31 @@ class SSHTerminal {
           rows: this.terminal?.rows
         })
       }
-      
-      if (this.ws && this.ws.readyState === WebSocket.OPEN && this.terminal) {
-        const cols = this.terminal.cols
-        const rows = this.terminal.rows
-        console.debug('Sending resize message to backend:', { width: cols, height: rows })
-        
-        // 发送resize消息到后端，使用width/height格式
-        this.ws.send(JSON.stringify({
-          type: 'resize',
-          data: { 
-            width: cols,
-            height: rows
-          }
-        }))
-        console.debug('Resize message sent successfully')
-      } else {
-        console.debug('Cannot send resize message - conditions not met:', {
-          wsExists: !!this.ws,
-          wsOpen: this.ws?.readyState === WebSocket.OPEN,
-          terminalExists: !!this.terminal
-        })
-      }
+
+      // 使用防抖延迟发送resize命令到后端（避免拖动时持续发送）
+      this.resizeTimer = setTimeout(() => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.terminal) {
+          const cols = this.terminal.cols
+          const rows = this.terminal.rows
+          console.debug('Sending resize message to backend:', { width: cols, height: rows })
+
+          // 发送resize消息到后端，使用width/height格式
+          this.ws.send(JSON.stringify({
+            type: 'resize',
+            data: {
+              width: cols,
+              height: rows
+            }
+          }))
+          console.debug('Resize message sent successfully')
+        } else {
+          console.debug('Cannot send resize message - conditions not met:', {
+            wsExists: !!this.ws,
+            wsOpen: this.ws?.readyState === WebSocket.OPEN,
+            terminalExists: !!this.terminal
+          })
+        }
+      }, 300) // 300ms防抖延迟
     } catch (error) {
       console.warn('终端大小调整错误:', error)
     }
@@ -803,6 +974,60 @@ class SSHTerminal {
     } catch (error) {
       console.warn('终端日志写入错误:', error)
     }
+  }
+
+  // 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
+  private isSimpleLsOutput(output: string): boolean {
+    // 检查输出格式：每行一个文件名，没有ANSI颜色代码
+    const lines = output.trim().split('\n')
+    if (lines.length === 0) return false
+
+    // 检查是否每行都是一个简单的文件名（没有颜色代码）
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (trimmedLine === '') continue
+
+      // 如果有ANSI颜色代码，返回false
+      if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
+        return false
+      }
+
+      // 如果包含特殊字符或格式，返回false
+      if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  // 格式化简单的ls输出为多列对齐格式
+  private formatSimpleLsOutput(output: string): string {
+    const lines = output.trim().split('\n').filter(line => line.trim() !== '')
+    if (lines.length === 0) return output
+
+    // 计算每列的最大宽度
+    const maxWidth = Math.max(...lines.map(line => line.trim().length))
+    const columnWidth = maxWidth + 2 // 添加一些间距
+
+    // 计算列数（假设终端宽度为120字符）
+    const terminalWidth = 120
+    const columns = Math.floor(terminalWidth / columnWidth)
+    const actualColumns = Math.max(1, columns)
+
+    // 重新排列为列格式
+    let result = ''
+    for (let i = 0; i < lines.length; i += actualColumns) {
+      let row = ''
+      for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
+        const item = lines[i + j].trim()
+        // 使用制表符或空格对齐
+        row += item.padEnd(columnWidth)
+      }
+      result += row.trimEnd() + '\r\n'
+    }
+
+    return result
   }
 
   public async connect(): Promise<void> {
@@ -1027,25 +1252,31 @@ class SSHTerminal {
 
   public disconnect(): void {
     try {
+      // 清除防抖timer
+      if (this.resizeTimer) {
+        clearTimeout(this.resizeTimer)
+        this.resizeTimer = null
+      }
+
       // 发送断开连接消息
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
           type: 'disconnect'
         }))
       }
-      
+
       // 关闭WebSocket连接
       if (this.ws) {
         this.ws.close()
         this.ws = null
       }
-      
+
       // 清理终端
       if (this.terminal) {
         this.terminal.dispose()
         this.terminal = null
       }
-      
+
       this.onConnectionChange(false)
     } catch (error) {
       console.warn('断开连接时出错:', error)
@@ -1394,158 +1625,6 @@ function handleCommand(input: string) {
 // 更新时间显示
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN')
-}
-
-// 文件颜色方案定义（根据 ssh_output_standards.md）
-const FILE_COLORS = {
-  // 目录 - 蓝色
-  directory: '\x1b[34m',      // 蓝色
-  // 普通文件 - 默认颜色（白色）
-  file: '\x1b[0m',            // 重置
-  // 可执行文件 - 绿色
-  executable: '\x1b[32m',     // 绿色
-  // 符号链接 - 青色
-  symlink: '\x1b[36m',        // 青色
-  // BASE路径 - 黄色加粗
-  base: '\x1b[33;1m',         // 黄色加粗
-  // 特殊文件类型
-  socket: '\x1b[35m',         // 紫色
-  pipe: '\x1b[33m',           // 黄色
-  block: '\x1b[34;46m',       // 蓝色背景
-  char: '\x1b[34;43m',        // 蓝色背景
-  // 重置颜色
-  reset: '\x1b[0m'
-}
-
-// 格式化ls输出（带颜色）
-function formatLsOutputWithColors(lsData: any, terminal?: any): string {
-  const { files, prompt } = lsData
-  if (!files || !Array.isArray(files) || files.length === 0) {
-    return prompt || ''
-  }
-  
-  // 获取终端宽度
-  const terminalWidth = terminal?.cols || 120
-  
-  // 计算最大文件名宽度（不考虑颜色代码）
-  const maxNameWidth = Math.max(...files.map((f: any) => f.name?.length || 0))
-  const columnWidth = maxNameWidth + 2  // 文件名宽度 + 2个空格间距
-  const columns = Math.max(1, Math.floor(terminalWidth / columnWidth))
-  const actualColumns = Math.min(columns, 8)  // 限制最大列数
-  
-  // 格式化每个文件名，添加颜色
-  const coloredFiles = files.map((file: any) => {
-    let color = FILE_COLORS.reset
-    
-    // 确定颜色（优先级：BASE > 类型 > 可执行）
-    if (file.is_base) {
-      color = FILE_COLORS.base
-    } else if (file.type === 'directory') {
-      color = FILE_COLORS.directory
-    } else if (file.is_executable) {
-      color = FILE_COLORS.executable
-    } else if (file.type === 'symlink') {
-      color = FILE_COLORS.symlink
-    } else if (file.type === 'socket') {
-      color = FILE_COLORS.socket
-    } else if (file.type === 'pipe') {
-      color = FILE_COLORS.pipe
-    } else if (file.type === 'block' || file.type === 'char') {
-      color = FILE_COLORS.block
-    } else {
-      color = FILE_COLORS.file
-    }
-    
-    const fileName = file.name || ''
-    return {
-      name: fileName,
-      colored: color + fileName + FILE_COLORS.reset,
-      width: fileName.length
-    }
-  })
-  
-  // 多列排列（行优先：从左到右，从上到下）
-  let result = ''
-  const totalRows = Math.ceil(coloredFiles.length / actualColumns)
-  
-  for (let row = 0; row < totalRows; row++) {
-    let rowContent = ''
-    for (let col = 0; col < actualColumns; col++) {
-      const index = row * actualColumns + col
-      if (index < coloredFiles.length) {
-        const item = coloredFiles[index]
-        if (col < actualColumns - 1) {
-          // 使用原始文件名长度计算填充（不考虑颜色代码）
-          const padding = columnWidth - item.width
-          rowContent += item.colored + ' '.repeat(padding)
-        } else {
-          rowContent += item.colored
-        }
-      }
-    }
-    result += rowContent.trimEnd() + '\n'
-  }
-  
-  // 添加提示符（不换行）
-  if (prompt) {
-    result += prompt
-  }
-  
-  return result
-}
-
-// 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
-function isSimpleLsOutput(output: string): boolean {
-  // 检查输出格式：每行一个文件名，没有ANSI颜色代码
-  const lines = output.trim().split('\n')
-  if (lines.length === 0) return false
-  
-  // 检查是否每行都是一个简单的文件名（没有颜色代码）
-  for (const line of lines) {
-    const trimmedLine = line.trim()
-    if (trimmedLine === '') continue
-    
-    // 如果有ANSI颜色代码，返回false
-    if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
-      return false
-    }
-    
-    // 如果包含特殊字符或格式，返回false
-    if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
-      return false
-    }
-  }
-  
-  return true
-}
-
-// 格式化简单的ls输出为多列对齐格式
-function formatSimpleLsOutput(output: string): string {
-  const lines = output.trim().split('\n').filter(line => line.trim() !== '')
-  if (lines.length === 0) return output
-  
-  // 计算每列的最大宽度
-  const maxWidth = Math.max(...lines.map(line => line.trim().length))
-  const columnWidth = maxWidth + 2 // 添加一些间距
-  
-  // 计算列数（假设终端宽度为120字符）
-  const terminalWidth = 120
-  const columns = Math.floor(terminalWidth / columnWidth)
-  const actualColumns = Math.max(1, columns)
-  
-  // 重新排列为列格式
-  let result = ''
-  for (let i = 0; i < lines.length; i += actualColumns) {
-    let row = ''
-    for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
-      const item = lines[i + j].trim()
-      // 使用制表符或空格对齐
-      row += item.padEnd(columnWidth)
-    }
-    result += row.trimEnd() + '\r\n'
-  }
-  
-  return result
 }
 
 // 清理函数
