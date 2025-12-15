@@ -863,21 +863,21 @@ class SSHTerminal {
   private handleTabCompletionResponse(data: any): void {
     let options = data.options || []
     const base = data.base || ''
-    
+
     // 过滤掉无效的补全选项，避免显示不相关内容
     // 1. 确保options是数组
     if (!Array.isArray(options)) {
       console.warn('Invalid tab completion options - not an array:', options)
       return
     }
-    
+
     // 2. 过滤掉无效值和不相关内容
     options = options.filter(option => {
       // 过滤掉非字符串值
       if (typeof option !== 'string') {
         return false
       }
-      
+
       // 过滤掉包含不相关内容的选项
       const invalidKeywords = [
         'just raised the bar',
@@ -885,12 +885,12 @@ class SSHTerminal {
         'cluster deployment',
         'resilient and secure'
       ]
-      
+
       return !invalidKeywords.some(keyword => option.includes(keyword))
     })
-    
+
     if (options.length === 0) return
-    
+
     if (options.length === 1) {
       // 单个补全选项 - 直接补全
       const completion = options[0]
@@ -900,7 +900,7 @@ class SSHTerminal {
          // 比如输入 "ls /tm"，base="/tm"，completion="/tmp/" -> prefix="ls "
          const prefix = base.length > 0 ? this.inputBuffer.slice(0, -base.length) : this.inputBuffer
          const finalInput = prefix + completion
-         
+
          this.replaceCurrentCommand(finalInput)
          this.inputBuffer = finalInput
        } else {
@@ -910,27 +910,9 @@ class SSHTerminal {
         this.inputBuffer = completion
       }
     } else {
-      // 多个补全选项 - 显示列表
-      if (this.terminal) {
-        // 获取当前行内容（包含提示符和输入）以备恢复
-        const buffer = this.terminal.buffer.active
-        const currentLineY = buffer.cursorY
-        const currentLineContent = buffer.getLine(currentLineY)?.translateToString(true) || ''
-        
-        this.terminal.write('\r\n')
-        // 格式化输出选项，尝试适配屏幕宽度
-        // 简单实现：空格分隔
-        this.terminal.write(options.join('  '))
-        this.terminal.write('\r\n')
-        
-        // 恢复提示符和输入
-        if (currentLineContent) {
-          this.terminal.write(currentLineContent)
-        } else {
-          // 降级方案：只显示输入内容
-          this.terminal.write(this.inputBuffer)
-        }
-      }
+      // 多个补全选项 - 不显示列表，保持静默
+      // 用户不希望看到底部的补全提示
+      // 什么都不做，保持当前输入不变
     }
   }
   
