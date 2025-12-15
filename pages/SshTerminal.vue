@@ -707,15 +707,12 @@ class SSHTerminal {
         return false
       }
       
-      // 过滤掉包含不相关内容的选项
-      const invalidKeywords = [
-        'just raised the bar',
-        'K8s',
-        'cluster deployment',
-        'resilient and secure'
-      ]
+      // 过滤掉特定的不相关内容 (Ubuntu ESM 提示)
+      if (option.includes('Expanded Security Maintenance')) {
+        return false
+      }
       
-      return !invalidKeywords.some(keyword => option.includes(keyword))
+      return true
     })
     
     if (options.length === 0) return
@@ -929,7 +926,13 @@ class SSHTerminal {
                 console.debug('=== OUTPUT/DATA MESSAGE START ===')
                 try {
                   if (this.terminal) {
-                    const outputData = message.data || message.output || ''
+                    let outputData = message.data || message.output || ''
+                    
+                    // Filter out Ubuntu ESM message (Frontend Fix)
+                    if (typeof outputData === 'string') {
+                      outputData = outputData.replace(/Expanded Security Maintenance for Applications is not enabled\.\s*/g, '')
+                    }
+
                     // 直接写入数据，不做任何格式化
                     this.terminal.write(outputData)
                   } else {
@@ -1054,6 +1057,58 @@ class SSHTerminal {
 
   public getTerminal(): Terminal | null {
     return this.terminal
+  }
+
+  private isSimpleLsOutput(output: string): boolean {
+    // 检查输出格式：每行一个文件名，没有ANSI颜色代码
+    const lines = output.trim().split('\n')
+    if (lines.length === 0) return false
+
+    // 检查是否每行都是一个简单的文件名（没有颜色代码）
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (trimmedLine === '') continue
+
+      // 如果有ANSI颜色代码，返回false
+      if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
+        return false
+      }
+
+      // 如果包含特殊字符或格式，返回false
+      if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private formatSimpleLsOutput(output: string): string {
+    const lines = output.trim().split('\n').filter(line => line.trim() !== '')
+    if (lines.length === 0) return output
+
+    // 计算每列的最大宽度
+    const maxWidth = Math.max(...lines.map(line => line.trim().length))
+    const columnWidth = maxWidth + 2 // 添加一些间距
+
+    // 计算列数（假设终端宽度为120字符）
+    const terminalWidth = 120
+    const columns = Math.floor(terminalWidth / columnWidth)
+    const actualColumns = Math.max(1, columns)
+
+    // 重新排列为列格式
+    let result = ''
+    for (let i = 0; i < lines.length; i += actualColumns) {
+      let row = ''
+      for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
+        const item = lines[i + j].trim()
+        // 使用制表符或空格对齐
+        row += item.padEnd(columnWidth)
+      }
+      result += row.trimEnd() + '\r\n'
+    }
+
+    return result
   }
 }
 
@@ -1490,61 +1545,7 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
   if (prompt) {
     result += prompt
   }
-  
-  return result
-}
 
-// 检测是否是简单的ls输出（每行一个项目，没有颜色编码）
-function isSimpleLsOutput(output: string): boolean {
-  // 检查输出格式：每行一个文件名，没有ANSI颜色代码
-  const lines = output.trim().split('\n')
-  if (lines.length === 0) return false
-  
-  // 检查是否每行都是一个简单的文件名（没有颜色代码）
-  for (const line of lines) {
-    const trimmedLine = line.trim()
-    if (trimmedLine === '') continue
-    
-    // 如果有ANSI颜色代码，返回false
-    if (trimmedLine.includes('\x1b[') || trimmedLine.includes('\u001b[')) {
-      return false
-    }
-    
-    // 如果包含特殊字符或格式，返回false
-    if (trimmedLine.includes('  ') || trimmedLine.includes('\t')) {
-      return false
-    }
-  }
-  
-  return true
-}
-
-// 格式化简单的ls输出为多列对齐格式
-function formatSimpleLsOutput(output: string): string {
-  const lines = output.trim().split('\n').filter(line => line.trim() !== '')
-  if (lines.length === 0) return output
-  
-  // 计算每列的最大宽度
-  const maxWidth = Math.max(...lines.map(line => line.trim().length))
-  const columnWidth = maxWidth + 2 // 添加一些间距
-  
-  // 计算列数（假设终端宽度为120字符）
-  const terminalWidth = 120
-  const columns = Math.floor(terminalWidth / columnWidth)
-  const actualColumns = Math.max(1, columns)
-  
-  // 重新排列为列格式
-  let result = ''
-  for (let i = 0; i < lines.length; i += actualColumns) {
-    let row = ''
-    for (let j = 0; j < actualColumns && i + j < lines.length; j++) {
-      const item = lines[i + j].trim()
-      // 使用制表符或空格对齐
-      row += item.padEnd(columnWidth)
-    }
-    result += row.trimEnd() + '\r\n'
-  }
-  
   return result
 }
 
