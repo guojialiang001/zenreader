@@ -22,7 +22,7 @@
     "marked": "9.1.2",
     "three": "^0.181.2",
     "vue": "3.3.4",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
