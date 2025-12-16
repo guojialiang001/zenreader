@@ -374,6 +374,9 @@ class SSHTerminal {
   private historyIndex = -1
   private currentInput = ''
   private inputBuffer = ''
+  
+  // 路径状态管理
+  private currentWorkingDirectory = '~'
 
   constructor(
     terminalContainer: HTMLElement,
@@ -502,13 +505,17 @@ class SSHTerminal {
               }
             }
             
-            // 发送完整的命令行
+            // 发送完整的命令行，包含当前工作目录信息
             console.debug('Sending command to server:', this.inputBuffer)
             this.ws.send(JSON.stringify({
               type: 'command',
-              data: { command: this.inputBuffer + '\n' }
+              data: { 
+                command: this.inputBuffer + '\n',
+                // 确保总是发送当前路径，如果未定义则默认为~
+                currentPath: this.currentWorkingDirectory || '~'
+              }
             }))
-            console.debug('Command sent to server')
+            console.debug('Command sent to server with current path:', this.currentWorkingDirectory)
             
             // 重置状态
             this.inputBuffer = ''
@@ -532,7 +539,10 @@ class SSHTerminal {
             // 发送中断信号 - 使用interrupt类型而不是command类型
             this.ws.send(JSON.stringify({
               type: 'interrupt',
-              data: { signal: 'SIGINT' }
+              data: {
+                signal: 'SIGINT',
+                currentPath: this.currentWorkingDirectory || '~'
+              }
             }))
             this.inputBuffer = ''
             this.historyIndex = -1
@@ -582,7 +592,10 @@ class SSHTerminal {
               // 例如：Ctrl+D可以发送EOF信号
               if (data === '\x04') { // Ctrl+D
                 this.ws.send(JSON.stringify({
-                  type: 'eof'
+                  type: 'eof',
+                  data: {
+                    currentPath: this.currentWorkingDirectory || '~'
+                  }
                 }))
               } else {
                 // 其他控制字符暂时忽略或本地处理
@@ -621,9 +634,10 @@ class SSHTerminal {
         // 发送resize消息到后端，使用width/height格式
         this.ws.send(JSON.stringify({
           type: 'resize',
-          data: { 
+          data: {
             width: cols,
-            height: rows
+            height: rows,
+            currentPath: this.currentWorkingDirectory || '~'
           }
         }))
         console.debug('Resize message sent successfully')
@@ -679,11 +693,12 @@ class SSHTerminal {
   
   // 处理TAB键 - 自动补全
   private handleTabCompletion(): void {
-    // 发送TAB补全请求到服务器
+    // 发送TAB补全请求到服务器，包含当前路径信息
     this.ws?.send(JSON.stringify({
       type: 'tab_complete',
       data: { 
-        command: this.inputBuffer
+        command: this.inputBuffer,
+        currentPath: this.currentWorkingDirectory || '~'
       }
     }))
   }
@@ -692,44 +707,44 @@ class SSHTerminal {
   private handleTabCompletionResponse(data: any): void {
     let options = data.options || []
     const base = data.base || ''
-    
+
     // 过滤掉无效的补全选项，避免显示不相关内容
     // 1. 确保options是数组
     if (!Array.isArray(options)) {
       console.warn('Invalid tab completion options - not an array:', options)
       return
     }
-    
+
     // 2. 过滤掉无效值和不相关内容
     options = options.filter(option => {
       // 过滤掉非字符串值
       if (typeof option !== 'string') {
         return false
       }
-      
+
       // 过滤掉特定的不相关内容 (Ubuntu ESM 提示)
       if (option.includes('Expanded Security Maintenance')) {
         return false
       }
-      
+
       return true
     })
-    
+
     if (options.length === 0) return
-    
+
     if (options.length === 1) {
       // 单个补全选项 - 直接补全
       const completion = options[0]
       // 检查当前输入是否以base结尾
-       if (this.inputBuffer.endsWith(base)) {
-         // 计算新的输入：移除base，加上completion
-         // 比如输入 "ls /tm"，base="/tm"，completion="/tmp/" -> prefix="ls "
-         const prefix = base.length > 0 ? this.inputBuffer.slice(0, -base.length) : this.inputBuffer
-         const finalInput = prefix + completion
-         
-         this.replaceCurrentCommand(finalInput)
-         this.inputBuffer = finalInput
-       } else {
+      if (this.inputBuffer.endsWith(base)) {
+        // 计算新的输入：移除base，加上completion
+        // 比如输入 "ls /tm"，base="/tm"，completion="/tmp/" -> prefix="ls "
+        const prefix = base.length > 0 ? this.inputBuffer.slice(0, -base.length) : this.inputBuffer
+        const finalInput = prefix + completion
+
+        this.replaceCurrentCommand(finalInput)
+        this.inputBuffer = finalInput
+      } else {
         // 如果base不匹配（罕见），尝试直接追加或替换
         // 这里假设后端返回的正确补全
         this.replaceCurrentCommand(completion)
@@ -738,24 +753,16 @@ class SSHTerminal {
     } else {
       // 多个补全选项 - 显示列表
       if (this.terminal) {
-        // 获取当前行内容（包含提示符和输入）以备恢复
-        const buffer = this.terminal.buffer.active
-        const currentLineY = buffer.cursorY
-        const currentLineContent = buffer.getLine(currentLineY)?.translateToString(true) || ''
-        
+        // 保存当前输入（修复：不再依赖不可靠的 getLine 方法）
+        const savedInput = this.inputBuffer
+
         this.terminal.write('\r\n')
-        // 格式化输出选项，尝试适配屏幕宽度
-        // 简单实现：空格分隔
+        // 格式化输出选项，空格分隔
         this.terminal.write(options.join('  '))
         this.terminal.write('\r\n')
-        
-        // 恢复提示符和输入
-        if (currentLineContent) {
-          this.terminal.write(currentLineContent)
-        } else {
-          // 降级方案：只显示输入内容
-          this.terminal.write(this.inputBuffer)
-        }
+
+        // 恢复输入内容（修复：直接使用保存的输入缓冲区）
+        this.terminal.write(savedInput)
       }
     }
   }
@@ -840,11 +847,14 @@ class SSHTerminal {
         this.ws.onopen = () => {
           console.log('WebSocket连接已建立:', wsUrl)
           this.log('正在连接SSH服务器...')
-          
-          // 发送SSH连接配置
+
+          // 发送SSH连接配置，包含初始路径信息
           this.ws?.send(JSON.stringify({
             type: 'connect',
-            data: this.connectionConfig
+            data: {
+              ...this.connectionConfig,
+              currentPath: this.currentWorkingDirectory || '~'
+            }
           }))
         }
         
@@ -862,6 +872,21 @@ class SSHTerminal {
                 console.debug('Connected message received, terminal exists:', !!this.terminal)
                 console.debug('Terminal container exists:', !!this.terminalContainer)
                 console.debug('Terminal container element:', this.terminalContainer)
+
+                // 初始化当前工作目录 - 使用增强的路径更新方法
+                // 优先从 data.initialPath 获取，回退到 data.currentPath
+                if (message.data) {
+                  const pathUpdated = this.extractAndUpdatePath(message.data, 'connected')
+                  if (!pathUpdated) {
+                    // 如果没有有效路径，使用默认值
+                    this.currentWorkingDirectory = '~'
+                    console.debug('No valid initial path from server, using default: ~')
+                  }
+                } else {
+                  this.currentWorkingDirectory = '~'
+                  console.debug('No data in connected message, using default: ~')
+                }
+                console.debug('Initial working directory set to:', this.currentWorkingDirectory)
                 
                 // 确保终端已初始化并聚焦
                 if (this.terminal) {
@@ -904,6 +929,11 @@ class SSHTerminal {
                 // 处理 ls 命令的结构化输出
                 console.debug('=== LS_OUTPUT MESSAGE START ===')
                 try {
+                  // 首先提取并更新路径信息
+                  if (message.data) {
+                    this.extractAndUpdatePath(message.data, 'ls_output')
+                  }
+
                   if (this.terminal) {
                     const formattedOutput = formatLsOutputWithColors(message.data, this.terminal)
                     this.terminal.write(formattedOutput)
@@ -925,16 +955,30 @@ class SSHTerminal {
                 // 接收SSH服务器返回的数据
                 console.debug('=== OUTPUT/DATA MESSAGE START ===')
                 try {
+                  // 首先提取并更新路径信息（后端在 output 消息中也包含 currentPath）
+                  if (message.data && typeof message.data === 'object') {
+                    this.extractAndUpdatePath(message.data, 'output')
+                  }
+
                   if (this.terminal) {
-                    let outputData = message.data || message.output || ''
-                    
+                    // 后端新格式: { output: string, currentPath: string }
+                    // 旧格式兼容: message.data 直接是字符串 或 message.output 是字符串
+                    let outputData = ''
+                    if (typeof message.data === 'object' && message.data !== null) {
+                      outputData = message.data.output || message.data.data || ''
+                    } else {
+                      outputData = message.data || message.output || ''
+                    }
+
                     // Filter out Ubuntu ESM message (Frontend Fix)
                     if (typeof outputData === 'string') {
                       outputData = outputData.replace(/Expanded Security Maintenance for Applications is not enabled\.\s*/g, '')
                     }
 
                     // 直接写入数据，不做任何格式化
-                    this.terminal.write(outputData)
+                    if (outputData) {
+                      this.terminal.write(outputData)
+                    }
                   } else {
                     console.debug('TERMINAL NOT FOUND - cannot write output!')
                   }
@@ -960,6 +1004,34 @@ class SSHTerminal {
                 
               case 'completed':
                 this.log(`命令执行完成，退出码: ${message.exit_code}`)
+                // 尝试从 completed 消息中提取路径信息
+                if (message.data) {
+                  this.extractAndUpdatePath(message.data, 'completed')
+                }
+                break
+
+              case 'cd_result':
+                // 处理 cd 命令执行结果 - 后端专门为 cd 命令返回的路径更新
+                console.debug('CD result received:', message.data)
+                if (message.data) {
+                  const updated = this.extractAndUpdatePath(message.data, 'cd_result')
+                  if (updated) {
+                    console.debug('Path updated from cd_result to:', this.currentWorkingDirectory)
+                  }
+                }
+                break
+
+              case 'path_changed':
+                // 处理路径变更通知 - 使用增强的路径更新方法
+                console.debug('Path changed notification received:', message.data)
+                if (message.data) {
+                  const updated = this.extractAndUpdatePath(message.data, 'path_changed')
+                  if (updated) {
+                    console.debug('Working directory updated to:', this.currentWorkingDirectory)
+                  } else {
+                    console.warn('path_changed: Failed to update path from:', message.data)
+                  }
+                }
                 break
                 
               case 'disconnected':
@@ -1030,10 +1102,13 @@ class SSHTerminal {
 
   public disconnect(): void {
     try {
-      // 发送断开连接消息
+      // 发送断开连接消息，包含当前路径信息
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
-          type: 'disconnect'
+          type: 'disconnect',
+          data: {
+            currentPath: this.currentWorkingDirectory || '~'
+          }
         }))
       }
       
@@ -1057,6 +1132,99 @@ class SSHTerminal {
 
   public getTerminal(): Terminal | null {
     return this.terminal
+  }
+
+  public getCurrentWorkingDirectory(): string {
+    return this.currentWorkingDirectory
+  }
+
+  public setCurrentWorkingDirectory(path: string): void {
+    this.currentWorkingDirectory = path
+    console.debug('Working directory manually set to:', path)
+  }
+
+  /**
+   * 从后端消息中安全地更新当前工作目录
+   * 处理各种边界情况：null、undefined、空字符串、无效路径等
+   *
+   * @param serverPath - 后端返回的路径
+   * @param source - 消息来源（用于调试日志）
+   * @returns boolean - 是否成功更新
+   */
+  public updateCurrentPathFromServer(serverPath: any, source: string = 'unknown'): boolean {
+    try {
+      // 1. 类型检查 - 必须是字符串
+      if (typeof serverPath !== 'string') {
+        console.debug(`[PATH-UPDATE] ${source}: 忽略非字符串路径:`, typeof serverPath, serverPath)
+        return false
+      }
+
+      // 2. 去除首尾空白
+      const trimmedPath = serverPath.trim()
+
+      // 3. 空字符串检查
+      if (trimmedPath === '') {
+        console.debug(`[PATH-UPDATE] ${source}: 忽略空字符串路径`)
+        return false
+      }
+
+      // 4. 路径格式验证 - 必须以 / 或 ~ 开头
+      if (!trimmedPath.startsWith('/') && !trimmedPath.startsWith('~')) {
+        console.debug(`[PATH-UPDATE] ${source}: 忽略无效路径格式:`, trimmedPath)
+        return false
+      }
+
+      // 5. 路径长度限制 (Linux PATH_MAX = 4096)
+      if (trimmedPath.length > 4096) {
+        console.debug(`[PATH-UPDATE] ${source}: 忽略过长路径:`, trimmedPath.length)
+        return false
+      }
+
+      // 6. 检查是否与当前路径相同（避免不必要的更新）
+      if (trimmedPath === this.currentWorkingDirectory) {
+        console.debug(`[PATH-UPDATE] ${source}: 路径未变化:`, trimmedPath)
+        return true // 返回 true 因为路径是有效的
+      }
+
+      // 7. 更新路径
+      const previousPath = this.currentWorkingDirectory
+      this.currentWorkingDirectory = trimmedPath
+      console.debug(`[PATH-UPDATE] ${source}: 路径更新 "${previousPath}" -> "${trimmedPath}"`)
+
+      return true
+    } catch (error) {
+      console.warn(`[PATH-UPDATE] ${source}: 更新路径时出错:`, error)
+      return false
+    }
+  }
+
+  /**
+   * 从消息数据对象中提取并更新 currentPath
+   * 支持多种数据结构格式
+   *
+   * @param data - 消息的 data 字段
+   * @param source - 消息来源
+   * @returns boolean - 是否成功更新
+   */
+  public extractAndUpdatePath(data: any, source: string = 'unknown'): boolean {
+    if (!data || typeof data !== 'object') {
+      return false
+    }
+
+    // 尝试从不同字段提取路径
+    // 优先级: currentPath > newPath > path > initialPath
+    const pathFields = ['currentPath', 'newPath', 'path', 'initialPath']
+
+    for (const field of pathFields) {
+      if (data[field] !== undefined && data[field] !== null) {
+        const result = this.updateCurrentPathFromServer(data[field], `${source}.${field}`)
+        if (result) {
+          return true
+        }
+      }
+    }
+
+    return false
   }
 
   private isSimpleLsOutput(output: string): boolean {
@@ -1170,29 +1338,9 @@ function disconnect() {
   if (window.sshTerminalManager) {
     window.sshTerminalManager.disconnect()
     window.sshTerminalManager = null
-  } else {
-    // 兼容旧版本的断开连接逻辑
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'disconnect'
-      }))
-    }
-    
-    if (ws) {
-      ws.close()
-      ws = null
-    }
-    
-    // 清理终端实例（使用新的终端管理器）
-    if (window.sshTerminalManager) {
-      window.sshTerminalManager.disconnect()
-      window.sshTerminalManager = null
-    }
   }
   
   isConnected.value = false
-  // 重置单次命令执行输出
-  executeOutput.value = ''
 }
 
 // 重置配置方法
@@ -1222,8 +1370,7 @@ function resetConfig() {
   }
 }
 
-// 终端管理器实例
-let sshTerminalManager: any = null
+
 
 // 清屏功能
 function clearTerminal() {
@@ -1552,12 +1699,6 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
 // 清理函数
 function cleanup() {
   try {
-    // 清理WebSocket连接
-    if (ws) {
-      ws.close()
-      ws = null
-    }
-    
     // 清理终端管理器
     if (window.sshTerminalManager) {
       window.sshTerminalManager.disconnect()
