@@ -378,6 +378,9 @@ class SSHTerminal {
   // 路径状态管理
   private currentWorkingDirectory = '~'
 
+  // 保存原始提示符
+  private lastPrompt = ''
+
   constructor(
     terminalContainer: HTMLElement,
     connectionConfig: any,
@@ -439,7 +442,7 @@ class SSHTerminal {
       disableStdin: false,
       allowProposedApi: false,
       rendererType: 'canvas',
-      // 关键配置：确保正确处理输出格式
+      // 保持 convertEol 为 true，普通命令需要正确换行
       convertEol: true,
       rows: 24,
       cols: 120, // 增加列数，更好地显示长文件名
@@ -504,7 +507,20 @@ class SSHTerminal {
                 }
               }
             }
-            
+
+            // 检查是否是本地处理的命令（clear 清屏）
+            const trimmedCommand = this.inputBuffer.trim()
+            if (trimmedCommand === 'clear') {
+              console.debug('Local clear command detected')
+              this.terminal.write('\r\n')
+              this.handleLocalClear()
+              // 重置状态
+              this.inputBuffer = ''
+              this.historyIndex = -1
+              this.currentInput = ''
+              break
+            }
+
             // 发送完整的命令行，包含当前工作目录信息
             console.debug('Sending command to server:', this.inputBuffer)
             this.ws.send(JSON.stringify({
@@ -516,12 +532,12 @@ class SSHTerminal {
               }
             }))
             console.debug('Command sent to server with current path:', this.currentWorkingDirectory)
-            
+
             // 重置状态
             this.inputBuffer = ''
             this.historyIndex = -1
             this.currentInput = ''
-            
+
             this.terminal.write('\r\n')
             break
             
@@ -789,9 +805,26 @@ class SSHTerminal {
     // 发送退格键序列删除当前命令
     const backspaceSequence = '\b \b'.repeat(this.inputBuffer.length)
     this.terminal?.write(backspaceSequence)
-    
+
     // 写入新命令
     this.terminal?.write(newCommand)
+  }
+
+  // 本地清屏处理
+  private handleLocalClear(): void {
+    if (!this.terminal) return
+
+    try {
+      // 清除终端内容
+      this.terminal.clear()
+
+      // 显示保存的原始提示符
+      if (this.lastPrompt) {
+        this.terminal.write(this.lastPrompt)
+      }
+    } catch (error) {
+      console.warn('本地清屏处理错误:', error)
+    }
   }
 
   private log(message: string): void {
@@ -848,12 +881,17 @@ class SSHTerminal {
           console.log('WebSocket连接已建立:', wsUrl)
           this.log('正在连接SSH服务器...')
 
-          // 发送SSH连接配置，包含初始路径信息
+          // 发送SSH连接配置，包含初始路径信息和终端尺寸
           this.ws?.send(JSON.stringify({
             type: 'connect',
             data: {
               ...this.connectionConfig,
-              currentPath: this.currentWorkingDirectory || '~'
+              currentPath: this.currentWorkingDirectory || '~',
+              // 发送终端尺寸，让服务器 PTY 正确设置
+              cols: this.terminal?.cols || 120,
+              rows: this.terminal?.rows || 24,
+              width: this.terminal?.cols || 120,
+              height: this.terminal?.rows || 24
             }
           }))
         }
@@ -932,6 +970,10 @@ class SSHTerminal {
                   // 首先提取并更新路径信息
                   if (message.data) {
                     this.extractAndUpdatePath(message.data, 'ls_output')
+                    // 保存原始提示符
+                    if (message.data.prompt) {
+                      this.lastPrompt = message.data.prompt
+                    }
                   }
 
                   if (this.terminal) {
@@ -973,6 +1015,12 @@ class SSHTerminal {
                     // Filter out Ubuntu ESM message (Frontend Fix)
                     if (typeof outputData === 'string') {
                       outputData = outputData.replace(/Expanded Security Maintenance for Applications is not enabled\.\s*/g, '')
+
+                      // 从输出中提取并保存提示符（格式如：(base) root@host:/path$ 或 user@host:~$ ）
+                      const promptMatch = outputData.match(/(\([^)]+\)\s+)?[\w-]+@[\w.-]+:[^\$#]*[\$#]\s*$/)
+                      if (promptMatch) {
+                        this.lastPrompt = promptMatch[0]
+                      }
                     }
 
                     // 直接写入数据，不做任何格式化
