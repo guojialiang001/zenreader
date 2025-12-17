@@ -374,7 +374,7 @@ class SSHTerminal {
   private historyIndex = -1
   private currentInput = ''
   private inputBuffer = ''
-  
+
   // 路径状态管理
   private currentWorkingDirectory = '~'
 
@@ -509,7 +509,7 @@ class SSHTerminal {
             console.debug('Sending command to server:', this.inputBuffer)
             this.ws.send(JSON.stringify({
               type: 'command',
-              data: { 
+              data: {
                 command: this.inputBuffer + '\n',
                 // 确保总是发送当前路径，如果未定义则默认为~
                 currentPath: this.currentWorkingDirectory || '~'
@@ -887,7 +887,7 @@ class SSHTerminal {
                   console.debug('No data in connected message, using default: ~')
                 }
                 console.debug('Initial working directory set to:', this.currentWorkingDirectory)
-                
+
                 // 确保终端已初始化并聚焦
                 if (this.terminal) {
                   console.debug('Terminal instance exists, checking focus')
