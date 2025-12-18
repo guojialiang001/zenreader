@@ -17,9 +17,9 @@
       <!-- 头部 -->
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-          <RouterLink 
-            to="/" 
-            class="flex items-center gap-2 px-3 py-2 bg-white/10 backdrop-blur rounded-lg shadow-sm border border-slate-700 text-slate-300 hover:text-white hover:bg-white/20 transition-colors"
+          <RouterLink
+              to="/"
+              class="flex items-center gap-2 px-3 py-2 bg-white/10 backdrop-blur rounded-lg shadow-sm border border-slate-700 text-slate-300 hover:text-white hover:bg-white/20 transition-colors"
           >
             <Home class="w-4 h-4" />
             返回主页
@@ -31,16 +31,16 @@
             <div :class="['w-2 h-2 rounded-full', isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500']"></div>
             <span class="text-sm">{{ isConnected ? '已连接' : '未连接' }}</span>
           </div>
-          <button 
-            v-if="isConnected"
-            @click="disconnect"
-            class="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm transition-colors"
+          <button
+              v-if="isConnected"
+              @click="disconnect"
+              class="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm transition-colors"
           >
             断开连接
           </button>
-          <button 
-            @click="clearTerminal"
-            class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
+          <button
+              @click="clearTerminal"
+              class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
           >
             清屏
           </button>
@@ -51,7 +51,7 @@
       <div v-if="!isConnected" class="mb-6">
         <div class="bg-slate-800/50 backdrop-blur rounded-lg p-4 md:p-6 border border-slate-700">
           <h2 class="text-xl md:text-2xl font-bold text-white mb-4 md:mb-6">SSH 连接配置</h2>
-          
+
           <!-- 环境配置提示 -->
           <div class="mb-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
             <div class="flex items-center gap-2 mb-2">
@@ -64,59 +64,59 @@
           </div>
 
           <!-- 连接配置 -->
-          
+
 
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             <div>
               <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">服务器地址</label>
-              <input 
-                v-model="connectionConfig.hostname"
-                type="text" 
-                placeholder="例如：192.168.1.100"
-                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              <input
+                  v-model="connectionConfig.hostname"
+                  type="text"
+                  placeholder="例如：192.168.1.100"
+                  class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
               />
             </div>
             <div>
               <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">端口</label>
-              <input 
-                v-model="connectionConfig.port"
-                type="number" 
-                placeholder="默认：22"
-                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              <input
+                  v-model="connectionConfig.port"
+                  type="number"
+                  placeholder="默认：22"
+                  class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
               />
             </div>
             <div>
               <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">用户名</label>
-              <input 
-                v-model="connectionConfig.username"
-                type="text" 
-                placeholder="例如：root"
-                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              <input
+                  v-model="connectionConfig.username"
+                  type="text"
+                  placeholder="例如：root"
+                  class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
               />
             </div>
             <div>
               <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">密码</label>
-              <input 
-                v-model="connectionConfig.password"
-                type="password" 
-                placeholder="输入密码"
-                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              <input
+                  v-model="connectionConfig.password"
+                  type="password"
+                  placeholder="输入密码"
+                  class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
               />
             </div>
           </div>
           <div class="mt-6 flex flex-col sm:flex-row gap-3 md:gap-4">
-            <button 
-              v-if="!isConnected"
-              @click="connect"
-              :disabled="!canConnect"
-              :class="['px-6 py-3 md:px-8 md:py-4 rounded-lg font-bold text-lg md:text-xl transition-colors', canConnect ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-slate-600 text-slate-400 cursor-not-allowed']"
+            <button
+                v-if="!isConnected"
+                @click="connect"
+                :disabled="!canConnect"
+                :class="['px-6 py-3 md:px-8 md:py-4 rounded-lg font-bold text-lg md:text-xl transition-colors', canConnect ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-slate-600 text-slate-400 cursor-not-allowed']"
             >
               连接
             </button>
-            <button 
-              @click="resetConfig"
-              class="px-6 py-3 md:px-8 md:py-4 bg-slate-600 hover:bg-slate-500 rounded-lg text-white transition-colors text-lg md:text-xl font-bold"
+            <button
+                @click="resetConfig"
+                class="px-6 py-3 md:px-8 md:py-4 bg-slate-600 hover:bg-slate-500 rounded-lg text-white transition-colors text-lg md:text-xl font-bold"
             >
               重置
             </button>
@@ -229,12 +229,12 @@ const envConfig = computed(() => {
   // 解析SSH WebSocket域名列表
   const websocketDomains = import.meta.env.VITE_SSH_WEBSOCKET_DOMAINS || ''
   const domains = websocketDomains.split(',').map(domain => domain.trim()).filter(domain => domain)
-  
+
   // 如果没有配置域名列表，使用单个默认域名
   if (domains.length === 0) {
     domains.push(import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh')
   }
-  
+
   return {
     defaultHost: import.meta.env.VITE_SSH_DEFAULT_HOST || 'localhost',
     defaultPort: import.meta.env.VITE_SSH_DEFAULT_PORT || '22',
@@ -248,9 +248,9 @@ const envConfig = computed(() => {
 
 // 计算属性：检查是否可以连接
 const canConnect = computed(() => {
-  return connectionConfig.value.hostname.trim() !== '' && 
-         connectionConfig.value.username.trim() !== '' && 
-         connectionConfig.value.password.trim() !== ''
+  return connectionConfig.value.hostname.trim() !== '' &&
+      connectionConfig.value.username.trim() !== '' &&
+      connectionConfig.value.password.trim() !== ''
 })
 
 
@@ -284,7 +284,7 @@ function loadConfig() {
 function showErrorMessage(message: string) {
   errorMessage.value = message
   showError.value = true
-  
+
   // 3秒后自动隐藏错误消息
   setTimeout(() => {
     showError.value = false
@@ -297,33 +297,33 @@ async function connect() {
     showErrorMessage('请填写所有必填字段（服务器地址、用户名、密码）')
     return
   }
-  
+
   // 保存当前配置
   saveConfig()
-  
+
   try {
     // 交互式终端模式 - 先设置连接状态，让终端容器渲染
     isConnected.value = true
-    
+
     // 等待DOM更新，确保终端容器已渲染
     await nextTick()
-    
+
     // 检查终端容器是否已准备好
     if (!terminalContainer.value) {
       console.error('终端容器未找到')
       throw new Error('终端容器未找到，请确保终端界面已加载')
     }
-    
+
     // 建立SSH连接，SSHTerminal类会自动初始化终端
     await connectRealSSH()
   } catch (error) {
     console.error('SSH连接失败:', error)
     // 重置连接状态
     isConnected.value = false
-    
+
     // 显示用户友好的错误消息
     let userFriendlyMessage = 'SSH连接失败'
-    
+
     if (error.message.includes('hostname')) {
       userFriendlyMessage = '连接失败：服务器地址格式错误'
     } else if (error.message.includes('username')) {
@@ -339,9 +339,9 @@ async function connect() {
     } else {
       userFriendlyMessage = `连接失败：${error.message}`
     }
-    
+
     showErrorMessage(userFriendlyMessage)
-    
+
     // 尝试通过终端管理器显示错误信息
     const terminal = window.sshTerminalManager?.getTerminal()
     if (terminal) {
@@ -368,7 +368,7 @@ class SSHTerminal {
   private isConnecting = false
   private websocketDomains: string[] = []
   private currentDomainIndex = 0
-  
+
   // 命令历史相关
   private commandHistory: string[] = []
   private historyIndex = -1
@@ -382,23 +382,23 @@ class SSHTerminal {
   private lastPrompt = ''
 
   constructor(
-    terminalContainer: HTMLElement,
-    connectionConfig: any,
-    onConnectionChange: (connected: boolean) => void,
-    onError: (error: string) => void,
-    websocketDomains: string[] = []
+      terminalContainer: HTMLElement,
+      connectionConfig: any,
+      onConnectionChange: (connected: boolean) => void,
+      onError: (error: string) => void,
+      websocketDomains: string[] = []
   ) {
     this.terminalContainer = terminalContainer
     this.connectionConfig = connectionConfig
     this.onConnectionChange = onConnectionChange
     this.onError = onError
     this.websocketDomains = websocketDomains
-    
+
     // 如果没有提供域名列表，使用默认域名
     if (this.websocketDomains.length === 0) {
       this.websocketDomains.push(import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh')
     }
-    
+
     // 自动连接
     this.connect()
   }
@@ -410,7 +410,7 @@ class SSHTerminal {
       return
     }
     console.debug('terminalContainer found, initializing terminal')
-    
+
     this.terminal = new Terminal({
       theme: {
         background: '#0a0e27', // 深蓝黑色背景
@@ -456,13 +456,13 @@ class SSHTerminal {
     this.terminal.open(this.terminalContainer)
     console.debug('Terminal opened successfully')
     this.fitAddon.fit()
-    
+
     // 检查终端尺寸
     console.debug('Terminal dimensions after fit:', {
       cols: this.terminal.cols,
       rows: this.terminal.rows
     })
-    
+
     // 设置终端焦点
     setTimeout(() => {
       try {
@@ -482,7 +482,7 @@ class SSHTerminal {
     this.commandHistory = []
     this.historyIndex = -1
     this.currentInput = ''
-    
+
     this.terminal.onData((data) => {
       try {
         console.debug('Terminal onData received:', JSON.stringify(data))
@@ -490,7 +490,7 @@ class SSHTerminal {
           console.debug('Cannot process input - WebSocket not ready')
           return
         }
-        
+
         // 处理特殊按键
         switch (data) {
           case '\r':
@@ -540,7 +540,7 @@ class SSHTerminal {
 
             this.terminal.write('\r\n')
             break
-            
+
           case '\x7f':
           case '\b': // 退格键
             console.debug('Backspace key pressed')
@@ -549,7 +549,7 @@ class SSHTerminal {
               this.terminal.write('\b \b')
             }
             break
-            
+
           case '\x03': // Ctrl+C
             console.debug('Ctrl+C pressed')
             // 发送中断信号 - 使用interrupt类型而不是command类型
@@ -564,22 +564,22 @@ class SSHTerminal {
             this.historyIndex = -1
             this.currentInput = ''
             break
-            
+
           case '\x1b[A': // 上箭头键
             console.debug('Up arrow pressed')
             this.handleUpArrow()
             break
-            
+
           case '\x1b[B': // 下箭头键
             console.debug('Down arrow pressed')
             this.handleDownArrow()
             break
-            
+
           case '\t': // TAB键 - 自动补全
             console.debug('Tab key pressed')
             this.handleTabCompletion()
             break
-            
+
           case '\x1b[C': // 右箭头键
           case '\x1b[D': // 左箭头键
             console.debug('Arrow key pressed, local handling')
@@ -593,7 +593,7 @@ class SSHTerminal {
               // 这里可以添加光标位置管理逻辑
             }
             break
-            
+
           default:
             if (data >= ' ' && data <= '~') { // 可打印字符
               console.debug('Regular character input:', data)
@@ -641,12 +641,12 @@ class SSHTerminal {
           rows: this.terminal?.rows
         })
       }
-      
+
       if (this.ws && this.ws.readyState === WebSocket.OPEN && this.terminal) {
         const cols = this.terminal.cols
         const rows = this.terminal.rows
         console.debug('Sending resize message to backend:', { width: cols, height: rows })
-        
+
         // 发送resize消息到后端，使用width/height格式
         this.ws.send(JSON.stringify({
           type: 'resize',
@@ -668,11 +668,11 @@ class SSHTerminal {
       console.warn('终端大小调整错误:', error)
     }
   }
-  
+
   // 处理上箭头键 - 浏览命令历史
   private handleUpArrow(): void {
     if (this.commandHistory.length === 0) return
-    
+
     if (this.historyIndex === -1) {
       // 保存当前输入
       this.currentInput = this.inputBuffer
@@ -682,15 +682,15 @@ class SSHTerminal {
       // 向上浏览历史
       this.historyIndex--
     }
-    
+
     // 显示历史命令
     this.displayHistoryCommand()
   }
-  
+
   // 处理下箭头键 - 浏览命令历史
   private handleDownArrow(): void {
     if (this.commandHistory.length === 0 || this.historyIndex === -1) return
-    
+
     if (this.historyIndex < this.commandHistory.length - 1) {
       // 向下浏览历史
       this.historyIndex++
@@ -706,19 +706,19 @@ class SSHTerminal {
       this.terminal?.write(this.inputBuffer)
     }
   }
-  
+
   // 处理TAB键 - 自动补全
   private handleTabCompletion(): void {
     // 发送TAB补全请求到服务器，包含当前路径信息
     this.ws?.send(JSON.stringify({
       type: 'tab_complete',
-      data: { 
+      data: {
         command: this.inputBuffer,
         currentPath: this.currentWorkingDirectory || '~'
       }
     }))
   }
-  
+
   // 处理TAB补全响应
   private handleTabCompletionResponse(data: any): void {
     let options = data.options || []
@@ -782,7 +782,7 @@ class SSHTerminal {
       }
     }
   }
-  
+
   // 显示历史命令
   private displayHistoryCommand(): void {
     if (this.historyIndex >= 0 && this.historyIndex < this.commandHistory.length) {
@@ -791,7 +791,7 @@ class SSHTerminal {
       this.inputBuffer = newCommand
     }
   }
-  
+
   // 显示当前输入
   private displayCurrentInput(): void {
     // 清空当前行
@@ -799,7 +799,7 @@ class SSHTerminal {
     // 重新显示当前输入
     this.terminal?.write(this.inputBuffer)
   }
-  
+
   // 替换当前命令，保持提示符不变
   private replaceCurrentCommand(newCommand: string): void {
     // 发送退格键序列删除当前命令
@@ -858,7 +858,7 @@ class SSHTerminal {
       // 初始化终端
       this.initTerminal()
       console.debug('Terminal initialized, starting WebSocket connection')
-      
+
       // 域名轮训连接函数
       const tryNextDomain = () => {
         // 检查是否所有域名都已尝试过
@@ -867,16 +867,16 @@ class SSHTerminal {
           reject(new Error('所有SSH服务器连接失败'))
           return
         }
-        
+
         // 获取当前要尝试的域名
         const wsUrl = this.websocketDomains[this.currentDomainIndex]
         this.currentDomainIndex++
-        
+
         this.log(`正在尝试连接到服务器...`)
-        
+
         // 创建WebSocket连接
         this.ws = new WebSocket(wsUrl)
-        
+
         this.ws.onopen = () => {
           console.log('WebSocket连接已建立:', wsUrl)
           this.log('正在连接SSH服务器...')
@@ -895,14 +895,14 @@ class SSHTerminal {
             }
           }))
         }
-        
+
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data)
             console.debug('WebSocket message received:', message)
             console.debug('Message type:', message.type)
             console.debug('Message data:', message.data)
-            
+
             switch (message.type) {
               case 'connected':
                 this.sessionId = message.session_id
@@ -938,7 +938,7 @@ class SSHTerminal {
                 } else {
                   console.debug('Terminal instance not found, cannot focus')
                 }
-                
+
                 this.log('SSH连接成功！')
                 this.isConnecting = false
                 // 连接成功后再次调整终端大小，确保光标在框内
@@ -947,7 +947,7 @@ class SSHTerminal {
                 }, 100)
                 resolve()
                 break
-                
+
               case 'welcome':
               case 'banner':
               case 'motd':
@@ -958,7 +958,7 @@ class SSHTerminal {
                   this.terminal.write(message.data)
                 }
                 break
-                
+
               case 'tab_completion_options':
                 this.handleTabCompletionResponse(message.data)
                 break;
@@ -986,7 +986,7 @@ class SSHTerminal {
                   console.error('LS 输出处理错误:', lsError)
                   // 降级处理：如果格式化失败，尝试打印原始数据
                   if (this.terminal && message.data) {
-                      this.terminal.write(JSON.stringify(message.data))
+                    this.terminal.write(JSON.stringify(message.data))
                   }
                 }
                 console.debug('=== LS_OUTPUT MESSAGE END ===')
@@ -1035,7 +1035,7 @@ class SSHTerminal {
                 }
                 console.debug('=== OUTPUT/DATA MESSAGE END ===')
                 break
-                
+
               case 'error':
                 const errorMsg = message.message || '未知错误'
                 this.onError(errorMsg)
@@ -1049,7 +1049,7 @@ class SSHTerminal {
                 this.isConnecting = false
                 reject(new Error(errorMsg))
                 break
-                
+
               case 'completed':
                 this.log(`命令执行完成，退出码: ${message.exit_code}`)
                 // 尝试从 completed 消息中提取路径信息
@@ -1081,12 +1081,12 @@ class SSHTerminal {
                   }
                 }
                 break
-                
+
               case 'disconnected':
                 this.onConnectionChange(false)
                 this.log('SSH连接已断开')
                 break
-                
+
               default:
                 console.debug('Unknown message type received:', message.type)
                 console.debug('Full message:', message)
@@ -1098,21 +1098,21 @@ class SSHTerminal {
             this.isConnecting = false
           }
         }
-        
+
         this.ws.onerror = (error) => {
           console.error(`WebSocket错误 (${wsUrl}):`, error)
           this.log(`连接失败，正在尝试下一个服务器... (${this.currentDomainIndex}/${this.websocketDomains.length})`)
-          
+
           // 关闭当前连接
           if (this.ws) {
             this.ws.close()
             this.ws = null
           }
-          
+
           // 尝试下一个域名
           setTimeout(tryNextDomain, 500) // 延迟500ms后尝试下一个域名
         }
-        
+
         this.ws.onclose = () => {
           console.log(`WebSocket连接已关闭 (${wsUrl})`)
           // 如果还在连接过程中，尝试下一个域名
@@ -1124,25 +1124,25 @@ class SSHTerminal {
             this.log('连接已断开')
           }
         }
-        
+
         // 设置超时
         setTimeout(() => {
           if (this.ws?.readyState !== WebSocket.OPEN && this.isConnecting) {
             console.log(`连接超时 (${wsUrl})`)
             this.log(`连接超时，正在尝试下一个服务器... (${this.currentDomainIndex}/${this.websocketDomains.length})`)
-            
+
             // 关闭当前连接
             if (this.ws) {
               this.ws.close()
               this.ws = null
             }
-            
+
             // 尝试下一个域名
             tryNextDomain()
           }
         }, 10000) // 10秒超时
       }
-      
+
       // 开始尝试第一个域名
       tryNextDomain()
     })
@@ -1159,19 +1159,19 @@ class SSHTerminal {
           }
         }))
       }
-      
+
       // 关闭WebSocket连接
       if (this.ws) {
         this.ws.close()
         this.ws = null
       }
-      
+
       // 清理终端
       if (this.terminal) {
         this.terminal.dispose()
         this.terminal = null
       }
-      
+
       this.onConnectionChange(false)
     } catch (error) {
       console.warn('断开连接时出错:', error)
@@ -1337,37 +1337,37 @@ async function connectRealSSH() {
   }
 
   const terminalManager = new SSHTerminal(
-    terminalContainer.value,
-    connectionConfig.value,
-    (connected) => {
-      isConnected.value = connected
-    },
-    (error) => {
-      console.error('SSH终端错误:', error)
-      // 使用用户友好的错误提示
-      let userFriendlyMessage = 'SSH连接失败'
-      
-      if (error.includes('hostname')) {
-        userFriendlyMessage = '连接失败：服务器地址格式错误'
-      } else if (error.includes('username')) {
-        userFriendlyMessage = '连接失败：用户名格式错误'
-      } else if (error.includes('password')) {
-        userFriendlyMessage = '连接失败：密码格式错误'
-      } else if (error.includes('Field required')) {
-        userFriendlyMessage = '连接失败：缺少必填字段，请检查服务器地址、用户名和密码'
-      } else if (error.includes('连接超时')) {
-        userFriendlyMessage = '连接失败：连接超时，请检查服务器地址和端口'
-      } else if (error.includes('WebSocket')) {
-        userFriendlyMessage = '连接失败：无法连接到服务器，请检查服务器状态'
-      } else if (error.includes('所有SSH服务器连接失败')) {
-        userFriendlyMessage = '连接失败：所有SSH服务器都无法连接，请检查网络状态'
-      } else {
-        userFriendlyMessage = `连接失败：${error}`
-      }
-      
-      showErrorMessage(userFriendlyMessage)
-    },
-    envConfig.value.websocketDomains // 传递域名列表用于轮训
+      terminalContainer.value,
+      connectionConfig.value,
+      (connected) => {
+        isConnected.value = connected
+      },
+      (error) => {
+        console.error('SSH终端错误:', error)
+        // 使用用户友好的错误提示
+        let userFriendlyMessage = 'SSH连接失败'
+
+        if (error.includes('hostname')) {
+          userFriendlyMessage = '连接失败：服务器地址格式错误'
+        } else if (error.includes('username')) {
+          userFriendlyMessage = '连接失败：用户名格式错误'
+        } else if (error.includes('password')) {
+          userFriendlyMessage = '连接失败：密码格式错误'
+        } else if (error.includes('Field required')) {
+          userFriendlyMessage = '连接失败：缺少必填字段，请检查服务器地址、用户名和密码'
+        } else if (error.includes('连接超时')) {
+          userFriendlyMessage = '连接失败：连接超时，请检查服务器地址和端口'
+        } else if (error.includes('WebSocket')) {
+          userFriendlyMessage = '连接失败：无法连接到服务器，请检查服务器状态'
+        } else if (error.includes('所有SSH服务器连接失败')) {
+          userFriendlyMessage = '连接失败：所有SSH服务器都无法连接，请检查网络状态'
+        } else {
+          userFriendlyMessage = `连接失败：${error}`
+        }
+
+        showErrorMessage(userFriendlyMessage)
+      },
+      envConfig.value.websocketDomains // 传递域名列表用于轮训
   )
 
   try {
@@ -1387,7 +1387,7 @@ function disconnect() {
     window.sshTerminalManager.disconnect()
     window.sshTerminalManager = null
   }
-  
+
   isConnected.value = false
 }
 
@@ -1397,7 +1397,7 @@ function resetConfig() {
   if (isConnected.value) {
     disconnect()
   }
-  
+
   // 重置连接配置（使用正确的属性名hostname）
   connectionConfig.value = {
     hostname: '',
@@ -1405,12 +1405,12 @@ function resetConfig() {
     username: '',
     password: ''
   }
-  
+
   // 重置状态
   isConnected.value = false
   errorMessage.value = ''
   showError.value = false
-  
+
   // 清理终端管理器实例
   if (window.sshTerminalManager) {
     window.sshTerminalManager.disconnect()
@@ -1443,8 +1443,8 @@ const fileSystem = {
             children: {
               'documents': { type: 'directory', children: {} },
               'downloads': { type: 'directory', children: {} },
-              'readme.txt': { 
-                type: 'file', 
+              'readme.txt': {
+                type: 'file',
                 content: '欢迎使用前端 SSH 终端模拟器！\n这是一个基于浏览器的模拟终端环境。\n\n输入 \'help\' 查看可用命令。'
               }
             }
@@ -1477,18 +1477,18 @@ const commands: Record<string, (args: string[]) => string> = {
       currentPath = '/home/user'
       return ''
     }
-    
+
     const newPath = resolvePath(args[0])
     const node = getNode(newPath)
-    
+
     if (!node) {
       return `cd: ${args[0]}: 没有那个文件或目录`
     }
-    
+
     if (node.type !== 'directory') {
       return `cd: ${args[0]}: 不是目录`
     }
-    
+
     currentPath = newPath
     return ''
   },
@@ -1499,18 +1499,18 @@ const commands: Record<string, (args: string[]) => string> = {
     if (!args[0]) {
       return 'cat: 缺少文件参数'
     }
-    
+
     const path = resolvePath(args[0])
     const node = getNode(path)
-    
+
     if (!node) {
       return `cat: ${args[0]}: 没有那个文件或目录`
     }
-    
+
     if (node.type !== 'file') {
       return `cat: ${args[0]}: 是目录`
     }
-    
+
     return node.content || ''
   },
 
@@ -1581,10 +1581,10 @@ function resolvePath(path: string): string {
   if (path.startsWith('/')) {
     return path
   }
-  
+
   const segments = currentPath.split('/').filter(Boolean)
   const newSegments = path.split('/').filter(Boolean)
-  
+
   for (const segment of newSegments) {
     if (segment === '..') {
       segments.pop()
@@ -1592,7 +1592,7 @@ function resolvePath(path: string): string {
       segments.push(segment)
     }
   }
-  
+
   return '/' + segments.join('/')
 }
 
@@ -1600,7 +1600,7 @@ function resolvePath(path: string): string {
 function getNode(path: string): any {
   const segments = path.split('/').filter(Boolean)
   let node = fileSystem['/']
-  
+
   for (const segment of segments) {
     if (node.children && node.children[segment]) {
       node = node.children[segment]
@@ -1608,7 +1608,7 @@ function getNode(path: string): any {
       return null
     }
   }
-  
+
   return node
 }
 
@@ -1617,7 +1617,7 @@ function handleCommand(input: string) {
   try {
     const [command, ...args] = input.trim().split(' ')
     const terminal = window.sshTerminalManager?.getTerminal()
-    
+
     if (commands[command]) {
       const result = commands[command](args)
       if (result && result !== 'exit') {
@@ -1630,7 +1630,7 @@ function handleCommand(input: string) {
     } else if (command) {
       terminal?.write(`\r\n${command}: 未找到命令\r\n`)
     }
-    
+
     // 显示新的提示符（仅用于本地命令）
     const prompt = `\x1b[32m${connectionConfig.value.username}@${connectionConfig.value.hostname}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `
     terminal?.write(prompt)
@@ -1673,20 +1673,20 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
   if (!files || !Array.isArray(files) || files.length === 0) {
     return prompt || ''
   }
-  
+
   // 获取终端宽度
   const terminalWidth = terminal?.cols || 120
-  
+
   // 计算最大文件名宽度（不考虑颜色代码）
   const maxNameWidth = Math.max(...files.map((f: any) => f.name?.length || 0))
   const columnWidth = maxNameWidth + 2  // 文件名宽度 + 2个空格间距
   const columns = Math.max(1, Math.floor(terminalWidth / columnWidth))
   const actualColumns = Math.min(columns, 8)  // 限制最大列数
-  
+
   // 格式化每个文件名，添加颜色
   const coloredFiles = files.map((file: any) => {
     let color = FILE_COLORS.reset
-    
+
     // 确定颜色（优先级：BASE > 类型 > 可执行）
     if (file.is_base) {
       color = FILE_COLORS.base
@@ -1705,7 +1705,7 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
     } else {
       color = FILE_COLORS.file
     }
-    
+
     const fileName = file.name || ''
     return {
       name: fileName,
@@ -1713,11 +1713,11 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
       width: fileName.length
     }
   })
-  
+
   // 多列排列（行优先：从左到右，从上到下）
   let result = ''
   const totalRows = Math.ceil(coloredFiles.length / actualColumns)
-  
+
   for (let row = 0; row < totalRows; row++) {
     let rowContent = ''
     for (let col = 0; col < actualColumns; col++) {
@@ -1735,7 +1735,7 @@ function formatLsOutputWithColors(lsData: any, terminal?: any): string {
     }
     result += rowContent.trimEnd() + '\n'
   }
-  
+
   // 添加提示符（不换行）
   if (prompt) {
     result += prompt
@@ -1752,7 +1752,7 @@ function cleanup() {
       window.sshTerminalManager.disconnect()
       window.sshTerminalManager = null
     }
-    
+
     // 移除事件监听器
     window.removeEventListener('resize', handleResize)
   } catch (error) {
@@ -1780,10 +1780,10 @@ onMounted(() => {
   // 初始化连接配置默认值
   connectionConfig.value.hostname = envConfig.value.defaultHost
   connectionConfig.value.port = parseInt(envConfig.value.defaultPort)
-  
+
   // 加载保存的配置（会覆盖默认值）
   loadConfig()
-  
+
   // 立即处理已存在的 all.js 错误
   setTimeout(() => {
     // 重写 HTMLBodyElement 的事件处理
@@ -1812,8 +1812,8 @@ onMounted(() => {
   console.error = function(...args) {
     // 首先检查是否是第三方库错误
     const errorStr = args[0]?.toString() || ''
-    if (errorStr.includes('Cannot read properties of undefined') || 
-        errorStr.includes('all.js') || 
+    if (errorStr.includes('Cannot read properties of undefined') ||
+        errorStr.includes('all.js') ||
         errorStr.includes('TypeError')) {
       console.warn('捕获到第三方库错误，已忽略:', errorStr)
       return
@@ -1825,9 +1825,9 @@ onMounted(() => {
   handleError = (event: ErrorEvent) => {
     const errorMsg = event.error?.message || event.message || ''
     const filename = event.filename || ''
-    
+
     // 捕获 all.js 相关的所有错误，包括 Cannot read properties of undefined
-    if (errorMsg.includes('Cannot read properties of undefined') || 
+    if (errorMsg.includes('Cannot read properties of undefined') ||
         filename.includes('all.js') ||
         errorMsg.includes('reading \'0\'') ||
         errorMsg.includes('addDocumentListenerMouse') ||
@@ -1839,7 +1839,7 @@ onMounted(() => {
       return false
     }
   }
-  
+
   // 捕获未处理的Promise错误
   handleUnhandledRejection = (event: PromiseRejectionEvent) => {
     const errorStr = event.reason?.toString() || ''
@@ -1849,18 +1849,18 @@ onMounted(() => {
       event.stopPropagation()
     }
   }
-  
+
   // 使用捕获阶段来确保优先处理
   window.addEventListener('error', handleError, true)
   window.addEventListener('unhandledrejection', handleUnhandledRejection, true)
-  
+
   // 添加更底层的错误处理
   window.onerror = function(message, source, lineno, colno, error) {
     const errorStr = message?.toString() || ''
     const stack = error?.stack || ''
-    
+
     // 更全面地捕获 all.js 相关错误
-    if (errorStr.includes('Cannot read properties of undefined') || 
+    if (errorStr.includes('Cannot read properties of undefined') ||
         (source && source.includes('all.js')) ||
         errorStr.includes('addDocumentListenerMouse') ||
         errorStr.includes('HTMLBodyElement') ||
@@ -1871,13 +1871,13 @@ onMounted(() => {
     }
     return false
   }
-  
+
   // 直接拦截 all.js 的加载和执行
   const scriptTags = document.querySelectorAll('script[src*="all.js"]')
   scriptTags.forEach(script => {
     console.warn('发现 all.js 脚本，已记录')
   })
-  
+
   // 包装 document.addEventListener 来捕获 all.js 的错误
   originalDocAddEventListener = document.addEventListener
   document.addEventListener = function(type, listener, options) {
@@ -1910,7 +1910,7 @@ onMounted(() => {
     }
     return originalDocAddEventListener.call(this, type, listener, options)
   }
-  
+
   // 添加 MutationObserver 来监控动态加载的脚本
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
@@ -1927,7 +1927,7 @@ onMounted(() => {
       })
     })
   })
-  
+
   observer.observe(document.head || document.documentElement, {
     childList: true,
     subtree: true
