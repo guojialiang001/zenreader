@@ -153,7 +153,7 @@
               -- {{ vimModeDisplay }} --
             </span>
             <span v-if="vimCommandBuffer" class="text-slate-400 text-sm font-mono">
-              :{{ vimCommandBuffer }}
+              {{ vimCommandBuffer }}
             </span>
           </div>
           <div class="text-slate-500 text-xs">
@@ -469,10 +469,8 @@ class FrontendVimEditor {
       this.onSendToServer('vim_command', { action: 'insert_text', text: this.insertBuffer })
       this.insertBuffer = ''
     }
-    if (newMode === 'COMMAND') {
-      this.commandBuffer = ''
-      this.onCommandBufferChange('')
-    }
+    // 注意：进入COMMAND模式时不再在这里初始化commandBuffer
+    // commandBuffer的初始化（包含冒号）在handleNormalMode中处理
     console.debug(`[VIM] Mode: ${oldMode} -> ${newMode}`)
   }
   
@@ -508,7 +506,13 @@ class FrontendVimEditor {
     if (data === 'v') { this.switchMode('VISUAL'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'char' }); return true }
     if (data === 'V') { this.switchMode('VISUAL_LINE'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'line' }); return true }
     if (data === '\x16') { this.switchMode('VISUAL_BLOCK'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'block' }); return true }
-    if (data === ':') { this.switchMode('COMMAND'); this.onTerminalWrite('\r\n:'); return true }
+    if (data === ':') {
+      this.switchMode('COMMAND')
+      // 冒号作为commandBuffer的一部分，这样退格键可以删除它
+      this.commandBuffer = ':'
+      this.onCommandBufferChange(':')
+      return true
+    }
     
     // 移动命令
     if (data === 'h' || data === '\x1b[D') { this.onSendToServer('vim_command', { action: 'move', direction: 'left', count }); return true }
@@ -603,30 +607,45 @@ class FrontendVimEditor {
   }
   
   private handleCommandMode(data: string): boolean {
-    if (data === '\x1b') { this.switchMode('NORMAL'); this.commandBuffer = ''; this.onCommandBufferChange(''); return true }
-    if (data === '\r' || data === '\n') {
-      const cmd = this.commandBuffer
+    if (data === '\x1b') {
+      // ESC是唯一退出COMMAND模式的方式 - 清空命令缓冲区
       this.switchMode('NORMAL')
-      this.commandBuffer = ''; this.onCommandBufferChange('')
-      if (cmd.startsWith('/') || cmd.startsWith('?')) {
-        this.onSendToServer('vim_command', { action: 'search', pattern: cmd.slice(1), direction: cmd[0] === '/' ? 'forward' : 'backward' })
-      } else {
+      this.commandBuffer = ''
+      this.onCommandBufferChange('')
+      return true
+    }
+    if (data === '\r' || data === '\n') {
+      // commandBuffer现在包含冒号前缀，如 ":q" 或 ":wq"
+      // 提取实际命令（去掉冒号前缀）
+      const fullCmd = this.commandBuffer
+      const cmd = fullCmd.startsWith(':') ? fullCmd.slice(1) : fullCmd
+      this.switchMode('NORMAL')
+      this.commandBuffer = ''
+      this.onCommandBufferChange('')
+      if (fullCmd.startsWith('/') || fullCmd.startsWith('?')) {
+        // 搜索命令保持原有逻辑
+        this.onSendToServer('vim_command', { action: 'search', pattern: cmd, direction: fullCmd[0] === '/' ? 'forward' : 'backward' })
+      } else if (cmd) {
+        // 只有当有实际命令时才发送
         this.onSendToServer('vim_command', { action: 'ex_command', command: cmd })
       }
       return true
     }
     if (data === '\x7f' || data === '\b') {
       if (this.commandBuffer.length > 0) {
+        // 删除commandBuffer中的最后一个字符（包括冒号）
         this.commandBuffer = this.commandBuffer.slice(0, -1)
         this.onCommandBufferChange(this.commandBuffer)
-        this.onTerminalWrite('\b \b')
+        // 注意：即使commandBuffer为空，也不自动退出COMMAND模式
+        // 只有ESC按键才能退出COMMAND模式
       }
+      // 不写入终端 - 命令只显示在状态栏中
       return true
     }
     if (data >= ' ' && data <= '~') {
       this.commandBuffer += data
       this.onCommandBufferChange(this.commandBuffer)
-      this.onTerminalWrite(data)
+      // 不写入终端 - 命令只显示在状态栏中
       return true
     }
     return false
