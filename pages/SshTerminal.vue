@@ -145,6 +145,21 @@
 
         <!-- 交互式终端内容 -->
         <div ref="terminalContainer" class="h-96 w-full text-sm font-mono overflow-hidden"></div>
+        
+        <!-- VIM模式状态栏 -->
+        <div v-if="vimModeActive" class="px-4 py-1 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <span :class="['px-2 py-0.5 rounded text-xs font-bold', vimModeClass]">
+              -- {{ vimModeDisplay }} --
+            </span>
+            <span v-if="vimCommandBuffer" class="text-slate-400 text-sm font-mono">
+              :{{ vimCommandBuffer }}
+            </span>
+          </div>
+          <div class="text-slate-500 text-xs">
+            {{ vimFileName }} {{ vimModified ? '[+]' : '' }}
+          </div>
+        </div>
 
         <!-- 终端底部 -->
         <div class="px-4 py-3 md:px-6 md:py-4 bg-slate-800 border-t border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
@@ -213,6 +228,44 @@ const currentTime = ref('')
 const isConnected = ref(false)
 const errorMessage = ref('')
 const showError = ref(false)
+
+// VIM模式类型定义
+type VimModeType = 'NORMAL' | 'INSERT' | 'COMMAND' | 'VISUAL' | 'VISUAL_LINE' | 'VISUAL_BLOCK' | 'REPLACE'
+
+// VIM模式相关状态
+const vimModeActive = ref(false)
+const vimMode = ref<VimModeType>('NORMAL')
+const vimCommandBuffer = ref('')
+const vimFileName = ref('')
+const vimModified = ref(false)
+
+// VIM模式显示文本
+const vimModeDisplay = computed(() => {
+  switch (vimMode.value) {
+    case 'NORMAL': return 'NORMAL'
+    case 'INSERT': return 'INSERT'
+    case 'COMMAND': return 'COMMAND'
+    case 'VISUAL': return 'VISUAL'
+    case 'VISUAL_LINE': return 'VISUAL LINE'
+    case 'VISUAL_BLOCK': return 'VISUAL BLOCK'
+    case 'REPLACE': return 'REPLACE'
+    default: return 'NORMAL'
+  }
+})
+
+// VIM模式样式类
+const vimModeClass = computed(() => {
+  switch (vimMode.value) {
+    case 'NORMAL': return 'bg-blue-600 text-white'
+    case 'INSERT': return 'bg-green-600 text-white'
+    case 'COMMAND': return 'bg-yellow-600 text-black'
+    case 'VISUAL':
+    case 'VISUAL_LINE':
+    case 'VISUAL_BLOCK': return 'bg-purple-600 text-white'
+    case 'REPLACE': return 'bg-red-600 text-white'
+    default: return 'bg-blue-600 text-white'
+  }
+})
 
 // 连接配置 - 使用环境变量作为默认值
 const connectionConfig = ref({
@@ -355,6 +408,248 @@ async function connect() {
 
 
 
+// ==================== VIM编辑器类 ====================
+// 前端VIM编辑器类 - 处理所有VIM输入和模式切换
+class FrontendVimEditor {
+  private mode: VimModeType = 'NORMAL'
+  private commandBuffer = ''
+  private insertBuffer = ''
+  private cursorLine = 0
+  private cursorCol = 0
+  private fileName = ''
+  private modified = false
+  private repeatCount = 0
+  private pendingOperator = ''
+  
+  // 回调函数
+  private onModeChange: (mode: VimModeType) => void
+  private onCommandBufferChange: (buffer: string) => void
+  private onModifiedChange: (modified: boolean) => void
+  private onSendToServer: (type: string, data: any) => void
+  private onTerminalWrite: (data: string) => void
+  
+  constructor(
+    onModeChange: (mode: VimModeType) => void,
+    onCommandBufferChange: (buffer: string) => void,
+    onModifiedChange: (modified: boolean) => void,
+    onSendToServer: (type: string, data: any) => void,
+    onTerminalWrite: (data: string) => void
+  ) {
+    this.onModeChange = onModeChange
+    this.onCommandBufferChange = onCommandBufferChange
+    this.onModifiedChange = onModifiedChange
+    this.onSendToServer = onSendToServer
+    this.onTerminalWrite = onTerminalWrite
+  }
+  
+  public getMode(): VimModeType { return this.mode }
+  public setFileName(name: string): void { this.fileName = name }
+  public getFileName(): string { return this.fileName }
+  public isModified(): boolean { return this.modified }
+  public getCommandBuffer(): string { return this.commandBuffer }
+  
+  public reset(): void {
+    this.mode = 'NORMAL'
+    this.commandBuffer = ''
+    this.insertBuffer = ''
+    this.fileName = ''
+    this.modified = false
+    this.repeatCount = 0
+    this.pendingOperator = ''
+    this.onModeChange('NORMAL')
+    this.onCommandBufferChange('')
+    this.onModifiedChange(false)
+  }
+  
+  private switchMode(newMode: VimModeType): void {
+    const oldMode = this.mode
+    this.mode = newMode
+    this.onModeChange(newMode)
+    if (oldMode === 'INSERT' && newMode === 'NORMAL' && this.insertBuffer) {
+      this.onSendToServer('vim_command', { action: 'insert_text', text: this.insertBuffer })
+      this.insertBuffer = ''
+    }
+    if (newMode === 'COMMAND') {
+      this.commandBuffer = ''
+      this.onCommandBufferChange('')
+    }
+    console.debug(`[VIM] Mode: ${oldMode} -> ${newMode}`)
+  }
+  
+  public handleInput(data: string): boolean {
+    console.debug(`[VIM] Input: mode=${this.mode}, data=${JSON.stringify(data)}`)
+    switch (this.mode) {
+      case 'NORMAL': return this.handleNormalMode(data)
+      case 'INSERT': return this.handleInsertMode(data)
+      case 'COMMAND': return this.handleCommandMode(data)
+      case 'VISUAL':
+      case 'VISUAL_LINE':
+      case 'VISUAL_BLOCK': return this.handleVisualMode(data)
+      case 'REPLACE': return this.handleReplaceMode(data)
+      default: return false
+    }
+  }
+  
+  private handleNormalMode(data: string): boolean {
+    if (data === '\x1b') { this.pendingOperator = ''; this.repeatCount = 0; return true }
+    if (data >= '1' && data <= '9') { this.repeatCount = this.repeatCount * 10 + parseInt(data); return true }
+    if (data === '0' && this.repeatCount > 0) { this.repeatCount = this.repeatCount * 10; return true }
+    const count = this.repeatCount || 1
+    this.repeatCount = 0
+    
+    // 模式切换
+    if (data === 'i') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'before' }); return true }
+    if (data === 'I') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'line_start' }); return true }
+    if (data === 'a') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'after' }); return true }
+    if (data === 'A') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'line_end' }); return true }
+    if (data === 'o') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'new_line_below' }); return true }
+    if (data === 'O') { this.switchMode('INSERT'); this.onSendToServer('vim_command', { action: 'enter_insert', position: 'new_line_above' }); return true }
+    if (data === 'R') { this.switchMode('REPLACE'); this.onSendToServer('vim_command', { action: 'enter_replace' }); return true }
+    if (data === 'v') { this.switchMode('VISUAL'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'char' }); return true }
+    if (data === 'V') { this.switchMode('VISUAL_LINE'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'line' }); return true }
+    if (data === '\x16') { this.switchMode('VISUAL_BLOCK'); this.onSendToServer('vim_command', { action: 'enter_visual', type: 'block' }); return true }
+    if (data === ':') { this.switchMode('COMMAND'); this.onTerminalWrite('\r\n:'); return true }
+    
+    // 移动命令
+    if (data === 'h' || data === '\x1b[D') { this.onSendToServer('vim_command', { action: 'move', direction: 'left', count }); return true }
+    if (data === 'j' || data === '\x1b[B') { this.onSendToServer('vim_command', { action: 'move', direction: 'down', count }); return true }
+    if (data === 'k' || data === '\x1b[A') { this.onSendToServer('vim_command', { action: 'move', direction: 'up', count }); return true }
+    if (data === 'l' || data === '\x1b[C') { this.onSendToServer('vim_command', { action: 'move', direction: 'right', count }); return true }
+    if (data === 'w') { this.onSendToServer('vim_command', { action: 'move', direction: 'word_next', count }); return true }
+    if (data === 'b') { this.onSendToServer('vim_command', { action: 'move', direction: 'word_prev', count }); return true }
+    if (data === 'e') { this.onSendToServer('vim_command', { action: 'move', direction: 'word_end', count }); return true }
+    if (data === '0' && this.repeatCount === 0) { this.onSendToServer('vim_command', { action: 'move', direction: 'line_start' }); return true }
+    if (data === '$') { this.onSendToServer('vim_command', { action: 'move', direction: 'line_end' }); return true }
+    if (data === '^') { this.onSendToServer('vim_command', { action: 'move', direction: 'line_first_char' }); return true }
+    if (data === 'G') { this.onSendToServer('vim_command', { action: 'move', direction: 'file_end', line: count > 1 ? count : undefined }); return true }
+    if (data === 'g') { this.pendingOperator = 'g'; return true }
+    
+    if (this.pendingOperator === 'g' && data === 'g') { this.pendingOperator = ''; this.onSendToServer('vim_command', { action: 'move', direction: 'file_start' }); return true }
+    
+    // 编辑命令
+    if (data === 'x') { this.onSendToServer('vim_command', { action: 'delete', target: 'char', count }); this.modified = true; this.onModifiedChange(true); return true }
+    if (data === 'X') { this.onSendToServer('vim_command', { action: 'delete', target: 'char_before', count }); this.modified = true; this.onModifiedChange(true); return true }
+    if (data === 'd') { this.pendingOperator = 'd'; return true }
+    if (data === 'y') { this.pendingOperator = 'y'; return true }
+    if (data === 'c') { this.pendingOperator = 'c'; return true }
+    if (data === 'p') { this.onSendToServer('vim_command', { action: 'paste', position: 'after', count }); this.modified = true; this.onModifiedChange(true); return true }
+    if (data === 'P') { this.onSendToServer('vim_command', { action: 'paste', position: 'before', count }); this.modified = true; this.onModifiedChange(true); return true }
+    if (data === 'u') { this.onSendToServer('vim_command', { action: 'undo', count }); return true }
+    if (data === '\x12') { this.onSendToServer('vim_command', { action: 'redo', count }); return true }
+    if (data === '.') { this.onSendToServer('vim_command', { action: 'repeat', count }); return true }
+    
+    // 操作符+动作
+    if (this.pendingOperator) {
+      const op = this.pendingOperator
+      this.pendingOperator = ''
+      if (data === op) {
+        const action = op === 'd' ? 'delete' : op === 'y' ? 'yank' : 'change'
+        this.onSendToServer('vim_command', { action, target: 'line', count })
+        if (op !== 'y') { this.modified = true; this.onModifiedChange(true) }
+        if (op === 'c') this.switchMode('INSERT')
+        return true
+      }
+      const motions: Record<string, string> = { 'w': 'word_next', 'b': 'word_prev', 'e': 'word_end', '$': 'line_end', '0': 'line_start', '^': 'line_first_char' }
+      if (motions[data]) {
+        const action = op === 'd' ? 'delete' : op === 'y' ? 'yank' : 'change'
+        this.onSendToServer('vim_command', { action, target: motions[data], count })
+        if (op !== 'y') { this.modified = true; this.onModifiedChange(true) }
+        if (op === 'c') this.switchMode('INSERT')
+        return true
+      }
+    }
+    
+    // 搜索
+    if (data === '/') { this.switchMode('COMMAND'); this.commandBuffer = '/'; this.onCommandBufferChange('/'); this.onTerminalWrite('\r\n/'); return true }
+    if (data === '?') { this.switchMode('COMMAND'); this.commandBuffer = '?'; this.onCommandBufferChange('?'); this.onTerminalWrite('\r\n?'); return true }
+    if (data === 'n') { this.onSendToServer('vim_command', { action: 'search_next', count }); return true }
+    if (data === 'N') { this.onSendToServer('vim_command', { action: 'search_prev', count }); return true }
+    
+    return false
+  }
+  
+  private handleInsertMode(data: string): boolean {
+    if (data === '\x1b') {
+      if (this.insertBuffer) { this.onSendToServer('vim_command', { action: 'insert_text', text: this.insertBuffer }); this.insertBuffer = '' }
+      this.switchMode('NORMAL')
+      this.onSendToServer('vim_command', { action: 'exit_insert' })
+      return true
+    }
+    if (data === '\x7f' || data === '\b') {
+      if (this.insertBuffer.length > 0) this.insertBuffer = this.insertBuffer.slice(0, -1)
+      this.onSendToServer('vim_command', { action: 'backspace' })
+      this.modified = true; this.onModifiedChange(true)
+      return true
+    }
+    if (data === '\r' || data === '\n') {
+      this.insertBuffer += '\n'
+      this.onSendToServer('vim_command', { action: 'newline' })
+      this.modified = true; this.onModifiedChange(true)
+      return true
+    }
+    if (data >= ' ' && data <= '~') {
+      this.insertBuffer += data
+      this.onSendToServer('vim_command', { action: 'insert_char', char: data })
+      this.modified = true; this.onModifiedChange(true)
+      return true
+    }
+    return false
+  }
+  
+  private handleCommandMode(data: string): boolean {
+    if (data === '\x1b') { this.switchMode('NORMAL'); this.commandBuffer = ''; this.onCommandBufferChange(''); return true }
+    if (data === '\r' || data === '\n') {
+      const cmd = this.commandBuffer
+      this.switchMode('NORMAL')
+      this.commandBuffer = ''; this.onCommandBufferChange('')
+      if (cmd.startsWith('/') || cmd.startsWith('?')) {
+        this.onSendToServer('vim_command', { action: 'search', pattern: cmd.slice(1), direction: cmd[0] === '/' ? 'forward' : 'backward' })
+      } else {
+        this.onSendToServer('vim_command', { action: 'ex_command', command: cmd })
+      }
+      return true
+    }
+    if (data === '\x7f' || data === '\b') {
+      if (this.commandBuffer.length > 0) {
+        this.commandBuffer = this.commandBuffer.slice(0, -1)
+        this.onCommandBufferChange(this.commandBuffer)
+        this.onTerminalWrite('\b \b')
+      }
+      return true
+    }
+    if (data >= ' ' && data <= '~') {
+      this.commandBuffer += data
+      this.onCommandBufferChange(this.commandBuffer)
+      this.onTerminalWrite(data)
+      return true
+    }
+    return false
+  }
+  
+  private handleVisualMode(data: string): boolean {
+    if (data === '\x1b' || data === 'v' || data === 'V') { this.switchMode('NORMAL'); this.onSendToServer('vim_command', { action: 'exit_visual' }); return true }
+    if (data === 'h' || data === '\x1b[D') { this.onSendToServer('vim_command', { action: 'visual_move', direction: 'left' }); return true }
+    if (data === 'j' || data === '\x1b[B') { this.onSendToServer('vim_command', { action: 'visual_move', direction: 'down' }); return true }
+    if (data === 'k' || data === '\x1b[A') { this.onSendToServer('vim_command', { action: 'visual_move', direction: 'up' }); return true }
+    if (data === 'l' || data === '\x1b[C') { this.onSendToServer('vim_command', { action: 'visual_move', direction: 'right' }); return true }
+    if (data === 'd' || data === 'x') { this.onSendToServer('vim_command', { action: 'visual_delete' }); this.switchMode('NORMAL'); this.modified = true; this.onModifiedChange(true); return true }
+    if (data === 'y') { this.onSendToServer('vim_command', { action: 'visual_yank' }); this.switchMode('NORMAL'); return true }
+    if (data === 'c') { this.onSendToServer('vim_command', { action: 'visual_change' }); this.switchMode('INSERT'); this.modified = true; this.onModifiedChange(true); return true }
+    return false
+  }
+  
+  private handleReplaceMode(data: string): boolean {
+    if (data === '\x1b') { this.switchMode('NORMAL'); this.onSendToServer('vim_command', { action: 'exit_replace' }); return true }
+    if (data >= ' ' && data <= '~') {
+      this.onSendToServer('vim_command', { action: 'replace_char', char: data })
+      this.modified = true; this.onModifiedChange(true)
+      return true
+    }
+    return false
+  }
+}
+
+// ==================== SSH终端类 ====================
 // 现代化的SSH终端类（基于用户提供的SSHTerminal类改进）
 class SSHTerminal {
   private ws: WebSocket | null = null
@@ -381,18 +676,44 @@ class SSHTerminal {
   // 保存原始提示符
   private lastPrompt = ''
 
+  // VIM模式相关
+  private vimEditor: FrontendVimEditor | null = null
+  private isVimMode = false
+  private vimFileName = ''
+  private onVimModeChange: ((active: boolean) => void) | null = null
+  private onVimModeUpdate: ((mode: VimModeType) => void) | null = null
+  private onVimCommandBufferChange: ((buffer: string) => void) | null = null
+  private onVimFileNameChange: ((name: string) => void) | null = null
+  private onVimModifiedChange: ((modified: boolean) => void) | null = null
+
   constructor(
       terminalContainer: HTMLElement,
       connectionConfig: any,
       onConnectionChange: (connected: boolean) => void,
       onError: (error: string) => void,
-      websocketDomains: string[] = []
+      websocketDomains: string[] = [],
+      vimCallbacks?: {
+        onVimModeChange?: (active: boolean) => void
+        onVimModeUpdate?: (mode: VimModeType) => void
+        onVimCommandBufferChange?: (buffer: string) => void
+        onVimFileNameChange?: (name: string) => void
+        onVimModifiedChange?: (modified: boolean) => void
+      }
   ) {
     this.terminalContainer = terminalContainer
     this.connectionConfig = connectionConfig
     this.onConnectionChange = onConnectionChange
     this.onError = onError
     this.websocketDomains = websocketDomains
+
+    // 设置VIM回调函数
+    if (vimCallbacks) {
+      this.onVimModeChange = vimCallbacks.onVimModeChange || null
+      this.onVimModeUpdate = vimCallbacks.onVimModeUpdate || null
+      this.onVimCommandBufferChange = vimCallbacks.onVimCommandBufferChange || null
+      this.onVimFileNameChange = vimCallbacks.onVimFileNameChange || null
+      this.onVimModifiedChange = vimCallbacks.onVimModifiedChange || null
+    }
 
     // 如果没有提供域名列表，使用默认域名
     if (this.websocketDomains.length === 0) {
@@ -401,6 +722,127 @@ class SSHTerminal {
 
     // 自动连接
     this.connect()
+  }
+
+  // 设置VIM回调函数的方法
+  public setVimCallbacks(callbacks: {
+    onVimModeChange?: (active: boolean) => void
+    onVimModeUpdate?: (mode: VimModeType) => void
+    onVimCommandBufferChange?: (buffer: string) => void
+    onVimFileNameChange?: (name: string) => void
+    onVimModifiedChange?: (modified: boolean) => void
+  }): void {
+    this.onVimModeChange = callbacks.onVimModeChange || null
+    this.onVimModeUpdate = callbacks.onVimModeUpdate || null
+    this.onVimCommandBufferChange = callbacks.onVimCommandBufferChange || null
+    this.onVimFileNameChange = callbacks.onVimFileNameChange || null
+    this.onVimModifiedChange = callbacks.onVimModifiedChange || null
+  }
+
+  // 进入VIM模式
+  public enterVimMode(fileName: string = ''): void {
+    if (this.isVimMode) return
+    
+    this.isVimMode = true
+    this.vimFileName = fileName
+    
+    // 创建VIM编辑器实例
+    this.vimEditor = new FrontendVimEditor(
+      // onModeChange
+      (mode: VimModeType) => {
+        if (this.onVimModeUpdate) this.onVimModeUpdate(mode)
+      },
+      // onCommandBufferChange
+      (buffer: string) => {
+        if (this.onVimCommandBufferChange) this.onVimCommandBufferChange(buffer)
+      },
+      // onModifiedChange
+      (modified: boolean) => {
+        if (this.onVimModifiedChange) this.onVimModifiedChange(modified)
+      },
+      // onSendToServer
+      (type: string, data: any) => {
+        this.sendVimCommand(type, data)
+      },
+      // onTerminalWrite
+      (data: string) => {
+        if (this.terminal) this.terminal.write(data)
+      }
+    )
+    
+    this.vimEditor.setFileName(fileName)
+    
+    // 通知外部VIM模式已激活
+    if (this.onVimModeChange) this.onVimModeChange(true)
+    if (this.onVimFileNameChange) this.onVimFileNameChange(fileName)
+    if (this.onVimModeUpdate) this.onVimModeUpdate('NORMAL')
+    
+    console.debug('[VIM] Entered VIM mode, file:', fileName)
+  }
+
+  // 退出VIM模式
+  public exitVimMode(): void {
+    if (!this.isVimMode) return
+    
+    this.isVimMode = false
+    this.vimFileName = ''
+    
+    if (this.vimEditor) {
+      this.vimEditor.reset()
+      this.vimEditor = null
+    }
+    
+    // 通知外部VIM模式已退出
+    if (this.onVimModeChange) this.onVimModeChange(false)
+    if (this.onVimFileNameChange) this.onVimFileNameChange('')
+    if (this.onVimCommandBufferChange) this.onVimCommandBufferChange('')
+    if (this.onVimModifiedChange) this.onVimModifiedChange(false)
+    
+    console.debug('[VIM] Exited VIM mode')
+  }
+
+  // 发送VIM命令到服务器
+  private sendVimCommand(type: string, data: any): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[VIM] Cannot send command - WebSocket not ready')
+      return
+    }
+    
+    this.ws.send(JSON.stringify({
+      type: 'vim_command',
+      data: {
+        ...data,
+        currentPath: this.currentWorkingDirectory || '~',
+        fileName: this.vimFileName
+      }
+    }))
+    
+    console.debug('[VIM] Sent vim_command:', data)
+  }
+
+  // 检测是否是VIM启动命令
+  private isVimStartCommand(command: string): { isVim: boolean; fileName: string } {
+    const trimmed = command.trim()
+    // 匹配 vim, vi, nvim 命令
+    const vimMatch = trimmed.match(/^(vim|vi|nvim)\s+(.+)$/)
+    if (vimMatch) {
+      return { isVim: true, fileName: vimMatch[2].trim() }
+    }
+    // 匹配不带文件名的 vim/vi/nvim
+    if (/^(vim|vi|nvim)\s*$/.test(trimmed)) {
+      return { isVim: true, fileName: '' }
+    }
+    return { isVim: false, fileName: '' }
+  }
+
+  // 获取VIM模式状态
+  public isInVimMode(): boolean {
+    return this.isVimMode
+  }
+
+  // 获取当前VIM编辑器
+  public getVimEditor(): FrontendVimEditor | null {
+    return this.vimEditor
   }
 
   private initTerminal(): void {
@@ -491,6 +933,49 @@ class SSHTerminal {
           return
         }
 
+        // ==================== VIM模式输入处理 ====================
+        // 如果处于VIM模式，将所有输入路由到VIM编辑器
+        if (this.isVimMode && this.vimEditor) {
+          console.debug('[VIM] Processing input in VIM mode:', JSON.stringify(data))
+          
+          // 检测VIM退出命令（在COMMAND模式下输入:q, :wq, :x等）
+          const vimMode = this.vimEditor.getMode()
+          const cmdBuffer = this.vimEditor.getCommandBuffer()
+          
+          // 如果是回车键且在COMMAND模式，检查是否是退出命令
+          if ((data === '\r' || data === '\n') && vimMode === 'COMMAND') {
+            const exitCommands = ['q', 'q!', 'wq', 'wq!', 'x', 'x!', 'qa', 'qa!', 'wqa', 'wqa!']
+            if (exitCommands.includes(cmdBuffer)) {
+              console.debug('[VIM] Exit command detected:', cmdBuffer)
+              // 发送退出命令到服务器
+              this.sendVimCommand('vim_command', { action: 'ex_command', command: cmdBuffer })
+              // 退出VIM模式
+              this.exitVimMode()
+              return
+            }
+          }
+          
+          // 让VIM编辑器处理输入
+          const handled = this.vimEditor.handleInput(data)
+          if (handled) {
+            console.debug('[VIM] Input handled by VIM editor')
+          } else {
+            console.debug('[VIM] Input not handled, forwarding to server')
+            // 未处理的输入直接发送到服务器（作为原始输入）
+            this.ws.send(JSON.stringify({
+              type: 'vim_command',
+              data: {
+                action: 'raw_input',
+                input: data,
+                currentPath: this.currentWorkingDirectory || '~',
+                fileName: this.vimFileName
+              }
+            }))
+          }
+          return
+        }
+
+        // ==================== 普通终端输入处理 ====================
         // 处理特殊按键
         switch (data) {
           case '\r':
@@ -518,6 +1003,28 @@ class SSHTerminal {
               this.inputBuffer = ''
               this.historyIndex = -1
               this.currentInput = ''
+              break
+            }
+
+            // 检查是否是VIM启动命令
+            const vimCheck = this.isVimStartCommand(trimmedCommand)
+            if (vimCheck.isVim) {
+              console.debug('[VIM] VIM start command detected:', trimmedCommand)
+              // 进入VIM模式
+              this.enterVimMode(vimCheck.fileName)
+              // 仍然发送命令到服务器启动VIM
+              this.ws.send(JSON.stringify({
+                type: 'command',
+                data: {
+                  command: this.inputBuffer + '\n',
+                  currentPath: this.currentWorkingDirectory || '~'
+                }
+              }))
+              // 重置状态
+              this.inputBuffer = ''
+              this.historyIndex = -1
+              this.currentInput = ''
+              this.terminal.write('\r\n')
               break
             }
 
@@ -1341,6 +1848,14 @@ async function connectRealSSH() {
       connectionConfig.value,
       (connected) => {
         isConnected.value = connected
+        // 断开连接时重置VIM状态
+        if (!connected) {
+          vimModeActive.value = false
+          vimMode.value = 'NORMAL'
+          vimCommandBuffer.value = ''
+          vimFileName.value = ''
+          vimModified.value = false
+        }
       },
       (error) => {
         console.error('SSH终端错误:', error)
@@ -1367,7 +1882,30 @@ async function connectRealSSH() {
 
         showErrorMessage(userFriendlyMessage)
       },
-      envConfig.value.websocketDomains // 传递域名列表用于轮训
+      envConfig.value.websocketDomains, // 传递域名列表用于轮训
+      // VIM回调函数
+      {
+        onVimModeChange: (active: boolean) => {
+          vimModeActive.value = active
+          console.debug('[VIM] Mode active changed:', active)
+        },
+        onVimModeUpdate: (mode: VimModeType) => {
+          vimMode.value = mode
+          console.debug('[VIM] Mode updated:', mode)
+        },
+        onVimCommandBufferChange: (buffer: string) => {
+          vimCommandBuffer.value = buffer
+          console.debug('[VIM] Command buffer changed:', buffer)
+        },
+        onVimFileNameChange: (name: string) => {
+          vimFileName.value = name
+          console.debug('[VIM] File name changed:', name)
+        },
+        onVimModifiedChange: (modified: boolean) => {
+          vimModified.value = modified
+          console.debug('[VIM] Modified changed:', modified)
+        }
+      }
   )
 
   try {
