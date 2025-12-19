@@ -578,18 +578,24 @@ class FrontendVimEditor {
     if (data === '\x7f' || data === '\b') {
       if (this.insertBuffer.length > 0) this.insertBuffer = this.insertBuffer.slice(0, -1)
       this.onSendToServer('vim_command', { action: 'backspace' })
+      // 在终端中显示退格效果
+      this.onTerminalWrite('\b \b')
       this.modified = true; this.onModifiedChange(true)
       return true
     }
     if (data === '\r' || data === '\n') {
       this.insertBuffer += '\n'
       this.onSendToServer('vim_command', { action: 'newline' })
+      // 在终端中显示换行
+      this.onTerminalWrite('\r\n')
       this.modified = true; this.onModifiedChange(true)
       return true
     }
     if (data >= ' ' && data <= '~') {
       this.insertBuffer += data
       this.onSendToServer('vim_command', { action: 'insert_char', char: data })
+      // 在终端中显示输入的字符 - 这是关键修复！
+      this.onTerminalWrite(data)
       this.modified = true; this.onModifiedChange(true)
       return true
     }
@@ -642,6 +648,8 @@ class FrontendVimEditor {
     if (data === '\x1b') { this.switchMode('NORMAL'); this.onSendToServer('vim_command', { action: 'exit_replace' }); return true }
     if (data >= ' ' && data <= '~') {
       this.onSendToServer('vim_command', { action: 'replace_char', char: data })
+      // 在终端中显示替换的字符
+      this.onTerminalWrite(data)
       this.modified = true; this.onModifiedChange(true)
       return true
     }
