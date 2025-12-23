@@ -410,6 +410,7 @@ async function connect() {
 
 // ==================== VIM编辑器类 ====================
 // 前端VIM编辑器类 - 处理所有VIM输入和模式切换
+// 基于 VIM_SAVE_EXIT_GUIDE.md 实现完整的保存退出功能
 class FrontendVimEditor {
   private mode: VimModeType = 'NORMAL'
   private commandBuffer = ''
@@ -417,9 +418,18 @@ class FrontendVimEditor {
   private cursorLine = 0
   private cursorCol = 0
   private fileName = ''
+  private filePath = ''
   private modified = false
   private repeatCount = 0
   private pendingOperator = ''
+  private currentPath = ''
+  
+  // 文件内容管理
+  private fileContent: string[] = []
+  private originalContent: string[] = []
+  
+  // 标记是否已从服务器接收到文件内容
+  private contentInitialized = false
   
   // 回调函数
   private onModeChange: (mode: VimModeType) => void
@@ -442,20 +452,174 @@ class FrontendVimEditor {
     this.onTerminalWrite = onTerminalWrite
   }
   
+  // ========== 基本属性访问 ==========
   public getMode(): VimModeType { return this.mode }
   public setFileName(name: string): void { this.fileName = name }
   public getFileName(): string { return this.fileName }
+  public setFilePath(path: string): void { this.filePath = path }
+  public getFilePath(): string {
+    if (this.filePath) return this.filePath
+    if (this.currentPath && this.fileName) {
+      const separator = this.currentPath.endsWith('/') ? '' : '/'
+      return `${this.currentPath}${separator}${this.fileName}`
+    }
+    return this.fileName
+  }
+  public setCurrentPath(path: string): void { this.currentPath = path }
+  public getCurrentPath(): string { return this.currentPath }
   public isModified(): boolean { return this.modified }
   public getCommandBuffer(): string { return this.commandBuffer }
+  
+  // ========== 文件内容管理 ==========
+  public initContent(content: string): void {
+    this.fileContent = content.split('\n')
+    this.originalContent = [...this.fileContent]
+    this.modified = false
+    this.contentInitialized = true
+    this.cursorLine = 0
+    this.cursorCol = 0
+    this.onModifiedChange(false)
+    console.debug('[VIM] Content initialized, lines:', this.fileContent.length)
+  }
+  
+  // 确保fileContent至少有一行（用于新文件）
+  private ensureContentInitialized(): void {
+    if (!this.contentInitialized || this.fileContent.length === 0) {
+      this.fileContent = ['']
+      this.contentInitialized = true
+      this.cursorLine = 0
+      this.cursorCol = 0
+      console.debug('[VIM] Content auto-initialized for new file')
+    }
+  }
+  
+  // 在当前光标位置插入字符
+  private insertCharAtCursor(char: string): void {
+    this.ensureContentInitialized()
+    
+    // 确保cursorLine在有效范围内
+    if (this.cursorLine >= this.fileContent.length) {
+      this.cursorLine = this.fileContent.length - 1
+    }
+    if (this.cursorLine < 0) {
+      this.cursorLine = 0
+    }
+    
+    const line = this.fileContent[this.cursorLine] || ''
+    
+    // 确保cursorCol在有效范围内
+    if (this.cursorCol > line.length) {
+      this.cursorCol = line.length
+    }
+    if (this.cursorCol < 0) {
+      this.cursorCol = 0
+    }
+    
+    // 在光标位置插入字符
+    const newLine = line.slice(0, this.cursorCol) + char + line.slice(this.cursorCol)
+    this.fileContent[this.cursorLine] = newLine
+    this.cursorCol++
+    
+    console.debug(`[VIM] Inserted char '${char}' at line ${this.cursorLine}, col ${this.cursorCol - 1}`)
+  }
+  
+  // 在当前光标位置插入换行
+  private insertNewlineAtCursor(): void {
+    this.ensureContentInitialized()
+    
+    // 确保cursorLine在有效范围内
+    if (this.cursorLine >= this.fileContent.length) {
+      this.cursorLine = this.fileContent.length - 1
+    }
+    if (this.cursorLine < 0) {
+      this.cursorLine = 0
+    }
+    
+    const line = this.fileContent[this.cursorLine] || ''
+    
+    // 确保cursorCol在有效范围内
+    if (this.cursorCol > line.length) {
+      this.cursorCol = line.length
+    }
+    if (this.cursorCol < 0) {
+      this.cursorCol = 0
+    }
+    
+    // 分割当前行
+    const beforeCursor = line.slice(0, this.cursorCol)
+    const afterCursor = line.slice(this.cursorCol)
+    
+    // 更新当前行并插入新行
+    this.fileContent[this.cursorLine] = beforeCursor
+    this.fileContent.splice(this.cursorLine + 1, 0, afterCursor)
+    
+    // 移动光标到新行开头
+    this.cursorLine++
+    this.cursorCol = 0
+    
+    console.debug(`[VIM] Inserted newline, now at line ${this.cursorLine}`)
+  }
+  
+  // 在当前光标位置执行退格
+  private backspaceAtCursor(): void {
+    this.ensureContentInitialized()
+    
+    // 确保cursorLine在有效范围内
+    if (this.cursorLine >= this.fileContent.length) {
+      this.cursorLine = this.fileContent.length - 1
+    }
+    if (this.cursorLine < 0) {
+      return // 无法退格
+    }
+    
+    const line = this.fileContent[this.cursorLine] || ''
+    
+    if (this.cursorCol > 0) {
+      // 删除光标前的字符
+      const newLine = line.slice(0, this.cursorCol - 1) + line.slice(this.cursorCol)
+      this.fileContent[this.cursorLine] = newLine
+      this.cursorCol--
+      console.debug(`[VIM] Backspace at line ${this.cursorLine}, col ${this.cursorCol}`)
+    } else if (this.cursorLine > 0) {
+      // 光标在行首，合并到上一行
+      const prevLine = this.fileContent[this.cursorLine - 1] || ''
+      const newCursorCol = prevLine.length
+      this.fileContent[this.cursorLine - 1] = prevLine + line
+      this.fileContent.splice(this.cursorLine, 1)
+      this.cursorLine--
+      this.cursorCol = newCursorCol
+      console.debug(`[VIM] Backspace merged lines, now at line ${this.cursorLine}, col ${this.cursorCol}`)
+    }
+  }
+  
+  public getContent(): string {
+    return this.fileContent.join('\n')
+  }
+  
+  public hasUnsavedChanges(): boolean {
+    return JSON.stringify(this.fileContent) !== JSON.stringify(this.originalContent)
+  }
+  
+  public markAsSaved(): void {
+    this.originalContent = [...this.fileContent]
+    this.modified = false
+    this.onModifiedChange(false)
+  }
   
   public reset(): void {
     this.mode = 'NORMAL'
     this.commandBuffer = ''
     this.insertBuffer = ''
     this.fileName = ''
+    this.filePath = ''
     this.modified = false
     this.repeatCount = 0
     this.pendingOperator = ''
+    this.fileContent = []
+    this.originalContent = []
+    this.contentInitialized = false
+    this.cursorLine = 0
+    this.cursorCol = 0
     this.onModeChange('NORMAL')
     this.onCommandBufferChange('')
     this.onModifiedChange(false)
@@ -486,6 +650,157 @@ class FrontendVimEditor {
       case 'REPLACE': return this.handleReplaceMode(data)
       default: return false
     }
+  }
+  
+  // ========== 命令解析和执行 ==========
+  private parseAndExecuteCommand(cmd: string): void {
+    cmd = cmd.trim()
+    
+    const saveAndExitCommands = ['wq', 'wq!', 'x', 'x!', 'wqa', 'wqa!']
+    
+    if (this.isSaveCommand(cmd)) {
+      const alsoQuit = saveAndExitCommands.some(c => cmd === c || cmd.startsWith(c + ' '))
+      this.handleSaveCommand(cmd, alsoQuit)
+      return
+    }
+    
+    if (this.isExitCommand(cmd)) {
+      const forceQuit = cmd.includes('!')
+      this.handleExitCommand(cmd, forceQuit)
+      return
+    }
+    
+    // 其他命令发送到服务器
+    this.onSendToServer('vim_command', {
+      action: 'ex_command',
+      command: cmd,
+      currentPath: this.currentPath
+    })
+  }
+  
+  private isSaveCommand(cmd: string): boolean {
+    return /^w($|!|\s)/.test(cmd) ||
+           /^wq($|!)/.test(cmd) ||
+           /^x($|!)/.test(cmd) ||
+           /^wqa($|!)/.test(cmd)
+  }
+  
+  private isExitCommand(cmd: string): boolean {
+    return /^q($|!|a|a!)/.test(cmd)
+  }
+  
+  // ========== 保存命令处理 ==========
+  private handleSaveCommand(cmd: string, alsoQuit: boolean = false): void {
+    const forceWrite = cmd.includes('!')
+    
+    let targetFileName = this.fileName
+    let targetFilePath = this.getFilePath()
+    
+    // 解析 :w filename 格式
+    const match = cmd.match(/^w\s+(.+)$/)
+    if (match) {
+      targetFileName = match[1].trim()
+      if (this.currentPath) {
+        const separator = this.currentPath.endsWith('/') ? '' : '/'
+        targetFilePath = `${this.currentPath}${separator}${targetFileName}`
+      } else {
+        targetFilePath = targetFileName
+      }
+    }
+    
+    // :x 命令在没有修改时直接退出
+    if ((cmd === 'x' || cmd === 'x!') && !this.hasUnsavedChanges()) {
+      if (alsoQuit) {
+        this.onSendToServer('vim_command', {
+          action: 'exit_vim',
+          command: cmd,
+          forceQuit: true,
+          currentPath: this.currentPath
+        })
+      }
+      return
+    }
+    
+    // 发送保存命令（携带文件内容）
+    this.onSendToServer('vim_command', {
+      action: 'save_with_content',
+      command: cmd,
+      fileName: targetFileName,
+      filePath: targetFilePath,
+      content: this.getContent(),
+      encoding: 'utf-8',
+      createBackup: !forceWrite,
+      lineEnding: 'unix',
+      currentPath: this.currentPath,
+      alsoQuit: alsoQuit
+    })
+  }
+  
+  // ========== 退出命令处理 ==========
+  private handleExitCommand(cmd: string, forceQuit: boolean = false): void {
+    if (!forceQuit && this.hasUnsavedChanges()) {
+      this.onTerminalWrite('\r\nE37: No write since last change (add ! to override)\r\n')
+      return
+    }
+    
+    this.onSendToServer('vim_command', {
+      action: 'exit_vim',
+      command: cmd,
+      forceQuit: forceQuit,
+      currentPath: this.currentPath
+    })
+  }
+  
+  // ========== 后端响应处理 ==========
+  public handleSaveResult(result: {
+    success: boolean
+    fileName: string
+    filePath?: string
+    bytesWritten?: number
+    error?: string
+    message: string
+    alsoQuit: boolean
+    prompt?: string
+  }): void {
+    if (result.success) {
+      this.markAsSaved()
+      this.onTerminalWrite(`\r\n"${result.fileName}" ${result.bytesWritten || 0}B written\r\n`)
+      
+      if (result.alsoQuit && result.prompt) {
+        this.reset()
+        this.onTerminalWrite(result.prompt)
+      }
+    } else {
+      this.onTerminalWrite(`\r\nE212: ${result.error || "Can't open file for writing"}\r\n`)
+    }
+  }
+  
+  public handleExitResult(result: {
+    success: boolean
+    error?: string
+    message?: string
+    prompt?: string
+  }): void {
+    if (result.success) {
+      this.reset()
+      if (result.prompt) {
+        this.onTerminalWrite(result.prompt)
+      }
+    } else {
+      this.onTerminalWrite(`\r\n${result.error || 'Cannot exit'}\r\n`)
+    }
+  }
+  
+  public handleError(error: { code: string; message: string }): void {
+    const errorMessages: Record<string, string> = {
+      'E212': "Can't open file for writing",
+      'E37': 'No write since last change (add ! to override)',
+      'E32': 'No file name',
+      'E45': "'readonly' option is set (add ! to override)"
+    }
+    
+    const displayMessage = errorMessages[error.code] || error.message
+    this.onTerminalWrite(`\r\n${error.code}: ${displayMessage}\r\n`)
   }
   
   private handleNormalMode(data: string): boolean {
@@ -563,6 +878,26 @@ class FrontendVimEditor {
       }
     }
     
+    // ZZ - 保存并退出, ZQ - 不保存退出
+    if (this.pendingOperator === 'Z') {
+      if (data === 'Z') {
+        this.pendingOperator = ''
+        this.handleSaveCommand('wq', true)
+        return true
+      }
+      if (data === 'Q') {
+        this.pendingOperator = ''
+        this.handleExitCommand('q!', true)
+        return true
+      }
+      // 其他键取消pending状态
+      this.pendingOperator = ''
+    }
+    if (data === 'Z') {
+      this.pendingOperator = 'Z'
+      return true
+    }
+    
     // 搜索
     if (data === '/') { this.switchMode('COMMAND'); this.commandBuffer = '/'; this.onCommandBufferChange('/'); this.onTerminalWrite('\r\n/'); return true }
     if (data === '?') { this.switchMode('COMMAND'); this.commandBuffer = '?'; this.onCommandBufferChange('?'); this.onTerminalWrite('\r\n?'); return true }
@@ -581,6 +916,8 @@ class FrontendVimEditor {
     }
     if (data === '\x7f' || data === '\b') {
       if (this.insertBuffer.length > 0) this.insertBuffer = this.insertBuffer.slice(0, -1)
+      // 更新本地文件内容
+      this.backspaceAtCursor()
       this.onSendToServer('vim_command', { action: 'backspace' })
       // 在终端中显示退格效果
       this.onTerminalWrite('\b \b')
@@ -589,6 +926,8 @@ class FrontendVimEditor {
     }
     if (data === '\r' || data === '\n') {
       this.insertBuffer += '\n'
+      // 更新本地文件内容
+      this.insertNewlineAtCursor()
       this.onSendToServer('vim_command', { action: 'newline' })
       // 在终端中显示换行
       this.onTerminalWrite('\r\n')
@@ -597,6 +936,8 @@ class FrontendVimEditor {
     }
     if (data >= ' ' && data <= '~') {
       this.insertBuffer += data
+      // 更新本地文件内容
+      this.insertCharAtCursor(data)
       this.onSendToServer('vim_command', { action: 'insert_char', char: data })
       // 在终端中显示输入的字符 - 这是关键修复！
       this.onTerminalWrite(data)
@@ -626,8 +967,8 @@ class FrontendVimEditor {
         // 搜索命令保持原有逻辑
         this.onSendToServer('vim_command', { action: 'search', pattern: cmd, direction: fullCmd[0] === '/' ? 'forward' : 'backward' })
       } else if (cmd) {
-        // 只有当有实际命令时才发送
-        this.onSendToServer('vim_command', { action: 'ex_command', command: cmd })
+        // 使用新的命令解析和执行方法
+        this.parseAndExecuteCommand(cmd)
       }
       return true
     }
@@ -835,6 +1176,11 @@ class SSHTerminal {
       return
     }
     
+    // 确保VIM编辑器有正确的当前路径
+    if (this.vimEditor) {
+      this.vimEditor.setCurrentPath(this.currentWorkingDirectory || '~')
+    }
+    
     this.ws.send(JSON.stringify({
       type: 'vim_command',
       data: {
@@ -965,19 +1311,33 @@ class SSHTerminal {
         if (this.isVimMode && this.vimEditor) {
           console.debug('[VIM] Processing input in VIM mode:', JSON.stringify(data))
           
+          // 确保VIM编辑器有正确的当前路径
+          this.vimEditor.setCurrentPath(this.currentWorkingDirectory || '~')
+          
           // 检测VIM退出命令（在COMMAND模式下输入:q, :wq, :x等）
           const vimMode = this.vimEditor.getMode()
           const cmdBuffer = this.vimEditor.getCommandBuffer()
+          // 提取实际命令（去掉冒号前缀）
+          const actualCmd = cmdBuffer.startsWith(':') ? cmdBuffer.slice(1) : cmdBuffer
           
-          // 如果是回车键且在COMMAND模式，检查是否是退出命令
+          // 如果是回车键且在COMMAND模式，检查是否是退出/保存命令
           if ((data === '\r' || data === '\n') && vimMode === 'COMMAND') {
             const exitCommands = ['q', 'q!', 'wq', 'wq!', 'x', 'x!', 'qa', 'qa!', 'wqa', 'wqa!']
-            if (exitCommands.includes(cmdBuffer)) {
-              console.debug('[VIM] Exit command detected:', cmdBuffer)
-              // 发送退出命令到服务器
-              this.sendVimCommand('vim_command', { action: 'ex_command', command: cmdBuffer })
-              // 退出VIM模式
-              this.exitVimMode()
+            const saveCommands = ['w', 'w!']
+            
+            // 检查是否是退出命令
+            if (exitCommands.includes(actualCmd)) {
+              console.debug('[VIM] Exit/Save command detected:', actualCmd)
+              // 让VIM编辑器处理命令（会调用parseAndExecuteCommand）
+              this.vimEditor.handleInput(data)
+              return
+            }
+            
+            // 检查是否是保存命令
+            if (saveCommands.includes(actualCmd) || actualCmd.startsWith('w ')) {
+              console.debug('[VIM] Save command detected:', actualCmd)
+              // 让VIM编辑器处理命令
+              this.vimEditor.handleInput(data)
               return
             }
           }
@@ -1438,6 +1798,43 @@ class SSHTerminal {
             console.debug('Message data:', message.data)
 
             switch (message.type) {
+              // ========== VIM相关消息处理 ==========
+              case 'vim_save_result':
+                console.debug('[VIM] Save result received:', message.data)
+                if (this.vimEditor) {
+                  this.vimEditor.handleSaveResult(message.data)
+                  if (message.data.success && message.data.alsoQuit) {
+                    this.exitVimMode()
+                  }
+                }
+                break
+                
+              case 'vim_exit_result':
+                console.debug('[VIM] Exit result received:', message.data)
+                if (this.vimEditor) {
+                  this.vimEditor.handleExitResult(message.data)
+                  if (message.data.success) {
+                    this.exitVimMode()
+                  }
+                }
+                break
+                
+              case 'vim_file_content':
+                console.debug('[VIM] File content received:', message.data)
+                if (this.vimEditor) {
+                  this.vimEditor.setFileName(message.data.fileName)
+                  this.vimEditor.setFilePath(message.data.filePath)
+                  this.vimEditor.initContent(message.data.content || '')
+                }
+                break
+                
+              case 'vim_error':
+                console.debug('[VIM] Error received:', message.data)
+                if (this.vimEditor) {
+                  this.vimEditor.handleError(message.data)
+                }
+                break
+              
               case 'connected':
                 this.sessionId = message.session_id
                 this.onConnectionChange(true)
