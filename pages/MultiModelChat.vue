@@ -124,15 +124,29 @@
                     </div>
                   </div>
                 </div>
-                <div v-if="msg.summaryContent || msg.summaryLoading" class="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-4">
-                  <div class="flex items-center gap-3 mb-3">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
-                    <div><h3 class="font-bold text-indigo-800">{{ msg.summaryModel || 'deepseek-v3.1-terminus' }} 智能总结</h3></div>
-                    <Loader2 v-if="msg.summaryLoading" class="w-5 h-5 animate-spin text-indigo-500 ml-auto" />
-                    <span v-else-if="msg.summaryContent" class="ml-auto text-xs text-indigo-400">{{ msg.summaryContent.length }}字</span>
+                <div v-if="msg.deepseekSummary || msg.opusSummary || msg.summaryLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <!-- DeepSeek 总结 -->
+                  <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
+                      <div><h3 class="font-bold text-indigo-800">DeepSeek V3.1 总结</h3></div>
+                      <Loader2 v-if="msg.deepseekSummaryLoading" class="w-5 h-5 animate-spin text-indigo-500 ml-auto" />
+                      <span v-else-if="msg.deepseekSummary" class="ml-auto text-xs text-indigo-400">{{ msg.deepseekSummary.length }}字</span>
+                    </div>
+                    <div v-if="msg.deepseekSummaryLoading && !msg.deepseekSummary" class="flex items-center gap-2 text-indigo-500 py-4"><span class="text-sm">正在整合分析...</span></div>
+                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(msg.deepseekSummary || '')"></div>
                   </div>
-                  <div v-if="msg.summaryLoading && !msg.summaryContent" class="flex items-center gap-2 text-indigo-500 py-4"><span class="text-sm">正在整合分析...</span></div>
-                  <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(msg.summaryContent || '')"></div>
+                  <!-- Claude Opus 总结 -->
+                  <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
+                      <div><h3 class="font-bold text-purple-800">{{ msg.opusSummaryModel || 'ClaudeOpus4.5' }} 总结</h3></div>
+                      <Loader2 v-if="msg.opusSummaryLoading" class="w-5 h-5 animate-spin text-purple-500 ml-auto" />
+                      <span v-else-if="msg.opusSummary" class="ml-auto text-xs text-purple-400">{{ msg.opusSummary.length }}字</span>
+                    </div>
+                    <div v-if="msg.opusSummaryLoading && !msg.opusSummary" class="flex items-center gap-2 text-purple-500 py-4"><span class="text-sm">正在整合分析...</span></div>
+                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(msg.opusSummary || '')"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -242,7 +256,7 @@ const getStr = (c: any): string => typeof c === 'string' ? c : c == null ? '' : 
 const getLen = (c: any): number => getStr(c).length
 
 const env = (k: string, d = '') => (import.meta as any).env?.[k] || d
-type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; sonnetContent?: string; deepseekContent?: string; summaryContent?: string; summaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
+type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; sonnetContent?: string; deepseekContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
 type Session = { id: string; title: string; messages: Msg[]; timestamp: Date }
 type Api = { url: string; key: string; model: string; thinking?: boolean; headers?: Record<string, string> }
 
@@ -521,9 +535,9 @@ const stopGeneration = () => {
         }
       })
       // 强制停止总结区的加载状态
-      // 停止时，如果总结区正在加载，则停止加载状态
-      // 不会覆盖已有的内容，也不会显示错误信息，保持当前状态
       lastMsg.summaryLoading = false
+      lastMsg.deepseekSummaryLoading = false
+      lastMsg.opusSummaryLoading = false
     }
   }
   saveSession()
@@ -546,139 +560,85 @@ const sendMessage = async () => {
   const check = () => {
     if (done.size === 9 && !messages.value[idx].summaryLoading) {
       // 检查是否已经停止生成
-      // 注意：这里不能只检查 isLoading.value，因为如果用户没有点击停止，isLoading 应该在所有模型完成后才变 false
-      // 但这里是最后一个步骤，所以我们需要确保没有被手动停止
-      // 手动停止时，我们会清空 abortControllers，所以可以通过这个判断
       if (abortControllers.value.length === 0 && !isLoading.value) return
 
       messages.value[idx].summaryLoading = true
-      messages.value[idx].summaryContent = '' // 初始化为空字符串，确保容器显示
-      messages.value[idx].summaryModel = 'deepseek-v3.1-terminus'
+      messages.value[idx].deepseekSummary = ''
+      messages.value[idx].deepseekSummaryLoading = true
+      messages.value[idx].opusSummary = ''
+      messages.value[idx].opusSummaryLoading = true
+      messages.value[idx].opusSummaryModel = 'Claude Opus'
       
-      const tryOpusBackup = (prevError: string) => {
-        messages.value[idx].summaryContent = ''
-        messages.value[idx].summaryModel = 'claude-sonnet-4-5-20250929 (备用)'
-        stream(apis.opusBackup, prompt(q, resp),
-          c => {
-            messages.value[idx].summaryContent = (messages.value[idx].summaryContent || '') + c
-            scrollToBottom()
-          },
-          () => {
-            if (!messages.value[idx].summaryContent && isLoading.value) {
-               messages.value[idx].summaryContent = '> ⚠️ 智能总结未返回任何内容'
-            }
-            messages.value[idx].summaryLoading = false
-            finish()
-          },
-          e => {
-            messages.value[idx].summaryContent = `智能总结失败。\nDeepSeek: 失败\nOpus: ${prevError}\nSonnet(备用): ${e}`
-            messages.value[idx].summaryLoading = false
-            finish()
-          }
-        )
-      }
-
-      const tryOpus = (prevError: string) => {
-        messages.value[idx].summaryContent = ''
-        messages.value[idx].summaryModel = 'claude-opus-4-5-20251101'
-        stream(apis.opus, prompt(q, resp),
-          c => {
-            messages.value[idx].summaryContent = (messages.value[idx].summaryContent || '') + c
-            scrollToBottom()
-          },
-          () => {
-            if (!messages.value[idx].summaryContent && isLoading.value) {
-               messages.value[idx].summaryContent = '> ⚠️ 智能总结未返回任何内容'
-            }
-            messages.value[idx].summaryLoading = false
-            finish()
-          },
-          e => {
-            tryOpusBackup(e)
-          }
-        )
-      }
-
-      // 并行执行 DeepSeek 和 Opus
-      messages.value[idx].summaryModel = 'DeepSeek V3.1 & Claude Opus 并行生成'
       let deepseekFinished = false
       let opusFinished = false
-      let deepseekContent = ''
-      let opusContent = ''
+      
+      const checkAllDone = () => {
+        if (deepseekFinished && opusFinished) {
+          messages.value[idx].summaryLoading = false
+          finish()
+        }
+      }
       
       // 启动 DeepSeek
       stream(apis.deepseek, prompt(q, resp),
         c => {
-          deepseekContent += c
-          if (!opusFinished) {
-             messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Opus\n${opusContent || '正在生成...'}`
-             scrollToBottom()
-          }
+          messages.value[idx].deepseekSummary = (messages.value[idx].deepseekSummary || '') + c
+          scrollToBottom()
         },
         () => {
           deepseekFinished = true
-          if (opusFinished) {
-             messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Opus\n${opusContent}`
-             messages.value[idx].summaryLoading = false
-             finish()
+          messages.value[idx].deepseekSummaryLoading = false
+          if (!messages.value[idx].deepseekSummary && isLoading.value) {
+            messages.value[idx].deepseekSummary = '> ⚠️ 未返回任何内容'
           }
+          checkAllDone()
         },
         e => {
-           deepseekContent = `生成失败: ${e}`
-           deepseekFinished = true
-           if (opusFinished) {
-             messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Opus\n${opusContent}`
-             messages.value[idx].summaryLoading = false
-             finish()
-           }
+          messages.value[idx].deepseekSummary = `生成失败: ${e}`
+          messages.value[idx].deepseekSummaryLoading = false
+          deepseekFinished = true
+          checkAllDone()
         }
       )
 
       // 启动 Opus
       stream(apis.opus, prompt(q, resp),
         c => {
-          opusContent += c
-          if (!deepseekFinished) {
-             messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent || '正在生成...'}\n\n---\n\n### Claude Opus\n${opusContent}`
-             scrollToBottom()
-          }
+          messages.value[idx].opusSummary = (messages.value[idx].opusSummary || '') + c
+          scrollToBottom()
         },
         () => {
           opusFinished = true
-          if (deepseekFinished) {
-             messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Opus\n${opusContent}`
-             messages.value[idx].summaryLoading = false
-             finish()
+          messages.value[idx].opusSummaryLoading = false
+          if (!messages.value[idx].opusSummary && isLoading.value) {
+            messages.value[idx].opusSummary = '> ⚠️ 未返回任何内容'
           }
+          checkAllDone()
         },
         e => {
-           // Opus 失败尝试备用
-           stream(apis.opusBackup, prompt(q, resp),
-             c => {
-               opusContent += c
-               if (!deepseekFinished) {
-                  messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent || '正在生成...'}\n\n---\n\n### Claude Sonnet (备用)\n${opusContent}`
-                  scrollToBottom()
-               }
-             },
-             () => {
-               opusFinished = true
-               if (deepseekFinished) {
-                  messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Sonnet (备用)\n${opusContent}`
-                  messages.value[idx].summaryLoading = false
-                  finish()
-               }
-             },
-             e2 => {
-               opusContent = `生成失败: ${e}\n备用失败: ${e2}`
-               opusFinished = true
-               if (deepseekFinished) {
-                  messages.value[idx].summaryContent = `### DeepSeek V3.1\n${deepseekContent}\n\n---\n\n### Claude Opus\n${opusContent}`
-                  messages.value[idx].summaryLoading = false
-                  finish()
-               }
-             }
-           )
+          // Opus 失败尝试备用
+          messages.value[idx].opusSummary = ''
+          messages.value[idx].opusSummaryModel = 'ClaudeOpus4.5'
+          stream(apis.opusBackup, prompt(q, resp),
+            c => {
+              messages.value[idx].opusSummary = (messages.value[idx].opusSummary || '') + c
+              scrollToBottom()
+            },
+            () => {
+              opusFinished = true
+              messages.value[idx].opusSummaryLoading = false
+              if (!messages.value[idx].opusSummary && isLoading.value) {
+                messages.value[idx].opusSummary = '> ⚠️ 未返回任何内容'
+              }
+              checkAllDone()
+            },
+            e2 => {
+              messages.value[idx].opusSummary = `生成失败: ${e}\n备用失败: ${e2}`
+              messages.value[idx].opusSummaryLoading = false
+              opusFinished = true
+              checkAllDone()
+            }
+          )
         }
       )
     }
