@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onBeforeUnmount, onMounted, nextTick } from 'vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { Clock, Calendar, Edit, Save, X, Heading1, Heading2, Quote, List, ListOrdered, Image, Link, Bold, Italic, Code, Table, Download } from 'lucide-vue-next';
+import { Clock, Calendar, Edit, Save, X, Heading1, Heading2, Quote, List, ListOrdered, Image, Link, Bold, Italic, Code, Table, Download, Copy, Check } from 'lucide-vue-next';
 import type { MarkdownFile } from '../types';
 
 const props = defineProps<{
@@ -219,6 +219,132 @@ const parsedContent = computed(() => {
   return DOMPurify.sanitize(rawHtml as string);
 });
 
+// 代码块复制状态
+const copiedStates = ref<Map<number, boolean>>(new Map());
+
+// 复制代码到剪贴板
+const copyCode = async (code: string, index: number) => {
+  try {
+    await navigator.clipboard.writeText(code);
+    copiedStates.value.set(index, true);
+    setTimeout(() => {
+      copiedStates.value.set(index, false);
+    }, 2000);
+  } catch (err) {
+    console.error('复制失败:', err);
+  }
+};
+
+// 文章容器引用
+const articleRef = ref<HTMLElement | null>(null);
+
+// 处理代码块，添加标题头和复制按钮
+const processCodeBlocks = () => {
+  if (!articleRef.value) return;
+  
+  const preElements = articleRef.value.querySelectorAll('pre');
+  preElements.forEach((pre, index) => {
+    // 检查是否已经处理过
+    if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
+    
+    const codeElement = pre.querySelector('code');
+    const code = codeElement?.textContent || '';
+    
+    // 获取语言类型
+    let language = 'Code';
+    if (codeElement) {
+      const classList = codeElement.className.split(' ');
+      for (const cls of classList) {
+        if (cls.startsWith('language-')) {
+          language = cls.replace('language-', '').toUpperCase();
+          break;
+        }
+      }
+    }
+    
+    // 创建包装容器
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper relative my-4';
+    
+    // 创建标题头
+    const header = document.createElement('div');
+    header.className = 'code-block-header flex items-center justify-between px-4 py-2 bg-slate-100 border-b border-slate-200 rounded-t-lg';
+    header.innerHTML = `
+      <span class="text-xs font-medium text-slate-600">${language}</span>
+      <button class="copy-btn flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors" data-index="${index}">
+        <svg class="w-4 h-4 copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+        </svg>
+        <svg class="w-4 h-4 check-icon hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span class="copy-text">复制</span>
+      </button>
+    `;
+    
+    // 添加复制事件
+    const copyBtn = header.querySelector('.copy-btn');
+    copyBtn?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        const copyIcon = copyBtn.querySelector('.copy-icon');
+        const checkIcon = copyBtn.querySelector('.check-icon');
+        const copyText = copyBtn.querySelector('.copy-text');
+        
+        copyIcon?.classList.add('hidden');
+        checkIcon?.classList.remove('hidden');
+        if (copyText) copyText.textContent = '已复制';
+        
+        setTimeout(() => {
+          copyIcon?.classList.remove('hidden');
+          checkIcon?.classList.add('hidden');
+          if (copyText) copyText.textContent = '复制';
+        }, 2000);
+      } catch (err) {
+        console.error('复制失败:', err);
+      }
+    });
+    
+    // 修改 pre 样式
+    pre.style.borderTopLeftRadius = '0';
+    pre.style.borderTopRightRadius = '0';
+    pre.style.marginTop = '0';
+    
+    // 包装元素
+    pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(header);
+    wrapper.appendChild(pre);
+  });
+};
+
+// 监听内容变化，重新处理代码块
+watch(() => props.file.content, () => {
+  if (!props.isEditMode) {
+    nextTick(() => {
+      processCodeBlocks();
+    });
+  }
+});
+
+// 监听编辑模式变化
+watch(() => props.isEditMode, (newMode) => {
+  if (!newMode) {
+    nextTick(() => {
+      processCodeBlocks();
+    });
+  }
+});
+
+// 组件挂载后处理代码块
+onMounted(() => {
+  if (!props.isEditMode) {
+    nextTick(() => {
+      processCodeBlocks();
+    });
+  }
+});
+
 const wordCount = computed(() => props.file.content.trim().split(/\s+/).length);
 const readTime = computed(() => Math.max(1, Math.ceil(wordCount.value / 200)));
 const dateStr = computed(() => new Date(props.file.lastModified).toLocaleDateString(undefined, {
@@ -364,8 +490,9 @@ const displayTitle = computed(() => {
           autocapitalize="off"
         ></textarea>
       </div>
-      <article 
+      <article
         v-else
+        ref="articleRef"
         class="prose prose-slate prose-lg max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-img:shadow-lg overflow-x-hidden break-words"
         v-html="parsedContent"
       >

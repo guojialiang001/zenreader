@@ -168,3 +168,69 @@
   max-height: 100%;
   box-sizing: border-box;
 }
+
+/* 代码块样式 */
+.code-block-wrapper {
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  margin: 1rem 0;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background-color: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.code-block-header .copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.code-block-header .copy-btn:hover {
+  color: #334155;
+  background-color: #e2e8f0;
+}
+
+.code-block-wrapper pre {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background-color: #f8fafc !important;
+}
+
+.code-block-wrapper pre code {
+  display: block;
+  padding: 1rem !important;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: #1e293b;
+  background-color: transparent !important;
+}
+
+/* prose 内代码块覆盖样式 */
+.prose pre:not(.code-block-wrapper pre) {
+  background-color: #f8fafc !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+.prose :where(pre):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  background-color: #f8fafc;
+  color: #1e293b;
+}
