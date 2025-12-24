@@ -1,0 +1,48 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/chat/:path*",
+      "destination": "https://api.xiaomimimo.com/v1/chat/:path*"
+    },
+    {
+      "source": "/api/claude/:path*",
+      "destination": "https://api.avoapi.com/v1/:path*"
+    },
+    {
+      "source": "/api/mimo/:path*",
+      "destination": "https://api.xiaomimimo.com/v1/:path*"
+    },
+    {
+      "source": "/api/code-relay/:path*",
+      "destination": "https://api.code-relay.com/:path*"
+    },
+    {
+      "source": "/api/opus/:path*",
+      "destination": "https://aiai.li/v1/:path*"
+    },
+    {
+      "source": "/api/gemini/:path*",
+      "destination": "https://claude.chiddns.com/v1/:path*"
+    },
+    {
+      "source": "/api/deepseek/:path*",
+      "destination": "https://aicodelink.top/v1/:path*"
+    },
+    {
+      "source": "/api/sonnet-backup/:path*",
+      "destination": "https://cifang.xyz/v1/:path*"
+    },
+    {
+      "source": "/api/sonnet/:path*",
+      "destination": "https://aiai.li/v1/:path*"
+    },
+    {
+      "source": "/api/minimax/:path*",
+      "destination": "https://aicodelink.top/v1/:path*"
+    },
+    {
+      "source": "/api/minimax-m21/chat/completions",
+      "destination": "https://routerpark.com/v1/chat/completions"
+    }
+  ]
+}
