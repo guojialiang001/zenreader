@@ -41,8 +41,8 @@
       "destination": "https://aicodelink.top/v1/:path*"
     },
     {
-      "source": "/api/minimax-m21/chat/completions",
-      "destination": "https://routerpark.com/v1/chat/completions"
+      "source": "/api/minimaxm21/:path*",
+      "destination": "https://routerpark.com/v1/:path*"
     }
   ]
 }

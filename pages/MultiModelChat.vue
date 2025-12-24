@@ -344,28 +344,30 @@ const modelConfigs = [
   { key: 'deepseek', name: 'deepseek-v3.1-terminus', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-100', dotColor: 'bg-indigo-500', contentKey: 'deepseekContent' as keyof Msg, loadingKey: 'deepseekLoading' as keyof Msg }
 ]
 
+const apiBase = env('VITE_API_BASE_URL', 'https://chat.toproject.cloud')
+
 const apis: Record<string, Api> = {
-  geminiPro: { url: '/api/gemini/chat/completions', key: env('VITE_GF5_TOKEN'), model: 'gemini-3-pro-preview', thinking: true },
-  mimo: { url: '/api/chat/completions', key: env('VITE_MZ3_TOKEN'), model: 'mimo-v2-flash' },
-  glm: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
-  opus: { url: '/api/opus/chat/completions', key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
+  geminiPro: { url: `${apiBase}/api/gemini/chat/completions`, key: env('VITE_GF5_TOKEN'), model: 'gemini-3-pro-preview', thinking: true },
+  mimo: { url: `${apiBase}/api/chat/completions`, key: env('VITE_MZ3_TOKEN'), model: 'mimo-v2-flash' },
+  glm: { url: `${apiBase}/api/claude/chat/completions`, key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
+  opus: { url: `${apiBase}/api/opus/chat/completions`, key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
   opusBackup: {
-    url: '/api/code-relay/chat/completions',
+    url: `${apiBase}/api/code-relay/chat/completions`,
     key: env('VITE_CODE_RELAY_TOKEN'),
     model: 'claude-opus-4-5-20251101'
   },
-  grok: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
-  geminiFlash: { url: '/api/gemini/chat/completions', key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },
-  minimax: { url: '/api/minimax/chat/completions', key: env('VITE_MM4_TOKEN'), model: 'minimaxai/minimax-m2' },
-  minimaxM21: { url: '/api/minimaxm21/chat/completions', key: env('VITE_MINIMAX_M21_TOKEN'), model: 'MiniMax-M2.1' },
-  deepseek: { url: '/api/deepseek/chat/completions', key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
-  sonnet: { url: '/api/sonnet/chat/completions', key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
+  grok: { url: `${apiBase}/api/claude/chat/completions`, key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
+  geminiFlash: { url: `${apiBase}/api/gemini/chat/completions`, key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },
+  minimax: { url: `${apiBase}/api/minimax/chat/completions`, key: env('VITE_MM4_TOKEN'), model: 'minimaxai/minimax-m2' },
+  minimaxM21: { url: `${apiBase}/api/minimaxm21/chat/completions`, key: env('VITE_MINIMAX_M21_TOKEN'), model: 'MiniMax-M2.1' },
+  deepseek: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
+  sonnet: { url: `${apiBase}/api/sonnet/chat/completions`, key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
   sonnetBackup: {
-    url: '/api/sonnet-backup/chat/completions',
+    url: `${apiBase}/api/sonnet-backup/chat/completions`,
     key: env('VITE_SONNET_TOKEN_BACKUP'),
     model: 'claude-sonnet-4-5-20250929'
   },
-  deepseekCard: { url: '/api/deepseek/chat/completions', key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' }
+  deepseekCard: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' }
 }
 
 const KEY = 'zenreader_multimodel_history'

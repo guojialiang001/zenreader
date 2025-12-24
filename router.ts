@@ -12,6 +12,7 @@ import ImageToBase64 from './pages/ImageToBase64.vue'
 // import Action3DTool from './pages/3DActionTool.vue'
 import SshTerminal from './pages/SshTerminal.vue'
 import MultiModelChat from './pages/MultiModelChat.vue'
+import CodeEditor from './pages/CodeEditor.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -26,7 +27,8 @@ const routes = [
   // { path: '/script-writer', name: 'script-writer', component: ScriptWriter },
   // { path: '/3d-action', name: '3d-action', component: Action3DTool },
   { path: '/ssh', name: 'ssh', component: SshTerminal },
-  { path: '/chat', name: 'chat', component: MultiModelChat }
+  { path: '/chat', name: 'chat', component: MultiModelChat },
+  { path: '/editor', name: 'editor', component: CodeEditor }
 ]
 
 export const router = createRouter({
