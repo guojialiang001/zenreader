@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X } from 'lucide-vue-next'
+
+const searchQuery = ref('')
 
 const tools = [
   { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
@@ -32,17 +34,82 @@ const getIcon = (icon: string) => {
   }
 }
 
+// 计算匹配分数：匹配的字段越多、越靠前，分数越高
+const getMatchScore = (tool: typeof tools[0], query: string): number => {
+  if (!query) return 0
+  const q = query.toLowerCase()
+  let score = 0
+  
+  // 名称匹配（权重最高）
+  if (tool.name.toLowerCase().includes(q)) {
+    score += 100
+    // 如果是开头匹配，额外加分
+    if (tool.name.toLowerCase().startsWith(q)) score += 50
+  }
+  
+  // 标签匹配（权重次高）
+  tool.tags.forEach(tag => {
+    if (tag.toLowerCase().includes(q)) score += 30
+  })
+  
+  // 描述匹配
+  if (tool.desc.toLowerCase().includes(q)) score += 20
+  
+  // 功能匹配
+  tool.features.forEach(feature => {
+    if (feature.toLowerCase().includes(q)) score += 10
+  })
+  
+  return score
+}
+
 const filtered = computed(() => {
-  // Search functionality moved to App.vue
-  return tools
+  const query = searchQuery.value.trim()
+  if (!query) return tools
+  
+  // 计算每个工具的匹配分数并排序
+  return [...tools]
+    .map(tool => ({ tool, score: getMatchScore(tool, query) }))
+    .filter(item => item.score > 0) // 只显示匹配的
+    .sort((a, b) => b.score - a.score) // 分数高的排前面
+    .map(item => item.tool)
 })
+
+const clearSearch = () => {
+  searchQuery.value = ''
+}
 </script>
 
 <template>
   <div class="min-h-[100vh] bg-gradient-to-b from-brand-50 to-white">
     <!-- 主内容区域 -->
     <main class="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-12">
-      <!-- 标题部分已移动到 App.vue 中 -->
+      <!-- 搜索框 -->
+      <div class="mb-8">
+        <div class="relative max-w-xl mx-auto">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search class="w-5 h-5 text-slate-400" />
+          </div>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索工具名称、标签或功能..."
+            class="w-full pl-12 pr-12 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200 text-slate-700 placeholder-slate-400"
+          />
+          <button
+            v-if="searchQuery"
+            @click="clearSearch"
+            class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <!-- 搜索结果提示 -->
+        <div v-if="searchQuery" class="text-center mt-3 text-sm text-slate-500">
+          <span v-if="filtered.length > 0">找到 <span class="font-medium text-brand-600">{{ filtered.length }}</span> 个匹配的工具</span>
+          <span v-else class="text-slate-400">没有找到匹配的工具，试试其他关键词</span>
+        </div>
+      </div>
 
         <!-- 工具卡片网格 -->
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">

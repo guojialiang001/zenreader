@@ -1,32 +1,103 @@
 <template>
   <div class="h-screen bg-gradient-to-b from-brand-50 to-white flex overflow-hidden">
+    <!-- 确认弹窗 -->
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4" @click.self="cancelConfirm">
+          <div class="absolute inset-0 bg-gradient-to-br from-slate-900/60 via-slate-800/50 to-slate-900/60 backdrop-blur-sm"></div>
+          <Transition name="modal-scale">
+            <div v-if="confirmModal.show" class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform">
+              <!-- 顶部装饰条 -->
+              <div class="h-1.5 bg-gradient-to-r" :class="confirmModal.type === 'danger' ? 'from-red-400 via-red-500 to-orange-500' : 'from-brand-400 via-brand-500 to-purple-500'"></div>
+              
+              <div class="p-8">
+                <!-- 图标 -->
+                <div class="flex justify-center mb-6">
+                  <div class="w-20 h-20 rounded-full flex items-center justify-center" :class="confirmModal.type === 'danger' ? 'bg-gradient-to-br from-red-100 to-orange-100' : 'bg-gradient-to-br from-brand-100 to-purple-100'">
+                    <div class="w-14 h-14 rounded-full flex items-center justify-center" :class="confirmModal.type === 'danger' ? 'bg-gradient-to-br from-red-500 to-orange-500' : 'bg-gradient-to-br from-brand-500 to-purple-500'">
+                      <AlertTriangle v-if="confirmModal.type === 'danger'" class="w-7 h-7 text-white" />
+                      <HelpCircle v-else class="w-7 h-7 text-white" />
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 标题 -->
+                <h3 class="text-xl font-bold text-center text-slate-800 mb-3">{{ confirmModal.title }}</h3>
+                
+                <!-- 消息 -->
+                <p class="text-center text-slate-500 leading-relaxed mb-8">{{ confirmModal.message }}</p>
+                
+                <!-- 按钮 -->
+                <div class="flex gap-3">
+                  <button @click="cancelConfirm" class="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-all duration-200 hover:shadow-md">
+                    取消
+                  </button>
+                  <button @click="doConfirm" class="flex-1 py-3 px-4 font-medium rounded-xl transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5" :class="confirmModal.type === 'danger' ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white' : 'bg-gradient-to-r from-brand-500 to-purple-500 hover:from-brand-600 hover:to-purple-600 text-white'">
+                    {{ confirmModal.confirmText || '确定' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 预览弹窗 -->
-    <div v-if="previewModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="closePreview">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
-          <div class="flex items-center gap-3">
-            <div class="w-3 h-3 rounded-full bg-gradient-to-r from-brand-500 to-brand-600"></div>
-            <h3 class="font-bold text-lg text-slate-800">{{ previewModal.title }}</h3>
-          </div>
-          <div class="flex items-center gap-2">
-            <button @click="copyContent" class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors" :class="copied ? 'bg-green-100 text-green-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'">
-              <Check v-if="copied" class="w-4 h-4" />
-              <Copy v-else class="w-4 h-4" />
-              <span>{{ copied ? '已复制' : '复制' }}</span>
-            </button>
-            <button @click="closePreview" class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-              <X class="w-5 h-5 text-slate-500" />
-            </button>
-          </div>
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="previewModal.show" class="fixed inset-0 z-[99] flex items-center justify-center p-4" @click.self="closePreview">
+          <div class="absolute inset-0 bg-gradient-to-br from-slate-900/60 via-purple-900/30 to-slate-900/60 backdrop-blur-sm"></div>
+          <Transition name="modal-scale">
+            <div v-if="previewModal.show" class="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden transform">
+              <!-- 顶部装饰 -->
+              <div class="h-1.5 bg-gradient-to-r from-brand-400 via-purple-500 to-pink-500"></div>
+              
+              <!-- 头部 -->
+              <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-50 via-white to-purple-50/50">
+                <div class="flex items-center gap-4">
+                  <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-purple-500 flex items-center justify-center shadow-lg shadow-brand-500/30">
+                    <FileText class="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg text-slate-800">{{ previewModal.title }}</h3>
+                    <p class="text-xs text-slate-400">模型响应内容</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button @click="copyContent" class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl transition-all duration-200 hover:shadow-md" :class="copied ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'">
+                    <Check v-if="copied" class="w-4 h-4" />
+                    <Copy v-else class="w-4 h-4" />
+                    <span>{{ copied ? '已复制' : '复制内容' }}</span>
+                  </button>
+                  <button @click="closePreview" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-xl transition-colors group">
+                    <X class="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 内容区 -->
+              <div class="flex-1 overflow-y-auto">
+                <div class="p-6 bg-gradient-to-b from-slate-50 to-white min-h-full">
+                  <div class="markdown-content prose prose-sm max-w-none text-slate-700" v-html="renderMd(previewModal.content)"></div>
+                </div>
+              </div>
+              
+              <!-- 底部状态栏 -->
+              <div class="px-6 py-3 border-t border-slate-100 bg-gradient-to-r from-white to-slate-50 flex items-center justify-between">
+                <div class="flex items-center gap-4 text-xs text-slate-400">
+                  <span class="flex items-center gap-1.5">
+                    <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                    生成完成
+                  </span>
+                </div>
+                <span class="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{{ previewModal.content.length }} 字符</span>
+              </div>
+            </div>
+          </Transition>
         </div>
-        <div class="flex-1 overflow-y-auto p-6 bg-slate-50">
-          <div class="markdown-content prose prose-sm max-w-none text-slate-700" v-html="renderMd(previewModal.content)"></div>
-        </div>
-        <div class="px-6 py-3 border-t border-slate-200 bg-white text-right">
-          <span class="text-xs text-slate-400">{{ previewModal.content.length }} 字</span>
-        </div>
-      </div>
-    </div>
+      </Transition>
+    </Teleport>
     <!-- 左侧历史记录面板 -->
     <div :class="['bg-white border-r border-slate-200 transition-all duration-300 flex flex-col flex-shrink-0 h-full', historyPanelOpen ? 'w-72' : 'w-0']">
       <div v-if="historyPanelOpen" class="flex flex-col h-full overflow-hidden">
@@ -71,7 +142,7 @@
             <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-slate-500">
               <div class="w-20 h-20 mb-6 bg-brand-100 rounded-full flex items-center justify-center"><MessageSquare class="w-10 h-10 text-brand-600" /></div>
               <p class="text-lg font-medium mb-2">开始对话</p>
-              <p class="text-sm text-slate-400 mb-8">9个模型并发响应 → DeepSeek 3.1 智能总结</p>
+              <p class="text-sm text-slate-400 mb-8">10个模型并发响应 → DeepSeek 3.1 智能总结</p>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-4xl">
                 <div v-for="m in modelConfigs" :key="m.key" class="flex flex-col items-center gap-2 p-3 rounded-lg bg-white border border-slate-200">
                   <div :class="['w-3 h-3 rounded-full', m.dotColor]"></div>
@@ -89,7 +160,7 @@
                     <button @click="toggleAllModels(idx)" class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-600 transition-colors">
                       <ChevronRight :class="['w-4 h-4 transition-transform', isAllModelsExpanded(idx) ? 'rotate-90' : '']" />
                       <span>{{ isAllModelsExpanded(idx) ? '收起全部模型' : '展开全部模型' }}</span>
-                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/9)</span>
+                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/10)</span>
                     </button>
                   </div>
                   <div v-if="isAllModelsExpanded(idx)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -185,9 +256,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, reactive, onMounted, watch } from 'vue'
+import { ref, nextTick, reactive, onMounted, watch, Teleport, Transition } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer } from 'lucide-vue-next'
+import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText } from 'lucide-vue-next'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
@@ -256,7 +327,7 @@ const getStr = (c: any): string => typeof c === 'string' ? c : c == null ? '' : 
 const getLen = (c: any): number => getStr(c).length
 
 const env = (k: string, d = '') => (import.meta as any).env?.[k] || d
-type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; sonnetContent?: string; deepseekContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
+type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; minimaxM21Content?: string; sonnetContent?: string; deepseekContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; minimaxM21Loading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
 type Session = { id: string; title: string; messages: Msg[]; timestamp: Date }
 type Api = { url: string; key: string; model: string; thinking?: boolean; headers?: Record<string, string> }
 
@@ -268,12 +339,12 @@ const modelConfigs = [
   { key: 'grok', name: 'grok-4.1', bgColor: 'bg-red-50', borderColor: 'border-red-100', dotColor: 'bg-red-500', contentKey: 'grokContent' as keyof Msg, loadingKey: 'grokLoading' as keyof Msg },
   { key: 'geminiFlash', name: 'gemini-3-flash-preview', bgColor: 'bg-cyan-50', borderColor: 'border-cyan-100', dotColor: 'bg-cyan-500', contentKey: 'geminiFlashContent' as keyof Msg, loadingKey: 'geminiFlashLoading' as keyof Msg },
   { key: 'minimax', name: 'minimax-m2', bgColor: 'bg-pink-50', borderColor: 'border-pink-100', dotColor: 'bg-pink-500', contentKey: 'minimaxContent' as keyof Msg, loadingKey: 'minimaxLoading' as keyof Msg },
+  { key: 'minimaxM21', name: 'MiniMax-M2.1', bgColor: 'bg-rose-50', borderColor: 'border-rose-100', dotColor: 'bg-rose-500', contentKey: 'minimaxM21Content' as keyof Msg, loadingKey: 'minimaxM21Loading' as keyof Msg },
   { key: 'sonnet', name: 'claude-sonnet-4.5', bgColor: 'bg-teal-50', borderColor: 'border-teal-100', dotColor: 'bg-teal-500', contentKey: 'sonnetContent' as keyof Msg, loadingKey: 'sonnetLoading' as keyof Msg },
   { key: 'deepseek', name: 'deepseek-v3.1-terminus', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-100', dotColor: 'bg-indigo-500', contentKey: 'deepseekContent' as keyof Msg, loadingKey: 'deepseekLoading' as keyof Msg }
 ]
 
-const isDev = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-const apis: Record<string, Api> = isDev ? {
+const apis: Record<string, Api> = {
   geminiPro: { url: '/api/gemini/chat/completions', key: env('VITE_GF5_TOKEN'), model: 'gemini-3-pro-preview', thinking: true },
   mimo: { url: '/api/chat/completions', key: env('VITE_MZ3_TOKEN'), model: 'mimo-v2-flash' },
   glm: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
@@ -286,35 +357,15 @@ const apis: Record<string, Api> = isDev ? {
   grok: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
   geminiFlash: { url: '/api/gemini/chat/completions', key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },
   minimax: { url: '/api/minimax/chat/completions', key: env('VITE_MM4_TOKEN'), model: 'minimaxai/minimax-m2' },
+  minimaxM21: { url: '/api/minimaxm21/chat/completions', key: env('VITE_MINIMAX_M21_TOKEN'), model: 'MiniMax-M2.1' },
   deepseek: { url: '/api/deepseek/chat/completions', key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
-  sonnet: { url: env('VITE_SONNET_ENDPOINT', 'https://aiai.li/v1/chat/completions'), key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
+  sonnet: { url: '/api/sonnet/chat/completions', key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
   sonnetBackup: {
     url: '/api/sonnet-backup/chat/completions',
     key: env('VITE_SONNET_TOKEN_BACKUP'),
     model: 'claude-sonnet-4-5-20250929'
   },
   deepseekCard: { url: '/api/deepseek/chat/completions', key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' }
-} : {
-  geminiPro: { url: env('VITE_GF5_ENDPOINT', 'https://claude.chiddns.com/v1/chat/completions'), key: env('VITE_GF5_TOKEN'), model: 'gemini-3-pro-preview', thinking: true },
-  mimo: { url: env('VITE_MZ3_ENDPOINT', 'https://api.xiaomimimo.com/v1/chat/completions'), key: env('VITE_MZ3_TOKEN'), model: 'mimo-v2-flash' },
-  glm: { url: env('VITE_XQ7_ENDPOINT', 'https://api.avoapi.com/v1/chat/completions'), key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
-  opus: { url: env('VITE_PK9_ENDPOINT', 'https://aiai.li/v1/chat/completions'), key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
-  opusBackup: {
-    url: env('VITE_CODE_RELAY_ENDPOINT', 'https://api.code-relay.com/v1/chat/completions'),
-    key: env('VITE_CODE_RELAY_TOKEN'),
-    model: 'claude-opus-4-5-20251101'
-  },
-  grok: { url: env('VITE_XQ7_ENDPOINT', 'https://api.avoapi.com/v1/chat/completions'), key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
-  geminiFlash: { url: env('VITE_GF5_ENDPOINT', 'https://claude.chiddns.com/v1/chat/completions'), key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },
-  minimax: { url: env('VITE_MM4_ENDPOINT', 'https://aicodelink.top/v1/chat/completions'), key: env('VITE_MM4_TOKEN'), model: 'minimaxai/minimax-m2' },
-  deepseek: { url: env('VITE_DS2_ENDPOINT', 'https://aicodelink.top/v1/chat/completions'), key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
-  sonnet: { url: env('VITE_SONNET_ENDPOINT', 'https://aiai.li/v1/chat/completions'), key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
-  sonnetBackup: {
-    url: env('VITE_SONNET_ENDPOINT_BACKUP', 'https://aicodelink.top/v1/chat/completions'),
-    key: env('VITE_SONNET_TOKEN_BACKUP'),
-    model: 'claude-sonnet-4-5-20250929'
-  },
-  deepseekCard: { url: env('VITE_DS2_ENDPOINT', 'https://aicodelink.top/v1/chat/completions'), key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' }
 }
 
 const KEY = 'zenreader_multimodel_history'
@@ -328,6 +379,7 @@ const chatContainer = ref<HTMLElement>()
 const expandedStates = reactive<Record<string, boolean>>({})
 const allModelsExpanded = reactive<Record<number, boolean>>({})
 const previewModal = ref<{ show: boolean; title: string; content: string }>({ show: false, title: '', content: '' })
+const confirmModal = ref<{ show: boolean; title: string; message: string; type: 'danger' | 'info'; confirmText?: string; onConfirm?: () => void }>({ show: false, title: '', message: '', type: 'info' })
 const copied = ref(false)
 const abortControllers = ref<AbortController[]>([])
 const modelControllers = reactive<Record<string, AbortController>>({})
@@ -342,10 +394,36 @@ const stopModel = (idx: number, key: string) => {
   }
 }
 
-const confirmStopModel = (idx: number, key: string, name: string) => {
-  if (confirm(`确定要停止 ${name} 的生成吗？`)) {
-    stopModel(idx, key)
+const showConfirm = (options: { title: string; message: string; type?: 'danger' | 'info'; confirmText?: string; onConfirm: () => void }) => {
+  confirmModal.value = {
+    show: true,
+    title: options.title,
+    message: options.message,
+    type: options.type || 'info',
+    confirmText: options.confirmText,
+    onConfirm: options.onConfirm
   }
+}
+
+const cancelConfirm = () => {
+  confirmModal.value.show = false
+}
+
+const doConfirm = () => {
+  if (confirmModal.value.onConfirm) {
+    confirmModal.value.onConfirm()
+  }
+  confirmModal.value.show = false
+}
+
+const confirmStopModel = (idx: number, key: string, name: string) => {
+  showConfirm({
+    title: '停止生成',
+    message: `确定要停止 ${name} 的生成吗？当前进度将被保留。`,
+    type: 'danger',
+    confirmText: '停止',
+    onConfirm: () => stopModel(idx, key)
+  })
 }
 
 const openPreview = (title: string, content: string) => {
@@ -400,7 +478,20 @@ const deleteSession = (id: string) => {
   saveHistory()
 }
 
-const clearAllHistory = () => { if (confirm('确定清空所有历史？')) { chatHistory.value = []; currentSessionId.value = ''; messages.value = []; saveHistory() } }
+const clearAllHistory = () => {
+  showConfirm({
+    title: '清空历史记录',
+    message: '确定要清空所有历史记录吗？此操作不可恢复。',
+    type: 'danger',
+    confirmText: '清空全部',
+    onConfirm: () => {
+      chatHistory.value = []
+      currentSessionId.value = ''
+      messages.value = []
+      saveHistory()
+    }
+  })
+}
 
 const startNewSession = () => {
   if (isLoading.value) return
@@ -425,7 +516,20 @@ const getCompletedCount = (msg: Msg) => { let c = 0; for (const m of modelConfig
 const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 const formatDate = (d: Date) => { const days = Math.floor((Date.now() - d.getTime()) / 86400000); if (days === 0) return '今天 ' + formatTime(d); if (days === 1) return '昨天'; if (days < 7) return `${days}天前`; return d.toLocaleDateString('zh-CN') }
 const scrollToBottom = async () => { await nextTick(); if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight }
-const clearMessages = () => { if (confirm('清空当前对话？')) { messages.value = []; currentSessionId.value = ''; Object.keys(expandedStates).forEach(k => delete expandedStates[k]); Object.keys(allModelsExpanded).forEach(k => delete allModelsExpanded[k as any]) } }
+const clearMessages = () => {
+  showConfirm({
+    title: '清空对话',
+    message: '确定要清空当前对话吗？所有消息将被删除。',
+    type: 'danger',
+    confirmText: '清空',
+    onConfirm: () => {
+      messages.value = []
+      currentSessionId.value = ''
+      Object.keys(expandedStates).forEach(k => delete expandedStates[k])
+      Object.keys(allModelsExpanded).forEach(k => delete allModelsExpanded[k as any])
+    }
+  })
+}
 const handleKeydown = (e: KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
 const stream = async (api: Api, content: string, onChunk: (c: string) => void, onDone: () => void, onErr: (e: string) => void, onController?: (c: AbortController) => void) => {
@@ -511,9 +615,13 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
 }
 
 const confirmStop = () => {
-  if (confirm('确定要停止生成吗？这将中断所有正在进行的请求。')) {
-    stopGeneration()
-  }
+  showConfirm({
+    title: '停止生成',
+    message: '确定要停止生成吗？这将中断所有正在进行的请求，当前已生成的内容将被保留。',
+    type: 'danger',
+    confirmText: '停止全部',
+    onConfirm: stopGeneration
+  })
 }
 
 const stopGeneration = () => {
@@ -541,14 +649,14 @@ const stopGeneration = () => {
   saveSession()
 }
 
-const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.claude-sonnet-4.5:${r.sonnet||'无'}\n9.deepseek-v3.1-terminus:${r.deepseek||'无'}\n\n请分析：\n### 📊 一致性分析\n### 🔍 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
+const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.MiniMax-M2.1:${r.minimaxM21||'无'}\n9.claude-sonnet-4.5:${r.sonnet||'无'}\n10.deepseek-v3.1-terminus:${r.deepseek||'无'}\n\n请分析：\n### 📊 一致性分析\n### 🔍 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
 
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
   collapseAllPreviousModels()
   const q = inputMessage.value.trim(); inputMessage.value = ''; isLoading.value = true
   messages.value.push({ role: 'user', content: q, timestamp: new Date() })
-  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, sonnetLoading: true, deepseekLoading: true, summaryLoading: false, timestamp: new Date() }
+  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, sonnetLoading: true, deepseekLoading: true, summaryLoading: false, timestamp: new Date() }
   messages.value.push(msg); const idx = messages.value.length - 1
   const assistantIdx = messages.value.filter(m => m.role === 'assistant').length - 1
   allModelsExpanded[assistantIdx] = true
@@ -556,7 +664,7 @@ const sendMessage = async () => {
   const done = new Set<string>(); const resp: Record<string, string> = {}
   const finish = () => { isLoading.value = false; saveSession() }
   const check = () => {
-    if (done.size === 9 && !messages.value[idx].summaryLoading) {
+    if (done.size === 10 && !messages.value[idx].summaryLoading) {
       // 检查是否已经停止生成
       if (abortControllers.value.length === 0 && !isLoading.value) return
 
@@ -641,9 +749,9 @@ const sendMessage = async () => {
       )
     }
   }
-  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', sonnet: 'sonnetContent', deepseek: 'deepseekContent' }
-  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading' }
-  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'sonnet', 'deepseek']) {
+  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', minimaxM21: 'minimaxM21Content', sonnet: 'sonnetContent', deepseek: 'deepseekContent' }
+  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', minimaxM21: 'minimaxM21Loading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading' }
+  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'minimaxM21', 'sonnet', 'deepseek']) {
     const onController = (c: AbortController) => { modelControllers[`${idx}-${k}`] = c }
     const onChunk = (c: string) => { (messages.value[idx] as any)[cKeys[k]] = ((messages.value[idx] as any)[cKeys[k]] || '') + c; scrollToBottom() }
     const onSuccess = () => {
@@ -719,4 +827,29 @@ const sendMessage = async () => {
 .markdown-content hr { border: none; border-top: 1px solid #e5e7eb; margin: 0.875rem 0; }
 .markdown-content strong { font-weight: 600; color: #1f2937; }
 .markdown-content em { font-style: italic; }
+
+/* 弹窗动画 */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-scale-enter-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-scale-leave-active {
+  transition: all 0.2s ease-in;
+}
+.modal-scale-enter-from {
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+}
+.modal-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-5px);
+}
 </style>
