@@ -279,10 +279,9 @@ const apis: Record<string, Api> = isDev ? {
   glm: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
   opus: { url: '/api/opus/chat/completions', key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
   opusBackup: {
-    url: '/api/opus-backup/chat/completions',
-    key: env('VITE_PK9_TOKEN_BACKUP'),
-    model: 'claude-opus-4-5-20251101',
-    headers: { 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1', 'DISABLE_TELEMETRY': '1' }
+    url: '/api/code-relay/chat/completions',
+    key: env('VITE_CODE_RELAY_TOKEN'),
+    model: 'claude-opus-4-5-20251101'
   },
   grok: { url: '/api/claude/chat/completions', key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
   geminiFlash: { url: '/api/gemini/chat/completions', key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },
@@ -301,10 +300,9 @@ const apis: Record<string, Api> = isDev ? {
   glm: { url: env('VITE_XQ7_ENDPOINT', 'https://api.avoapi.com/v1/chat/completions'), key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
   opus: { url: env('VITE_PK9_ENDPOINT', 'https://aiai.li/v1/chat/completions'), key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
   opusBackup: {
-    url: env('VITE_PK9_ENDPOINT_BACKUP', 'https://cifang.xyz/v1/chat/completions'),
-    key: env('VITE_PK9_TOKEN_BACKUP'),
-    model: 'claude-opus-4-5-20251101',
-    headers: { 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1', 'DISABLE_TELEMETRY': '1' }
+    url: env('VITE_CODE_RELAY_ENDPOINT', 'https://api.code-relay.com/v1/chat/completions'),
+    key: env('VITE_CODE_RELAY_TOKEN'),
+    model: 'claude-opus-4-5-20251101'
   },
   grok: { url: env('VITE_XQ7_ENDPOINT', 'https://api.avoapi.com/v1/chat/completions'), key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
   geminiFlash: { url: env('VITE_GF5_ENDPOINT', 'https://claude.chiddns.com/v1/chat/completions'), key: env('VITE_GF5_TOKEN'), model: 'gemini-3-flash-preview', thinking: true },

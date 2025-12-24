@@ -11,80 +11,17 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         proxy: {
-          '/api/chat': {
-            target: 'https://api.xiaomimimo.com',
+          // 所有 /api 请求代理到本地后端 8000 端口
+          '/api': {
+            target: 'http://127.0.0.1:8000',
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/chat/, '/v1/chat'),
-            secure: true
-          },
-          // Claude API 代理 (avoapi)
-          '/api/claude': {
-            target: 'https://api.avoapi.com',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/claude/, '/v1'),
-            secure: true
-          },
-          // MIMO API 代理
-          '/api/mimo': {
-            target: 'https://api.xiaomimimo.com',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/mimo/, '/v1'),
-            secure: true
-          },
-          // Claude Opus Backup API 代理 (cifang.xyz) - 必须放在 /api/opus 之前！
-          '/api/opus-backup': {
-            target: 'https://cifang.xyz',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/opus-backup/, '/v1'),
-            secure: true
-          },
-          // Claude Opus API 代理 (aiai.li)
-          '/api/opus': {
-            target: 'https://aiai.li',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/opus/, '/v1'),
-            secure: true
-          },
-          // Gemini API 代理 (claude.chiddns.com)
-          '/api/gemini': {
-            target: 'https://claude.chiddns.com',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/gemini/, '/v1'),
-            secure: true
-          },
-          // DeepSeek API 代理 (aicodelink.top)
-          '/api/deepseek': {
-            target: 'https://aicodelink.top',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/deepseek/, '/v1'),
-            secure: true,
+            secure: false,
             configure: (proxy, _options) => {
               proxy.on('proxyReq', (proxyReq, req, _res) => {
                 // 确保流式响应不被缓冲
                 proxyReq.setHeader('Connection', 'keep-alive');
               });
             }
-          },
-          // Claude Sonnet Backup API 代理 (aicodelink.top) - 必须放在 /api/sonnet 之前！
-          '/api/sonnet-backup': {
-            target: 'https://cifang.xyz',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/sonnet-backup/, '/v1'),
-            secure: true
-          },
-          // Claude Sonnet API 代理 (aiai.li)
-          '/api/sonnet': {
-            target: 'https://aiai.li',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/sonnet/, '/v1'),
-            secure: true
-          },
-          // MiniMax API 代理 (aicodelink.top)
-          '/api/minimax': {
-            target: 'https://aicodelink.top',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/minimax/, '/v1'),
-            secure: true
           }
         }
       },
@@ -110,7 +47,12 @@ export default defineConfig(({ mode }) => {
         'process.env.VITE_DS2_TOKEN': JSON.stringify(env.VITE_DS2_TOKEN),
         // MiniMax API 配置
         'process.env.VITE_MM4_ENDPOINT': JSON.stringify(env.VITE_MM4_TOKEN),
-        'process.env.VITE_MM4_TOKEN': JSON.stringify(env.VITE_MM4_TOKEN)
+        'process.env.VITE_MM4_TOKEN': JSON.stringify(env.VITE_MM4_TOKEN),
+        // MiniMax-M2.1 API 配置
+        'process.env.VITE_MINIMAX_M21_TOKEN': JSON.stringify(env.VITE_MINIMAX_M21_TOKEN),
+        // Code-Relay API 配置 (Opus 备用)
+        'process.env.VITE_CODE_RELAY_ENDPOINT': JSON.stringify(env.VITE_CODE_RELAY_ENDPOINT),
+        'process.env.VITE_CODE_RELAY_TOKEN': JSON.stringify(env.VITE_CODE_RELAY_TOKEN)
       },
       resolve: {
         alias: {
