@@ -699,8 +699,8 @@ const sendMessage = async () => {
   const finish = () => { isLoading.value = false; saveSession() }
   const check = () => {
     if (done.size === 12 && !messages.value[idx].summaryLoading) {
-      // 检查是否已经停止生成
-      if (abortControllers.value.length === 0 && !isLoading.value) return
+      // 检查是否已经停止生成（只检查 isLoading 状态）
+      if (!isLoading.value) return
 
       messages.value[idx].summaryLoading = true
       messages.value[idx].deepseekSummary = ''
