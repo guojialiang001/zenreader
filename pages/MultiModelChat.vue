@@ -544,9 +544,9 @@ onUnmounted(() => {
 
 const isExpanded = (i: number, m: string) => { const k = `${i}-${m}`; if (expandedStates[k] === undefined) expandedStates[k] = true; return expandedStates[k] }
 const toggleExpand = (i: number, m: string) => { const k = `${i}-${m}`; expandedStates[k] = !isExpanded(i, m) }
-const isAllModelsExpanded = (idx: number) => { if (allModelsExpanded[idx] === undefined) allModelsExpanded[idx] = true; return allModelsExpanded[idx] }
+const isAllModelsExpanded = (idx: number) => { if (allModelsExpanded[idx] === undefined) return false; return allModelsExpanded[idx] }
 const toggleAllModels = (idx: number) => { allModelsExpanded[idx] = !isAllModelsExpanded(idx) }
-const collapseAllPreviousModels = () => { let c = 0; for (let i = 0; i < messages.value.length; i++) { if (messages.value[i].role === 'assistant') { allModelsExpanded[c] = false; c++ } } }
+const collapseAllPreviousModels = () => { for (let i = 0; i < messages.value.length; i++) { if (messages.value[i].role === 'assistant') { allModelsExpanded[i] = false } } }
 const getCompletedCount = (msg: Msg) => { let c = 0; for (const m of modelConfigs) if (!msg[m.loadingKey] && msg[m.contentKey]) c++; return c }
 
 const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -694,8 +694,7 @@ const sendMessage = async () => {
   messages.value.push({ role: 'user', content: q, timestamp: new Date() })
   const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, qwenLoading: true, deepseekV32Loading: true, sonnetLoading: true, deepseekLoading: true, summaryLoading: false, timestamp: new Date() }
   messages.value.push(msg); const idx = messages.value.length - 1
-  const assistantIdx = messages.value.filter(m => m.role === 'assistant').length - 1
-  allModelsExpanded[assistantIdx] = true
+  allModelsExpanded[idx] = true
   await scrollToBottom()
   const done = new Set<string>(); const resp: Record<string, string> = {}
   const finish = () => { isLoading.value = false; saveSession() }
