@@ -98,6 +98,11 @@
         </div>
       </Transition>
     </Teleport>
+    <!-- 手机端侧边栏遮罩 -->
+    <Transition name="fade">
+      <div v-if="isMobile && historyPanelOpen" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden" @click="historyPanelOpen = false"></div>
+    </Transition>
+
     <!-- 左侧历史记录面板 -->
     <div :class="['bg-white border-r border-slate-200 transition-all duration-300 flex flex-col flex-shrink-0 h-full z-40', 'fixed md:relative', 'w-[280px] sm:w-72', historyPanelOpen ? 'left-0' : '-left-[280px] sm:-left-72 md:w-0']">
       <div v-if="historyPanelOpen" class="flex flex-col h-full overflow-hidden">
@@ -249,6 +254,18 @@
                   <input type="range" v-model.number="temperature" min="0" max="1" step="0.1" class="w-12 sm:w-16 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-brand-500">
                   <span class="w-6 text-center font-medium text-brand-600">{{ temperature }}</span>
                 </div>
+                <div
+                  class="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded transition-colors select-none"
+                  :class="isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'"
+                  @click="!isLoading && (webSearch = !webSearch)"
+                  :title="isLoading ? '生成中无法修改联网搜索设置' : '开启联网搜索获取最新信息'"
+                >
+                  <Globe class="w-3 h-3" :class="webSearch ? 'text-brand-600' : 'text-slate-400'" />
+                  <span :class="webSearch ? 'text-brand-600 font-medium' : 'text-slate-500'">联网搜索</span>
+                  <div class="relative inline-flex items-center h-4 w-8 rounded-full transition-colors duration-200 focus:outline-none" :class="webSearch ? 'bg-brand-500' : 'bg-slate-300'">
+                    <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform duration-200" :class="webSearch ? 'translate-x-4' : 'translate-x-1'"></span>
+                  </div>
+                </div>
               </div>
               <button v-if="messages.length > 0" @click="clearMessages" class="text-red-500 hover:text-red-600">清空对话</button>
             </div>
@@ -262,7 +279,7 @@
 <script setup lang="ts">
 import { ref, nextTick, reactive, onMounted, onUnmounted, watch, computed, Teleport, Transition } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText, Menu } from 'lucide-vue-next'
+import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText, Menu, Globe } from 'lucide-vue-next'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
@@ -407,6 +424,7 @@ const copied = ref(false)
 const abortControllers = ref<AbortController[]>([])
 const modelControllers = reactive<Record<string, AbortController>>({})
 const temperature = ref(0.7)
+const webSearch = ref(false)
 // 移动端检测
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
 const isMobile = computed(() => windowWidth.value < 768)
@@ -578,7 +596,8 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
       model: api.model,
       messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content }],
       stream: true,
-      temperature: temperature.value
+      temperature: temperature.value,
+      web_search: webSearch.value
     }
 
     // 针对 Anthropic 原生 API 格式的特殊处理
