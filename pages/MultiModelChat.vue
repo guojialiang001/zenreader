@@ -392,7 +392,7 @@ const apis: Record<string, Api> = {
 }
 
 const KEY = 'zenreader_multimodel_history'
-const historyPanelOpen = ref(true)
+const historyPanelOpen = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
 const chatHistory = ref<Session[]>([])
 const currentSessionId = ref('')
 const inputMessage = ref('')
@@ -497,6 +497,7 @@ const loadSession = (s: Session) => {
   Object.keys(expandedStates).forEach(k => delete expandedStates[k])
   Object.keys(allModelsExpanded).forEach(k => delete allModelsExpanded[k as any])
   nextTick(() => scrollToBottom())
+  if (isMobile.value) historyPanelOpen.value = false
 }
 
 const deleteSession = (id: string) => {
@@ -528,6 +529,7 @@ const startNewSession = () => {
   inputMessage.value = ''
   Object.keys(expandedStates).forEach(k => delete expandedStates[k])
   Object.keys(allModelsExpanded).forEach(k => delete allModelsExpanded[k as any])
+  if (isMobile.value) historyPanelOpen.value = false
 }
 
 watch(messages, () => { if (messages.value.length > 0 && !isLoading.value) saveSession() }, { deep: true })
