@@ -99,11 +99,14 @@
       </Transition>
     </Teleport>
     <!-- 左侧历史记录面板 -->
-    <div :class="['bg-white border-r border-slate-200 transition-all duration-300 flex flex-col flex-shrink-0 h-full', historyPanelOpen ? 'w-72' : 'w-0']">
+    <div :class="['bg-white border-r border-slate-200 transition-all duration-300 flex flex-col flex-shrink-0 h-full z-40', 'fixed md:relative', 'w-[280px] sm:w-72', historyPanelOpen ? 'left-0' : '-left-[280px] sm:-left-72 md:w-0']">
       <div v-if="historyPanelOpen" class="flex flex-col h-full overflow-hidden">
-        <div class="p-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
-          <h2 class="font-bold text-slate-800 flex items-center gap-2"><History class="w-5 h-5" />历史记录</h2>
-          <span class="text-xs text-slate-400">{{ chatHistory.length }}/100</span>
+        <div class="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2 text-sm sm:text-base"><History class="w-4 h-4 sm:w-5 sm:h-5" />历史记录</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">{{ chatHistory.length }}/100</span>
+            <button @click="historyPanelOpen = false" class="md:hidden w-8 h-8 flex items-center justify-center hover:bg-slate-100 rounded-lg"><X class="w-4 h-4 text-slate-500" /></button>
+          </div>
         </div>
         <div class="p-3 border-b border-slate-100 flex-shrink-0">
           <button @click="startNewSession" :disabled="isLoading" :class="['w-full py-2.5 px-4 bg-gradient-to-r from-brand-500 to-brand-600 text-white rounded-lg shadow-sm flex items-center justify-center gap-2 font-medium transition-opacity', isLoading ? 'opacity-50 cursor-not-allowed' : '']"><Plus class="w-4 h-4" />新建会话</button>
@@ -125,20 +128,21 @@
         </div>
       </div>
     </div>
-    <button @click="historyPanelOpen = !historyPanelOpen" class="fixed top-1/2 -translate-y-1/2 z-20 bg-white border border-slate-200 rounded-r-lg p-2 shadow-sm hover:bg-slate-50" :style="{ left: historyPanelOpen ? '288px' : '0' }">
+    <button @click="historyPanelOpen = !historyPanelOpen" class="hidden md:flex fixed top-1/2 -translate-y-1/2 z-20 bg-white border border-slate-200 rounded-r-lg p-2 shadow-sm hover:bg-slate-50" :style="{ left: historyPanelOpen ? '288px' : '0' }">
       <ChevronLeft v-if="historyPanelOpen" class="w-4 h-4 text-slate-600" /><ChevronRight v-else class="w-4 h-4 text-slate-600" />
     </button>
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-      <div class="flex-1 flex flex-col px-4 py-4 overflow-hidden">
-        <div class="flex items-center justify-between mb-4 flex-shrink-0">
-          <div class="text-center flex-1">
-            <h1 class="text-2xl font-bold text-slate-900">多模型问答</h1>
-            <p class="text-sm text-slate-600">同时调用12个AI模型，DeepSeek 3.1 智能总结</p>
+      <div class="flex-1 flex flex-col px-2 sm:px-4 py-2 sm:py-4 overflow-hidden">
+        <div class="flex items-center justify-between mb-2 sm:mb-4 flex-shrink-0 gap-2">
+          <button @click="historyPanelOpen = true" class="md:hidden w-10 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 flex-shrink-0"><Menu class="w-5 h-5 text-slate-600" /></button>
+          <div class="text-center flex-1 min-w-0">
+            <h1 class="text-lg sm:text-2xl font-bold text-slate-900 truncate">多模型问答</h1>
+            <p class="text-xs sm:text-sm text-slate-600 hidden sm:block">同时调用12个AI模型，DeepSeek 3.1 智能总结</p>
           </div>
-          <RouterLink to="/" class="flex items-center gap-2 px-3 py-2 bg-white/80 rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600"><Home class="w-5 h-5" /></RouterLink>
+          <RouterLink to="/" class="flex items-center gap-2 px-2 sm:px-3 py-2 bg-white/80 rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600 flex-shrink-0"><Home class="w-5 h-5" /></RouterLink>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div ref="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
+          <div ref="chatContainer" class="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50">
             <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-slate-500">
               <div class="w-20 h-20 mb-6 bg-brand-100 rounded-full flex items-center justify-center"><MessageSquare class="w-10 h-10 text-brand-600" /></div>
               <p class="text-lg font-medium mb-2">开始对话</p>
@@ -152,7 +156,7 @@
             </div>
             <div v-for="(msg, idx) in messages" :key="idx" class="space-y-3">
               <div v-if="msg.role === 'user'" class="flex justify-end">
-                <div class="max-w-3xl px-4 py-3 rounded-lg bg-brand-500 text-white"><div class="text-sm whitespace-pre-wrap break-words">{{ msg.content }}</div></div>
+                <div class="max-w-[85%] sm:max-w-3xl px-3 sm:px-4 py-2 sm:py-3 rounded-lg bg-brand-500 text-white"><div class="text-sm whitespace-pre-wrap break-words">{{ msg.content }}</div></div>
               </div>
               <div v-else class="space-y-4">
                 <div class="space-y-2">
@@ -222,7 +226,7 @@
               </div>
             </div>
           </div>
-          <div class="border-t border-slate-200 p-4 bg-white flex-shrink-0">
+          <div class="border-t border-slate-200 p-2 sm:p-4 bg-white flex-shrink-0">
             <div v-if="isLoading" class="mb-3">
               <button @click="confirmStop" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg flex items-center justify-center gap-2 transition-colors">
                 <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -230,19 +234,19 @@
               </button>
             </div>
             <div class="flex gap-3">
-              <textarea v-model="inputMessage" @keydown="handleKeydown" placeholder="输入你的问题..." rows="2" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none" :disabled="isLoading"></textarea>
+              <textarea v-model="inputMessage" @keydown="handleKeydown" placeholder="输入你的问题..." :rows="isMobile ? 1 : 2" class="flex-1 px-3 sm:px-4 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none text-sm sm:text-base" :disabled="isLoading"></textarea>
               <button @click="sendMessage" :disabled="!inputMessage.trim() || isLoading" class="px-6 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap min-w-[100px] justify-center">
                 <Send class="w-4 h-4 flex-shrink-0" />
                 <span class="flex-shrink-0">{{ isLoading ? '处理中' : '发送' }}</span>
               </button>
             </div>
-            <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
-              <div class="flex items-center gap-4">
-                <span>Enter 发送，Shift+Enter 换行</span>
+            <div class="mt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-slate-500 gap-2">
+              <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+                <span class="hidden sm:inline">Enter 发送，Shift+Enter 换行</span>
                 <div class="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded hover:bg-slate-200 transition-colors select-none" title="调整模型随机性 (温度)">
                   <Thermometer class="w-3 h-3 text-slate-400" />
                   <span>温度</span>
-                  <input type="range" v-model.number="temperature" min="0" max="1" step="0.1" class="w-16 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-brand-500">
+                  <input type="range" v-model.number="temperature" min="0" max="1" step="0.1" class="w-12 sm:w-16 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-brand-500">
                   <span class="w-6 text-center font-medium text-brand-600">{{ temperature }}</span>
                 </div>
               </div>
@@ -256,9 +260,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, reactive, onMounted, watch, Teleport, Transition } from 'vue'
+import { ref, nextTick, reactive, onMounted, onUnmounted, watch, computed, Teleport, Transition } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText } from 'lucide-vue-next'
+import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText, Menu } from 'lucide-vue-next'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
@@ -403,6 +407,10 @@ const copied = ref(false)
 const abortControllers = ref<AbortController[]>([])
 const modelControllers = reactive<Record<string, AbortController>>({})
 const temperature = ref(0.7)
+// 移动端检测
+const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const isMobile = computed(() => windowWidth.value < 768)
+const handleResize = () => { windowWidth.value = window.innerWidth }
 
 const stopModel = (idx: number, key: string) => {
   const mapKey = `${idx}-${key}`
@@ -523,7 +531,14 @@ const startNewSession = () => {
 }
 
 watch(messages, () => { if (messages.value.length > 0 && !isLoading.value) saveSession() }, { deep: true })
-onMounted(() => loadHistory())
+onMounted(() => {
+  loadHistory()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 const isExpanded = (i: number, m: string) => { const k = `${i}-${m}`; if (expandedStates[k] === undefined) expandedStates[k] = true; return expandedStates[k] }
 const toggleExpand = (i: number, m: string) => { const k = `${i}-${m}`; expandedStates[k] = !isExpanded(i, m) }
@@ -910,5 +925,15 @@ const sendMessage = async () => {
 .modal-scale-leave-to {
   opacity: 0;
   transform: scale(0.95) translateY(-5px);
+}
+
+/* 遮罩淡入淡出动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
