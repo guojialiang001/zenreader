@@ -365,7 +365,7 @@ const getStr = (c: any): string => typeof c === 'string' ? c : c == null ? '' : 
 const getLen = (c: any): number => getStr(c).length
 
 const env = (k: string, d = '') => (import.meta as any).env?.[k] || d
-type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; minimaxM21Content?: string; qwenContent?: string; deepseekV32Content?: string; sonnetContent?: string; deepseekContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; minimaxM21Loading?: boolean; qwenLoading?: boolean; deepseekV32Loading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
+type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; minimaxM21Content?: string; qwenContent?: string; deepseekV32Content?: string; sonnetContent?: string; deepseekContent?: string; qwenVLContent?: string; qwen30BContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; minimaxM21Loading?: boolean; qwenLoading?: boolean; deepseekV32Loading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; qwenVLLoading?: boolean; qwen30BLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
 type Session = { id: string; title: string; messages: Msg[]; timestamp: Date }
 type Api = { url: string; key: string; model: string; thinking?: boolean; headers?: Record<string, string> }
 
@@ -381,7 +381,9 @@ const modelConfigs = [
   { key: 'qwen', name: 'Qwen3-235B-A22B', bgColor: 'bg-amber-50', borderColor: 'border-amber-100', dotColor: 'bg-amber-500', contentKey: 'qwenContent' as keyof Msg, loadingKey: 'qwenLoading' as keyof Msg },
   { key: 'deepseekV32', name: 'DeepSeek-V3.2', bgColor: 'bg-lime-50', borderColor: 'border-lime-100', dotColor: 'bg-lime-500', contentKey: 'deepseekV32Content' as keyof Msg, loadingKey: 'deepseekV32Loading' as keyof Msg },
   { key: 'sonnet', name: 'claude-sonnet-4.5', bgColor: 'bg-teal-50', borderColor: 'border-teal-100', dotColor: 'bg-teal-500', contentKey: 'sonnetContent' as keyof Msg, loadingKey: 'sonnetLoading' as keyof Msg },
-  { key: 'deepseek', name: 'deepseek-v3.1-terminus', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-100', dotColor: 'bg-indigo-500', contentKey: 'deepseekContent' as keyof Msg, loadingKey: 'deepseekLoading' as keyof Msg }
+  { key: 'deepseek', name: 'deepseek-v3.1-terminus', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-100', dotColor: 'bg-indigo-500', contentKey: 'deepseekContent' as keyof Msg, loadingKey: 'deepseekLoading' as keyof Msg },
+  { key: 'qwenVL', name: 'Qwen3-VL-32B-Thinking', bgColor: 'bg-violet-50', borderColor: 'border-violet-100', dotColor: 'bg-violet-500', contentKey: 'qwenVLContent' as keyof Msg, loadingKey: 'qwenVLLoading' as keyof Msg },
+  { key: 'qwen30B', name: 'Qwen3-30B-A3B', bgColor: 'bg-fuchsia-50', borderColor: 'border-fuchsia-100', dotColor: 'bg-fuchsia-500', contentKey: 'qwen30BContent' as keyof Msg, loadingKey: 'qwen30BLoading' as keyof Msg }
 ]
 
 const apiBase = env('VITE_API_BASE_URL', 'https://chat.toproject.cloud')
@@ -409,7 +411,9 @@ const apis: Record<string, Api> = {
     key: env('VITE_SONNET_TOKEN_BACKUP'),
     model: 'claude-sonnet-4-5-20250929'
   },
-  deepseekCard: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' }
+  deepseekCard: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
+  qwenVL: { url: `${apiBase}/api/Qwen3VL32B/chat/completions`, key: env('VITE_QWEN_VL_TOKEN'), model: 'Qwen/Qwen3-VL-32B-Thinking', thinking: true },
+  qwen30B: { url: `${apiBase}/api/Qwen330BA3B/chat/completions`, key: env('VITE_QWEN_VL_TOKEN'), model: 'free:Qwen3-30B-A3B' }
 }
 
 const KEY = 'zenreader_multimodel_history'
@@ -810,9 +814,9 @@ const sendMessage = async () => {
       )
     }
   }
-  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', minimaxM21: 'minimaxM21Content', qwen: 'qwenContent', deepseekV32: 'deepseekV32Content', sonnet: 'sonnetContent', deepseek: 'deepseekContent' }
-  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', minimaxM21: 'minimaxM21Loading', qwen: 'qwenLoading', deepseekV32: 'deepseekV32Loading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading' }
-  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'minimaxM21', 'qwen', 'deepseekV32', 'sonnet', 'deepseek']) {
+  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', minimaxM21: 'minimaxM21Content', qwen: 'qwenContent', deepseekV32: 'deepseekV32Content', sonnet: 'sonnetContent', deepseek: 'deepseekContent', qwenVL: 'qwenVLContent', qwen30B: 'qwen30BContent' }
+  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', minimaxM21: 'minimaxM21Loading', qwen: 'qwenLoading', deepseekV32: 'deepseekV32Loading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading', qwenVL: 'qwenVLLoading', qwen30B: 'qwen30BLoading' }
+  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'minimaxM21', 'qwen', 'deepseekV32', 'sonnet', 'deepseek', 'qwenVL', 'qwen30B']) {
     const onController = (c: AbortController) => { modelControllers[`${idx}-${k}`] = c }
     const onChunk = (c: string) => { (messages.value[idx] as any)[cKeys[k]] = ((messages.value[idx] as any)[cKeys[k]] || '') + c; scrollToBottom() }
     const onSuccess = () => {

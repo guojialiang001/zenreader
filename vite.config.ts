@@ -52,7 +52,9 @@ export default defineConfig(({ mode }) => {
         'process.env.VITE_MINIMAX_M21_TOKEN': JSON.stringify(env.VITE_MINIMAX_M21_TOKEN),
         // Code-Relay API 配置 (Opus 备用)
         'process.env.VITE_CODE_RELAY_ENDPOINT': JSON.stringify(env.VITE_CODE_RELAY_ENDPOINT),
-        'process.env.VITE_CODE_RELAY_TOKEN': JSON.stringify(env.VITE_CODE_RELAY_TOKEN)
+        'process.env.VITE_CODE_RELAY_TOKEN': JSON.stringify(env.VITE_CODE_RELAY_TOKEN),
+        // Qwen VL API 配置 (Qwen3-VL-32B-Thinking)
+        'process.env.VITE_QWEN_VL_TOKEN': JSON.stringify(env.VITE_QWEN_VL_TOKEN)
       },
       resolve: {
         alias: {
