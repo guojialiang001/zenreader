@@ -248,10 +248,14 @@
             <div class="mt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-slate-500 gap-2">
               <div class="flex flex-wrap items-center gap-2 sm:gap-4">
                 <span class="hidden sm:inline">Enter 发送，Shift+Enter 换行</span>
-                <div class="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded hover:bg-slate-200 transition-colors select-none" title="调整模型随机性 (温度)">
+                <div
+                  class="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded transition-colors select-none"
+                  :class="isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200'"
+                  :title="isLoading ? '生成中无法修改温度设置' : '调整模型随机性 (温度)'"
+                >
                   <Thermometer class="w-3 h-3 text-slate-400" />
                   <span>温度</span>
-                  <input type="range" v-model.number="temperature" min="0" max="1" step="0.1" class="w-12 sm:w-16 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-brand-500">
+                  <input type="range" v-model.number="temperature" min="0" max="1" step="0.1" :disabled="isLoading" class="w-12 sm:w-16 h-1 bg-slate-300 rounded-lg appearance-none accent-brand-500" :class="isLoading ? 'cursor-not-allowed' : 'cursor-pointer'">
                   <span class="w-6 text-center font-medium text-brand-600">{{ temperature }}</span>
                 </div>
                 <div
@@ -607,6 +611,9 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'origin': 'https://www.toproject.cloud',
+      'priority': 'u=1, i',
+      'referer': 'https://www.toproject.cloud/',
       ...api.headers
     }
     
