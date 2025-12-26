@@ -210,7 +210,12 @@
                     <div class="flex items-center gap-3 mb-3">
                       <div class="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
                       <div><h3 class="font-bold text-indigo-800">DeepSeek V3.1 总结</h3></div>
-                      <Loader2 v-if="msg.deepseekSummaryLoading" class="w-5 h-5 animate-spin text-indigo-500 ml-auto" />
+                      <div v-if="msg.deepseekSummaryLoading" class="ml-auto flex items-center gap-2">
+                        <button @click="confirmStopModel(idx, 'deepseekSummary', 'DeepSeek 总结')" class="p-1 hover:bg-red-100 text-red-500 rounded transition-colors" title="停止生成">
+                          <X class="w-4 h-4" />
+                        </button>
+                        <Loader2 class="w-5 h-5 animate-spin text-indigo-500" />
+                      </div>
                       <span v-else-if="msg.deepseekSummary" class="ml-auto text-xs text-indigo-400">{{ msg.deepseekSummary.length }}字</span>
                     </div>
                     <div v-if="msg.deepseekSummaryLoading && !msg.deepseekSummary" class="flex items-center gap-2 text-indigo-500 py-4"><span class="text-sm">正在整合分析...</span></div>
@@ -221,7 +226,12 @@
                     <div class="flex items-center gap-3 mb-3">
                       <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
                       <div><h3 class="font-bold text-purple-800">{{ msg.opusSummaryModel || 'ClaudeOpus4.5' }} 总结</h3></div>
-                      <Loader2 v-if="msg.opusSummaryLoading" class="w-5 h-5 animate-spin text-purple-500 ml-auto" />
+                      <div v-if="msg.opusSummaryLoading" class="ml-auto flex items-center gap-2">
+                        <button @click="confirmStopModel(idx, 'opusSummary', 'Opus 总结')" class="p-1 hover:bg-red-100 text-red-500 rounded transition-colors" title="停止生成">
+                          <X class="w-4 h-4" />
+                        </button>
+                        <Loader2 class="w-5 h-5 animate-spin text-purple-500" />
+                      </div>
                       <span v-else-if="msg.opusSummary" class="ml-auto text-xs text-purple-400">{{ msg.opusSummary.length }}字</span>
                     </div>
                     <div v-if="msg.opusSummaryLoading && !msg.opusSummary" class="flex items-center gap-2 text-purple-500 py-4"><span class="text-sm">正在整合分析...</span></div>
@@ -769,7 +779,8 @@ const sendMessage = async () => {
           messages.value[idx].deepseekSummaryLoading = false
           deepseekFinished = true
           checkAllDone()
-        }
+        },
+        c => { modelControllers[`${idx}-deepseekSummary`] = c }
       )
 
       // 启动 Opus
@@ -808,9 +819,11 @@ const sendMessage = async () => {
               messages.value[idx].opusSummaryLoading = false
               opusFinished = true
               checkAllDone()
-            }
+            },
+            c => { modelControllers[`${idx}-opusSummary`] = c }
           )
-        }
+        },
+        c => { modelControllers[`${idx}-opusSummary`] = c }
       )
     }
   }
