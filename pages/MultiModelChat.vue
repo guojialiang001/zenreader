@@ -142,7 +142,7 @@
           <button @click="historyPanelOpen = true" class="md:hidden w-10 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 flex-shrink-0"><Menu class="w-5 h-5 text-slate-600" /></button>
           <div class="text-center flex-1 min-w-0">
             <h1 class="text-lg sm:text-2xl font-bold text-slate-900 truncate">多模型问答</h1>
-            <p class="text-xs sm:text-sm text-slate-600 hidden sm:block">同时调用12个AI模型，DeepSeek 3.1 智能总结</p>
+            <p class="text-xs sm:text-sm text-slate-600 hidden sm:block">同时调用14个AI模型，DeepSeek 3.1 智能总结</p>
           </div>
           <RouterLink to="/" class="flex items-center gap-2 px-2 sm:px-3 py-2 bg-white/80 rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600 flex-shrink-0"><Home class="w-5 h-5" /></RouterLink>
         </div>
@@ -151,7 +151,7 @@
             <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-slate-500">
               <div class="w-20 h-20 mb-6 bg-brand-100 rounded-full flex items-center justify-center"><MessageSquare class="w-10 h-10 text-brand-600" /></div>
               <p class="text-lg font-medium mb-2">开始对话</p>
-              <p class="text-sm text-slate-400 mb-8">12个模型并发响应 → DeepSeek 3.1 智能总结</p>
+              <p class="text-sm text-slate-400 mb-8">14个模型并发响应 → DeepSeek 3.1 智能总结</p>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-4xl">
                 <div v-for="m in modelConfigs" :key="m.key" class="flex flex-col items-center gap-2 p-3 rounded-lg bg-white border border-slate-200">
                   <div :class="['w-3 h-3 rounded-full', m.dotColor]"></div>
@@ -206,36 +206,46 @@
                 </div>
                 <div v-if="msg.deepseekSummary || msg.opusSummary || msg.summaryLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <!-- DeepSeek 总结 -->
-                  <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4">
+                  <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4 relative group">
                     <div class="flex items-center gap-3 mb-3">
                       <div class="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
                       <div><h3 class="font-bold text-indigo-800">DeepSeek V3.1 总结</h3></div>
                       <div v-if="msg.deepseekSummaryLoading" class="ml-auto flex items-center gap-2">
-                        <button @click="confirmStopModel(idx, 'deepseekSummary', 'DeepSeek 总结')" class="p-1 hover:bg-red-100 text-red-500 rounded transition-colors" title="停止生成">
-                          <X class="w-4 h-4" />
-                        </button>
                         <Loader2 class="w-5 h-5 animate-spin text-indigo-500" />
                       </div>
                       <span v-else-if="msg.deepseekSummary" class="ml-auto text-xs text-indigo-400">{{ msg.deepseekSummary.length }}字</span>
                     </div>
                     <div v-if="msg.deepseekSummaryLoading && !msg.deepseekSummary" class="flex items-center gap-2 text-indigo-500 py-4"><span class="text-sm">正在整合分析...</span></div>
-                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(msg.deepseekSummary || '')"></div>
+                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(getStr(msg.deepseekSummary))"></div>
+
+                    <!-- 停止生成遮罩 -->
+                    <div v-if="msg.deepseekSummaryLoading" class="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-xl">
+                      <button @click.stop="confirmStopModel(idx, 'deepseekSummary', 'DeepSeek 总结')" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
+                        <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span class="font-medium text-sm">停止生成</span>
+                      </button>
+                    </div>
                   </div>
                   <!-- Claude Opus 总结 -->
-                  <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+                  <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4 relative group">
                     <div class="flex items-center gap-3 mb-3">
                       <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center"><Sparkles class="w-4 h-4 text-white" /></div>
                       <div><h3 class="font-bold text-purple-800">{{ msg.opusSummaryModel || 'ClaudeOpus4.5' }} 总结</h3></div>
                       <div v-if="msg.opusSummaryLoading" class="ml-auto flex items-center gap-2">
-                        <button @click="confirmStopModel(idx, 'opusSummary', 'Opus 总结')" class="p-1 hover:bg-red-100 text-red-500 rounded transition-colors" title="停止生成">
-                          <X class="w-4 h-4" />
-                        </button>
                         <Loader2 class="w-5 h-5 animate-spin text-purple-500" />
                       </div>
                       <span v-else-if="msg.opusSummary" class="ml-auto text-xs text-purple-400">{{ msg.opusSummary.length }}字</span>
                     </div>
                     <div v-if="msg.opusSummaryLoading && !msg.opusSummary" class="flex items-center gap-2 text-purple-500 py-4"><span class="text-sm">正在整合分析...</span></div>
-                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(msg.opusSummary || '')"></div>
+                    <div v-else class="markdown-content prose prose-sm max-w-none text-slate-700 break-words" v-html="renderMd(getStr(msg.opusSummary))"></div>
+
+                    <!-- 停止生成遮罩 -->
+                    <div v-if="msg.opusSummaryLoading" class="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-xl">
+                      <button @click.stop="confirmStopModel(idx, 'opusSummary', 'Opus 总结')" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
+                        <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span class="font-medium text-sm">停止生成</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
