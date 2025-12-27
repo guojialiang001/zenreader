@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Plus, FileText, Trash2, ChevronLeft, Menu } from 'lucide-vue-next';
+import { Plus, FileText, Trash2, ChevronLeft, Menu, Home, PanelLeftClose } from 'lucide-vue-next';
 import type { MarkdownFile } from '../types';
 
 const props = defineProps<{
@@ -157,12 +157,12 @@ const handleFileNameKeydown = (e: KeyboardEvent, id: string) => {
         <span class="w-3 h-3 rounded-full bg-brand-500"></span>
         ZenReader
       </h1>
-      <button @click="emit('toggle')" class="md:hidden text-slate-400 hover:text-slate-600">
-        <ChevronLeft class="w-6 h-6" />
+      <button @click="emit('toggle')" class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="收起侧边栏">
+        <PanelLeftClose class="w-5 h-5" />
       </button>
     </div>
 
-    <div class="p-4 rounded-lg">
+    <div class="p-3 sm:p-4 rounded-lg">
       <input
         type="file"
         ref="fileInputRef"
@@ -173,62 +173,62 @@ const handleFileNameKeydown = (e: KeyboardEvent, id: string) => {
       />
       <button
         @click="handleUploadClick"
-        class="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3 px-4 rounded-xl transition-all duration-200 shadow-sm hover:shadow active:scale-95"
+        class="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3.5 sm:py-3 px-4 rounded-xl transition-all duration-200 shadow-sm hover:shadow active:scale-[0.98]"
       >
         <Plus class="w-5 h-5" />
-        <span class="font-medium">Open File</span>
+        <span class="font-medium">打开文件</span>
       </button>
     </div>
 
     <div class="flex-1 overflow-y-auto px-2 py-0 space-y-1 min-h-0 flex flex-col">
-      <div v-if="files.length === 0" class="text-center py-10 px-4">
+      <div v-if="files.length === 0" class="text-center py-8 sm:py-10 px-4">
         <p class="text-sm text-slate-400 italic">No files opened yet.</p>
       </div>
       <template v-else>
-        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 mb-2 mt-2">
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 sm:px-4 mb-2 mt-2">
           Recently Opened
         </h3>
         <div
           v-for="file in files"
           :key="file.id"
-          class="group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all duration-200"
+          class="group flex items-center justify-between p-2.5 sm:p-2 rounded-lg cursor-pointer transition-all duration-200 active:bg-slate-100"
           :class="activeFileId === file.id ? 'bg-brand-50 text-brand-900 ring-1 ring-brand-200' : 'text-slate-600 hover:bg-slate-50'"
           @click="emit('select-file', file.id)"
           @dblclick.stop="handleFileRename(file.id, file.name.replace(/\.(md|markdown|txt)$/i, ''))"
         >
-          <div class="flex items-center gap-3 overflow-hidden flex-1">
+          <div class="flex items-center gap-2.5 sm:gap-3 overflow-hidden flex-1">
             <FileText class="w-4 h-4 flex-shrink-0" :class="activeFileId === file.id ? 'text-brand-500' : 'text-slate-400'" />
             <div v-if="editingFileId === file.id" class="relative flex items-center min-w-0 flex-1">
               <input
                 v-model="editingFileName"
                 type="text"
-                class="text-sm font-medium border-b-2 border-brand-400 focus:outline-none focus:border-brand-600 px-1 py-0 w-full min-w-0"
+                class="text-sm font-medium border-b-2 border-brand-400 focus:outline-none focus:border-brand-600 px-1 py-1 w-full min-w-0 bg-transparent"
                 @blur="handleFileNameSave(file.id)"
                 @keydown="handleFileNameKeydown($event, file.id)"
                 ref="fileNameInputRef"
                 title="按Enter保存，按Escape取消"
                 autofocus
               />
-              <span class="ml-1 whitespace-nowrap text-slate-500">
+              <span class="ml-1 whitespace-nowrap text-slate-500 text-sm">
                 {{ file.name.match(/\.(md|markdown|txt)$/i)?.[0] || '' }}
               </span>
             </div>
-            <span v-else class="truncate text-sm font-medium hover:text-brand-600 transition-colors cursor-default max-w-[calc(100%-50px)] whitespace-nowrap overflow-hidden text-ellipsis" :title="file.name">
+            <span v-else class="truncate text-sm font-medium hover:text-brand-600 transition-colors cursor-default flex-1 whitespace-nowrap overflow-hidden text-ellipsis" :title="file.name">
               {{ file.name }}
             </span>
           </div>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-0.5 sm:gap-1 ml-2">
             <button
               v-if="editingFileId !== file.id"
               @click.stop="handleFileRename(file.id, file.name.replace(/\.(md|markdown|txt)$/i, ''))"
-              class="opacity-0 group-hover:opacity-50 p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-all"
+              class="opacity-60 sm:opacity-0 sm:group-hover:opacity-50 p-2 sm:p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 active:bg-blue-100 rounded-md transition-all"
               title="重命名"
             >
               ✏️
             </button>
             <button
               @click.stop="emit('delete-file', file.id)"
-              class="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+              class="opacity-60 sm:opacity-0 sm:group-hover:opacity-100 p-2 sm:p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 active:bg-red-100 rounded-md transition-all"
               title="移除"
             >
               <Trash2 class="w-4 h-4" />
@@ -239,21 +239,28 @@ const handleFileNameKeydown = (e: KeyboardEvent, id: string) => {
     </div>
 
     <!-- 拖动提示覆盖层 -->
-    <div 
+    <div
       v-if="showDragHint"
       class="absolute inset-0 flex flex-col items-center justify-center bg-brand-50/90 backdrop-blur-sm z-30 w-full"
     >
-      <div class="text-center p-8">
-        <div class="text-brand-600 text-6xl mb-4">📄</div>
-        <h3 class="text-xl font-bold text-brand-800 mb-2">放置文件</h3>
-        <p class="text-brand-700">将Markdown或文本文件拖放到此处进行导入</p>
+      <div class="text-center p-6 sm:p-8">
+        <div class="text-brand-600 text-5xl sm:text-6xl mb-3 sm:mb-4">📄</div>
+        <h3 class="text-lg sm:text-xl font-bold text-brand-800 mb-2">放置文件</h3>
+        <p class="text-sm sm:text-base text-brand-700">将Markdown或文本文件拖放到此处</p>
       </div>
     </div>
-    
-    <div class="p-2 border-t border-slate-100 mt-auto flex-shrink-0">
-       <div class="text-xs text-slate-400 text-center">
-         Built with Vue 3 & Tailwind
-       </div>
+
+    <div class="p-2.5 sm:p-3 border-t border-slate-100 mt-auto flex-shrink-0">
+      <div class="flex items-center justify-between">
+        <RouterLink
+          to="/"
+          class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm"
+        >
+          <Home class="w-4 h-4" />
+          <span>返回主页</span>
+        </RouterLink>
+        <span class="text-xs text-slate-300">v1.0</span>
+      </div>
     </div>
   </div>
 </template>

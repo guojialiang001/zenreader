@@ -148,14 +148,14 @@
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
           <div ref="chatContainer" class="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50">
-            <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-slate-500">
-              <div class="w-20 h-20 mb-6 bg-brand-100 rounded-full flex items-center justify-center"><MessageSquare class="w-10 h-10 text-brand-600" /></div>
-              <p class="text-lg font-medium mb-2">开始对话</p>
-              <p class="text-sm text-slate-400 mb-8">14个模型并发响应 → DeepSeek 3.1 智能总结</p>
-              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-4xl">
-                <div v-for="m in modelConfigs" :key="m.key" class="flex flex-col items-center gap-2 p-3 rounded-lg bg-white border border-slate-200">
-                  <div :class="['w-3 h-3 rounded-full', m.dotColor]"></div>
-                  <span class="text-xs text-slate-600 text-center leading-tight">{{ m.name }}</span>
+            <div v-if="messages.length === 0" class="min-h-full flex flex-col items-center pt-8 sm:pt-12 md:justify-center md:pt-0 text-slate-500">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 mb-4 sm:mb-6 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0"><MessageSquare class="w-8 h-8 sm:w-10 sm:h-10 text-brand-600" /></div>
+              <p class="text-base sm:text-lg font-medium mb-2">开始对话</p>
+              <p class="text-xs sm:text-sm text-slate-400 mb-6 sm:mb-8 text-center px-4">14个模型并发响应 → DeepSeek 3.1 智能总结</p>
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 max-w-4xl px-2">
+                <div v-for="m in modelConfigs" :key="m.key" class="flex flex-col items-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-lg bg-white border border-slate-200">
+                  <div :class="['w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full', m.dotColor]"></div>
+                  <span class="text-[10px] sm:text-xs text-slate-600 text-center leading-tight">{{ m.name }}</span>
                 </div>
               </div>
             </div>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode, Palette, FileEdit, GitBranch, Brain } from 'lucide-vue-next'
 
 const searchQuery = ref('')
 
 const tools = [
+  { name: '流程画布', desc: '类似ProcessOn的流程图绘制工具，支持多种形状和连接线', route: '/flow', icon: 'flow', tags: ['流程图', '画布', '设计'], features: ['拖拽编辑', '自动保存', '导出PNG/JSON'], usageCount: '0k+' },
   { name: '多模型问答', desc: '支持多种 AI 模型的智能对话，流式响应', route: '/chat', icon: 'chat', tags: ['AI', '对话', '问答'], features: ['多模型选择', '流式响应', '上下文记忆'], usageCount: '0.1k+' },
+  { name: 'Markdown 编辑器', desc: '左右分栏实时预览，支持快捷键和格式工具栏', route: '/markdown', icon: 'markdown', tags: ['编辑', '预览', 'Markdown'], features: ['实时预览', '快捷键支持', '自动保存'], usageCount: '0k+' },
   { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
   { name: '代码编辑器', desc: '基于Monaco的在线代码编辑器，支持多种语言', route: '/editor', icon: 'editor', tags: ['代码', '编辑', '开发'], features: ['语法高亮', '多语言支持', '本地保存'], usageCount: '0k+' },
   { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces', tags: ['格式', '验证', '开发'], features: ['语法高亮', '错误检查', '压缩/美化'], usageCount: '9.3k+' },
@@ -19,6 +21,8 @@ const tools = [
   { name: '字符串拼接', desc: '灵活拼接字符串，支持模板和变量替换', route: '/string', icon: 'string', tags: ['文本', '拼接', '模板'], features: ['模板变量', '批量处理', '实时预览'], usageCount: '1.8k+' },
   // { name: '图片去水印', desc: '无损预览，批量去水印与导出', route: '/images', icon: 'image', tags: ['图片', '去水印', '批量'], features: ['多图上传', '手动选择', '角落识别'], usageCount: '3.1k+' },
   { name: '图片画布', desc: '可拖拽定位，支持ZIP导入，鼠标位置添加图片', route: '/images-new', icon: 'image', tags: ['图片', '拖拽', '管理'], features: ['自由拖拽', 'ZIP导入', '鼠标定位'], usageCount: '1.5k+' },
+  { name: 'RGBA颜色工具', desc: '前端调色神器，支持多种颜色格式转换与渐变生成', route: '/color', icon: 'palette', tags: ['颜色', '调色', '前端'], features: ['RGBA调节', '格式转换', '渐变生成'], usageCount: '0k+' },
+  { name: '脑图工具', desc: '类似XMind/GitMind的思维导图工具，支持多种主题和快捷键', route: '/mindmap', icon: 'brain', tags: ['脑图', '思维导图', '设计'], features: ['多彩主题', '快捷键操作', '导出JSON'], usageCount: '0k+' },
 ]
 
 const getIcon = (icon: string) => {
@@ -32,6 +36,10 @@ const getIcon = (icon: string) => {
     case 'chat': return MessageSquare
     case 'image': return ImageIcon
     case 'editor': return FileCode
+    case 'palette': return Palette
+    case 'markdown': return FileEdit
+    case 'flow': return GitBranch
+    case 'brain': return Brain
     default: return FileText
   }
 }

@@ -5,7 +5,7 @@ import Sidebar from '../components/Sidebar.vue';
 import MarkdownViewer from '../components/MarkdownViewer.vue';
 import EmptyState from '../components/EmptyState.vue';
 import type { MarkdownFile } from '../types';
-import { Menu, Home } from 'lucide-vue-next';
+import { Menu, Home, FilePlus } from 'lucide-vue-next';
 
 const files = ref<MarkdownFile[]>([]);
 const activeFileId = ref<string | null>(null);
@@ -132,6 +132,22 @@ const triggerUpload = () => {
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value;
 };
+
+// 新建 Markdown 文件
+const createNewFile = () => {
+  const newFile: MarkdownFile = {
+    id: generateId(),
+    name: `新文档-${new Date().toLocaleDateString('zh-CN')}.md`,
+    content: '# 新文档\n\n开始编写你的内容...\n',
+    lastModified: Date.now(),
+  };
+  files.value = [newFile, ...files.value];
+  activeFileId.value = newFile.id;
+  isEditMode.value = true; // 自动进入编辑模式
+  if (window.innerWidth < 768) {
+    sidebarOpen.value = false;
+  }
+};
 </script>
 
 <template>
@@ -145,6 +161,24 @@ const toggleSidebar = () => {
       class="hidden"
     />
 
+    <!-- 右上角按钮组 -->
+    <div class="fixed top-3 sm:top-4 right-3 sm:right-4 z-20 flex items-center gap-2">
+      <button
+        @click="createNewFile"
+        class="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 text-slate-600 hover:text-green-600 transition-colors"
+        title="新建 Markdown"
+      >
+        <FilePlus class="w-5 h-5 sm:w-6 sm:h-6" />
+      </button>
+      <RouterLink
+        to="/"
+        class="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 text-slate-600 hover:text-brand-600 transition-colors"
+        title="返回主页"
+      >
+        <Home class="w-5 h-5 sm:w-6 sm:h-6" />
+      </RouterLink>
+    </div>
+
     <Sidebar 
       :files="files"
       :active-file-id="activeFileId"
@@ -156,22 +190,7 @@ const toggleSidebar = () => {
       @rename-file="handleRenameFile"
     />
 
-    <main class="flex-1 relative flex flex-col min-w-0 transition-all duration-300">
-      <button 
-        v-if="!sidebarOpen"
-        @click="sidebarOpen = true"
-        class="absolute top-4 left-4 z-30 p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600 transition-colors md:hidden"
-      >
-        <Menu class="w-6 h-6" />
-      </button>
-      <RouterLink 
-        to="/" 
-        class="absolute top-4 right-4 z-30 flex items-center gap-2 px-3 py-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600 transition-colors"
-        aria-label="返回主页"
-      >
-        <Home class="w-5 h-5" />
-        <span class="hidden md:inline">返回主页</span>
-      </RouterLink>
+    <main class="flex-1 flex flex-col min-w-0 transition-all duration-300">
       <div class="flex-1 overflow-hidden">
         <div v-if="activeFile" class="h-full">
           <MarkdownViewer 

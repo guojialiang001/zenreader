@@ -13,6 +13,10 @@ import ImageToBase64 from './pages/ImageToBase64.vue'
 import SshTerminal from './pages/SshTerminal.vue'
 import MultiModelChat from './pages/MultiModelChat.vue'
 import CodeEditor from './pages/CodeEditor.vue'
+import ColorTool from './pages/ColorTool.vue'
+import MarkdownEditor from './pages/MarkdownEditor.vue'
+import FlowCanvas from './pages/FlowCanvas.vue'
+import MindMap from './pages/MindMap.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -28,7 +32,11 @@ const routes = [
   // { path: '/3d-action', name: '3d-action', component: Action3DTool },
   { path: '/ssh', name: 'ssh', component: SshTerminal },
   { path: '/chat', name: 'chat', component: MultiModelChat },
-  { path: '/editor', name: 'editor', component: CodeEditor }
+  { path: '/editor', name: 'editor', component: CodeEditor },
+  { path: '/color', name: 'color', component: ColorTool },
+  { path: '/markdown', name: 'markdown', component: MarkdownEditor },
+  { path: '/flow', name: 'flow', component: FlowCanvas },
+  { path: '/mindmap', name: 'mindmap', component: MindMap }
 ]
 
 export const router = createRouter({
