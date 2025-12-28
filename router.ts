@@ -17,6 +17,7 @@ import ColorTool from './pages/ColorTool.vue'
 import MarkdownEditor from './pages/MarkdownEditor.vue'
 import FlowCanvas from './pages/FlowCanvas.vue'
 import MindMap from './pages/MindMap.vue'
+import TokenCounter from './pages/TokenCounter.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -36,7 +37,8 @@ const routes = [
   { path: '/color', name: 'color', component: ColorTool },
   { path: '/markdown', name: 'markdown', component: MarkdownEditor },
   { path: '/flow', name: 'flow', component: FlowCanvas },
-  { path: '/mindmap', name: 'mindmap', component: MindMap }
+  { path: '/mindmap', name: 'mindmap', component: MindMap },
+  { path: '/token', name: 'token', component: TokenCounter }
 ]
 
 export const router = createRouter({
