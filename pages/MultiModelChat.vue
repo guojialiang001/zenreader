@@ -670,28 +670,93 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
       const { done, value } = await reader.read();
       if (done) break;
       buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() || '';
-      for (const l of lines) {
-        // 处理 Anthropic 原生格式 (event: ... data: ...)
-        if (l.startsWith('event: ')) continue;
+      
+      // 尝试解析纯 JSON 流（多个 JSON 对象连接在一起，没有换行符）
+      let startPos = 0;
+      while (startPos < buf.length) {
+        // 跳过空白字符
+        while (startPos < buf.length && /\s/.test(buf[startPos])) {
+          startPos++;
+        }
+        if (startPos >= buf.length) break;
         
-        if (l.startsWith('data: ')) {
-          const d = l.slice(6).trim();
-          if (d === '[DONE]') continue;
-          try {
-            const p = JSON.parse(d);
-            // OpenAI 格式
-            if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
-              onChunk(p.choices[0].delta.content)
+        // 尝试找到完整的 JSON 对象
+        if (buf[startPos] === '{') {
+          let braceCount = 0;
+          let endPos = startPos;
+          let inString = false;
+          let escapeNext = false;
+          
+          while (endPos < buf.length) {
+            const char = buf[endPos];
+            
+            if (escapeNext) {
+              escapeNext = false;
+            } else if (char === '\\') {
+              escapeNext = true;
+            } else if (char === '"' && !escapeNext) {
+              inString = !inString;
+            } else if (!inString) {
+              if (char === '{') braceCount++;
+              else if (char === '}') {
+                braceCount--;
+                if (braceCount === 0) {
+                  // 找到完整的 JSON 对象
+                  const jsonStr = buf.substring(startPos, endPos + 1);
+                  try {
+                    const p = JSON.parse(jsonStr);
+                    // OpenAI 格式
+                    if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
+                      onChunk(p.choices[0].delta.content);
+                    }
+                    // Anthropic 原生格式
+                    else if (p.type === 'content_block_delta' && p.delta?.text) {
+                      onChunk(p.delta.text);
+                    }
+                  } catch (err) {
+                    console.error('解析纯JSON流失败:', err, 'json:', jsonStr);
+                  }
+                  startPos = endPos + 1;
+                  break;
+                }
+              }
             }
-            // Anthropic 原生格式
-            else if (p.type === 'content_block_delta' && p.delta?.text) {
-              onChunk(p.delta.text)
-            }
-          } catch (err) {
-            console.error('解析流式数据失败:', err, 'data:', d)
+            endPos++;
           }
+          
+          // 如果没有找到完整的 JSON，保留剩余部分
+          if (braceCount !== 0) {
+            buf = buf.substring(startPos);
+            break;
+          }
+        } else {
+          // 处理传统的 SSE 格式（data: 前缀）
+          const lines = buf.split('\n');
+          buf = lines.pop() || '';
+          
+          for (const l of lines) {
+            // 处理 Anthropic 原生格式 (event: ... data: ...)
+            if (l.startsWith('event: ')) continue;
+            
+            if (l.startsWith('data: ')) {
+              const d = l.slice(6).trim();
+              if (d === '[DONE]') continue;
+              try {
+                const p = JSON.parse(d);
+                // OpenAI 格式
+                if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
+                  onChunk(p.choices[0].delta.content);
+                }
+                // Anthropic 原生格式
+                else if (p.type === 'content_block_delta' && p.delta?.text) {
+                  onChunk(p.delta.text);
+                }
+              } catch (err) {
+                console.error('解析SSE流失败:', err, 'data:', d);
+              }
+            }
+          }
+          break;
         }
       }
     }
