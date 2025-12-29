@@ -682,14 +682,16 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
           try {
             const p = JSON.parse(d);
             // OpenAI 格式
-            if (p.choices?.[0]?.delta?.content) {
+            if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
               onChunk(p.choices[0].delta.content)
             }
             // Anthropic 原生格式
             else if (p.type === 'content_block_delta' && p.delta?.text) {
               onChunk(p.delta.text)
             }
-          } catch {}
+          } catch (err) {
+            console.error('解析流式数据失败:', err, 'data:', d)
+          }
         }
       }
     }
