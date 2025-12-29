@@ -683,8 +683,10 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
           // 处理 Anthropic 原生格式 (event: ... data: ...)
           if (line.startsWith('event: ')) continue;
           
-          if (line.startsWith('data: ')) {
-            const d = line.slice(6).trim();
+          // 支持两种格式: "data: {...}" 和 "data:{...}"
+          if (line.startsWith('data:')) {
+            // 提取数据部分：如果是 "data: " 则跳过6字符，否则跳过5字符
+            const d = line.startsWith('data: ') ? line.slice(6).trim() : line.slice(5).trim();
             if (d === '[DONE]') continue;
             try {
               const p = JSON.parse(d);
@@ -811,7 +813,7 @@ const stopGeneration = () => {
   saveSession()
 }
 
-const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.MiniMax-M2.1:${r.minimaxM21||'无'}\n9.Qwen3-235B-A22B:${r.qwen||'无'}\n10.DeepSeek-V3.2:${r.deepseekV32||'无'}\n11.claude-sonnet-4.5:${r.sonnet||'无'}\n12.deepseek-v3.1-terminus:${r.deepseek||'无'}\n13.qwen3-coder-plus:${r.qwenCoderPlus||'无'}\n14.qwen3-vl-plus:${r.qwenVLPlus||'无'}\n15.qwen3-max:${r.qwenMax||'无'}\n16.kimi-k2:${r.kimiK2||'无'}\n\n请分析：\n### 📊 一致性分析\n### 🔍 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
+const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.MiniMax-M2.1:${r.minimaxM21||'无'}\n9.Qwen3-235B-A22B:${r.qwen||'无'}\n10.DeepSeek-V3.2:${r.deepseekV32||'无'}\n11.claude-sonnet-4.5:${r.sonnet||'无'}\n12.deepseek-v3.1-terminus:${r.deepseek||'无'}\n13.Qwen3-VL-32B-Thinking:${r.qwenVL||'无'}\n14.Qwen3-30B-A3B:${r.qwen30B||'无'}\n15.qwen3-coder-plus:${r.qwenCoderPlus||'无'}\n16.qwen3-vl-plus:${r.qwenVLPlus||'无'}\n17.qwen3-max:${r.qwenMax||'无'}\n18.kimi-k2:${r.kimiK2||'无'}\n\n请分析：\n### 📊 一致性分析\n### 🔍 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
 
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
