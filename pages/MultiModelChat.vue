@@ -671,93 +671,94 @@ const stream = async (api: Api, content: string, onChunk: (c: string) => void, o
       if (done) break;
       buf += dec.decode(value, { stream: true });
       
-      // 尝试解析纯 JSON 流（多个 JSON 对象连接在一起，没有换行符）
-      let startPos = 0;
-      while (startPos < buf.length) {
-        // 跳过空白字符
-        while (startPos < buf.length && /\s/.test(buf[startPos])) {
-          startPos++;
-        }
-        if (startPos >= buf.length) break;
+      // 先尝试按行处理（SSE 格式）
+      if (buf.includes('\n')) {
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
         
-        // 尝试找到完整的 JSON 对象
-        if (buf[startPos] === '{') {
-          let braceCount = 0;
-          let endPos = startPos;
-          let inString = false;
-          let escapeNext = false;
+        for (const l of lines) {
+          const line = l.trim();
+          if (!line) continue;
           
-          while (endPos < buf.length) {
-            const char = buf[endPos];
-            
-            if (escapeNext) {
-              escapeNext = false;
-            } else if (char === '\\') {
-              escapeNext = true;
-            } else if (char === '"' && !escapeNext) {
-              inString = !inString;
-            } else if (!inString) {
-              if (char === '{') braceCount++;
-              else if (char === '}') {
-                braceCount--;
-                if (braceCount === 0) {
-                  // 找到完整的 JSON 对象
-                  const jsonStr = buf.substring(startPos, endPos + 1);
-                  try {
-                    const p = JSON.parse(jsonStr);
-                    // OpenAI 格式
-                    if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
-                      onChunk(p.choices[0].delta.content);
-                    }
-                    // Anthropic 原生格式
-                    else if (p.type === 'content_block_delta' && p.delta?.text) {
-                      onChunk(p.delta.text);
-                    }
-                  } catch (err) {
-                    console.error('解析纯JSON流失败:', err, 'json:', jsonStr);
-                  }
-                  startPos = endPos + 1;
-                  break;
-                }
+          // 处理 Anthropic 原生格式 (event: ... data: ...)
+          if (line.startsWith('event: ')) continue;
+          
+          if (line.startsWith('data: ')) {
+            const d = line.slice(6).trim();
+            if (d === '[DONE]') continue;
+            try {
+              const p = JSON.parse(d);
+              if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
+                onChunk(p.choices[0].delta.content);
+              } else if (p.type === 'content_block_delta' && p.delta?.text) {
+                onChunk(p.delta.text);
               }
+            } catch (err) {
+              console.error('解析SSE流失败:', err, 'data:', d);
             }
-            endPos++;
+          }
+        }
+      }
+      
+      // 尝试解析纯 JSON 流（多个 JSON 对象紧密连接）
+      while (buf.length > 0) {
+        // 跳过前导空白
+        const trimStart = buf.trimStart();
+        if (trimStart.length === 0) break;
+        
+        // 必须以 { 开头
+        if (!trimStart.startsWith('{')) break;
+        
+        // 查找完整的 JSON 对象
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        let i = 0;
+        
+        for (; i < trimStart.length; i++) {
+          const ch = trimStart[i];
+          
+          if (escape) {
+            escape = false;
+            continue;
           }
           
-          // 如果没有找到完整的 JSON，保留剩余部分
-          if (braceCount !== 0) {
-            buf = buf.substring(startPos);
-            break;
+          if (ch === '\\') {
+            escape = true;
+            continue;
           }
-        } else {
-          // 处理传统的 SSE 格式（data: 前缀）
-          const lines = buf.split('\n');
-          buf = lines.pop() || '';
           
-          for (const l of lines) {
-            // 处理 Anthropic 原生格式 (event: ... data: ...)
-            if (l.startsWith('event: ')) continue;
-            
-            if (l.startsWith('data: ')) {
-              const d = l.slice(6).trim();
-              if (d === '[DONE]') continue;
+          if (ch === '"') {
+            inString = !inString;
+            continue;
+          }
+          
+          if (inString) continue;
+          
+          if (ch === '{') {
+            depth++;
+          } else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              // 找到完整的 JSON 对象
+              const jsonStr = trimStart.substring(0, i + 1);
               try {
-                const p = JSON.parse(d);
-                // OpenAI 格式
+                const p = JSON.parse(jsonStr);
                 if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
                   onChunk(p.choices[0].delta.content);
                 }
-                // Anthropic 原生格式
-                else if (p.type === 'content_block_delta' && p.delta?.text) {
-                  onChunk(p.delta.text);
-                }
               } catch (err) {
-                console.error('解析SSE流失败:', err, 'data:', d);
+                console.error('解析纯JSON流失败:', err, 'json:', jsonStr.substring(0, 200));
               }
+              // 移除已处理的部分
+              buf = trimStart.substring(i + 1);
+              break;
             }
           }
-          break;
         }
+        
+        // 如果没有找到完整的 JSON，说明需要更多数据
+        if (depth !== 0) break;
       }
     }
     onDone()
