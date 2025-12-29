@@ -142,7 +142,7 @@
           <button @click="historyPanelOpen = true" class="md:hidden w-10 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 flex-shrink-0"><Menu class="w-5 h-5 text-slate-600" /></button>
           <div class="text-center flex-1 min-w-0">
             <h1 class="text-lg sm:text-2xl font-bold text-slate-900 truncate">多模型问答</h1>
-            <p class="text-xs sm:text-sm text-slate-600 hidden sm:block">同时调用18个AI模型，DeepSeek 3.1 智能总结</p>
+            <p class="text-xs sm:text-sm text-slate-600 hidden sm:block">同时调用19个AI模型，DeepSeek 3.1 智能总结</p>
           </div>
           <RouterLink to="/" class="flex items-center gap-2 px-2 sm:px-3 py-2 bg-white/80 rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600 flex-shrink-0"><Home class="w-5 h-5" /></RouterLink>
         </div>
@@ -151,7 +151,7 @@
             <div v-if="messages.length === 0" class="min-h-full flex flex-col items-center pt-8 sm:pt-12 md:justify-center md:pt-0 text-slate-500">
               <div class="w-16 h-16 sm:w-20 sm:h-20 mb-4 sm:mb-6 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0"><MessageSquare class="w-8 h-8 sm:w-10 sm:h-10 text-brand-600" /></div>
               <p class="text-base sm:text-lg font-medium mb-2">开始对话</p>
-              <p class="text-xs sm:text-sm text-slate-400 mb-6 sm:mb-8 text-center px-4">18个模型并发响应 → DeepSeek 3.1 智能总结</p>
+              <p class="text-xs sm:text-sm text-slate-400 mb-6 sm:mb-8 text-center px-4">19个模型并发响应 → DeepSeek 3.1 智能总结</p>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 max-w-4xl px-2">
                 <div v-for="m in modelConfigs" :key="m.key" class="flex flex-col items-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-lg bg-white border border-slate-200">
                   <div :class="['w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full', m.dotColor]"></div>
@@ -169,7 +169,7 @@
                     <button @click="toggleAllModels(idx)" class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-600 transition-colors">
                       <ChevronRight :class="['w-4 h-4 transition-transform', isAllModelsExpanded(idx) ? 'rotate-90' : '']" />
                       <span>{{ isAllModelsExpanded(idx) ? '收起全部模型' : '展开全部模型' }}</span>
-                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/18)</span>
+                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/19)</span>
                     </button>
                   </div>
                   <div v-if="isAllModelsExpanded(idx)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -385,7 +385,7 @@ const getStr = (c: any): string => typeof c === 'string' ? c : c == null ? '' : 
 const getLen = (c: any): number => getStr(c).length
 
 const env = (k: string, d = '') => (import.meta as any).env?.[k] || d
-type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; minimaxM21Content?: string; qwenContent?: string; deepseekV32Content?: string; sonnetContent?: string; deepseekContent?: string; qwenVLContent?: string; qwen30BContent?: string; qwenCoderPlusContent?: string; qwenVLPlusContent?: string; qwenMaxContent?: string; kimiK2Content?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; minimaxM21Loading?: boolean; qwenLoading?: boolean; deepseekV32Loading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; qwenVLLoading?: boolean; qwen30BLoading?: boolean; qwenCoderPlusLoading?: boolean; qwenVLPlusLoading?: boolean; qwenMaxLoading?: boolean; kimiK2Loading?: boolean; summaryLoading?: boolean; timestamp?: Date }
+type Msg = { role: 'user' | 'assistant'; content?: string; geminiProContent?: string; mimoContent?: string; glmContent?: string; opusContent?: string; grokContent?: string; geminiFlashContent?: string; minimaxContent?: string; minimaxM21Content?: string; qwenContent?: string; deepseekV32Content?: string; sonnetContent?: string; deepseekContent?: string; qwenVLContent?: string; qwen30BContent?: string; qwenCoderPlusContent?: string; qwenVLPlusContent?: string; qwenMaxContent?: string; kimiK2Content?: string; doubaoSeedContent?: string; summaryContent?: string; summaryModel?: string; deepseekSummary?: string; deepseekSummaryLoading?: boolean; opusSummary?: string; opusSummaryLoading?: boolean; opusSummaryModel?: string; geminiProLoading?: boolean; mimoLoading?: boolean; glmLoading?: boolean; opusLoading?: boolean; grokLoading?: boolean; geminiFlashLoading?: boolean; minimaxLoading?: boolean; minimaxM21Loading?: boolean; qwenLoading?: boolean; deepseekV32Loading?: boolean; sonnetLoading?: boolean; deepseekLoading?: boolean; qwenVLLoading?: boolean; qwen30BLoading?: boolean; qwenCoderPlusLoading?: boolean; qwenVLPlusLoading?: boolean; qwenMaxLoading?: boolean; kimiK2Loading?: boolean; doubaoSeedLoading?: boolean; summaryLoading?: boolean; timestamp?: Date }
 type Session = { id: string; title: string; messages: Msg[]; timestamp: Date }
 type Api = { url: string; key: string; model: string; thinking?: boolean; headers?: Record<string, string> }
 
@@ -407,7 +407,8 @@ const modelConfigs = [
   { key: 'qwenCoderPlus', name: 'qwen3-coder-plus', bgColor: 'bg-sky-50', borderColor: 'border-sky-100', dotColor: 'bg-sky-500', contentKey: 'qwenCoderPlusContent' as keyof Msg, loadingKey: 'qwenCoderPlusLoading' as keyof Msg },
   { key: 'qwenVLPlus', name: 'qwen3-vl-plus', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-100', dotColor: 'bg-emerald-500', contentKey: 'qwenVLPlusContent' as keyof Msg, loadingKey: 'qwenVLPlusLoading' as keyof Msg },
   { key: 'qwenMax', name: 'qwen3-max', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-100', dotColor: 'bg-yellow-500', contentKey: 'qwenMaxContent' as keyof Msg, loadingKey: 'qwenMaxLoading' as keyof Msg },
-  { key: 'kimiK2', name: 'kimi-k2', bgColor: 'bg-slate-50', borderColor: 'border-slate-100', dotColor: 'bg-slate-500', contentKey: 'kimiK2Content' as keyof Msg, loadingKey: 'kimiK2Loading' as keyof Msg }
+  { key: 'kimiK2', name: 'kimi-k2', bgColor: 'bg-slate-50', borderColor: 'border-slate-100', dotColor: 'bg-slate-500', contentKey: 'kimiK2Content' as keyof Msg, loadingKey: 'kimiK2Loading' as keyof Msg },
+  { key: 'doubaoSeed', name: 'doubao-seed-code', bgColor: 'bg-orange-50', borderColor: 'border-orange-100', dotColor: 'bg-orange-600', contentKey: 'doubaoSeedContent' as keyof Msg, loadingKey: 'doubaoSeedLoading' as keyof Msg }
 ]
 
 const apiBase = env('VITE_API_BASE_URL', 'https://chat.toproject.cloud')
@@ -441,7 +442,8 @@ const apis: Record<string, Api> = {
   qwenCoderPlus: { url: `${apiBase}/api/qwenCoderPlus/chat/completions`, key: env('VITE_QWEN_CODER_PLUS_TOKEN'), model: 'qwen3-coder-plus' },
   qwenVLPlus: { url: `${apiBase}/api/qwenVLPlus/chat/completions`, key: env('VITE_QWEN_VL_PLUS_TOKEN'), model: 'qwen3-vl-plus' },
   qwenMax: { url: `${apiBase}/api/qwenMax/chat/completions`, key: env('VITE_QWEN_MAX_TOKEN'), model: 'qwen3-max' },
-  kimiK2: { url: `${apiBase}/api/kimiK2/chat/completions`, key: env('VITE_KIMI_K2_TOKEN'), model: 'kimi-k2' }
+  kimiK2: { url: `${apiBase}/api/kimiK2/chat/completions`, key: env('VITE_KIMI_K2_TOKEN'), model: 'kimi-k2' },
+  doubaoSeed: { url: `${apiBase}/api/doubaoSeed/chat/completions`, key: env('VITE_DOUBAO_SEED_TOKEN'), model: 'doubao-seed-code-preview-latest' }
 }
 
 const KEY = 'zenreader_multimodel_history'
@@ -813,21 +815,21 @@ const stopGeneration = () => {
   saveSession()
 }
 
-const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.MiniMax-M2.1:${r.minimaxM21||'无'}\n9.Qwen3-235B-A22B:${r.qwen||'无'}\n10.DeepSeek-V3.2:${r.deepseekV32||'无'}\n11.claude-sonnet-4.5:${r.sonnet||'无'}\n12.deepseek-v3.1-terminus:${r.deepseek||'无'}\n13.Qwen3-VL-32B-Thinking:${r.qwenVL||'无'}\n14.Qwen3-30B-A3B:${r.qwen30B||'无'}\n15.qwen3-coder-plus:${r.qwenCoderPlus||'无'}\n16.qwen3-vl-plus:${r.qwenVLPlus||'无'}\n17.qwen3-max:${r.qwenMax||'无'}\n18.kimi-k2:${r.kimiK2||'无'}\n\n请分析：\n### 📊 一致性分析\n### 🔍 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
+const prompt = (q: string, r: Record<string, string>) => `你是AI答案整合专家。问题：${q}\n\n回答：\n1.gemini-3-pro-preview:${r.geminiPro||'无'}\n2.mimo-v2-flash:${r.mimo||'无'}\n3.glm-4.7:${r.glm||'无'}\n4.claude-opus-4-5-20251101:${r.opus||'无'}\n5.grok-4.1:${r.grok||'无'}\n6.gemini-3-flash-preview:${r.geminiFlash||'无'}\n7.minimax-m2:${r.minimax||'无'}\n8.MiniMax-M2.1:${r.minimaxM21||'无'}\n9.Qwen3-235B-A22B:${r.qwen||'无'}\n10.DeepSeek-V3.2:${r.deepseekV32||'无'}\n11.claude-sonnet-4.5:${r.sonnet||'无'}\n12.deepseek-v3.1-terminus:${r.deepseek||'无'}\n13.Qwen3-VL-32B-Thinking:${r.qwenVL||'无'}\n14.Qwen3-30B-A3B:${r.qwen30B||'无'}\n15.qwen3-coder-plus:${r.qwenCoderPlus||'无'}\n16.qwen3-vl-plus:${r.qwenVLPlus||'无'}\n17.qwen3-max:${r.qwenMax||'无'}\n18.kimi-k2:${r.kimiK2||'无'}\n19.doubao-seed-code:${r.doubaoSeed||'无'}\n\n请分析：\n### 📊 一致性分析\n### �� 逻辑验证\n### ✅ 最终答案\n### 💡 补充建议`
 
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
   collapseAllPreviousModels()
   const q = inputMessage.value.trim(); inputMessage.value = ''; isLoading.value = true
   messages.value.push({ role: 'user', content: q, timestamp: new Date() })
-  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, qwenLoading: true, deepseekV32Loading: true, sonnetLoading: true, deepseekLoading: true, qwenVLLoading: true, qwen30BLoading: true, qwenCoderPlusLoading: true, qwenVLPlusLoading: true, qwenMaxLoading: true, kimiK2Loading: true, summaryLoading: false, timestamp: new Date() }
+  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, qwenLoading: true, deepseekV32Loading: true, sonnetLoading: true, deepseekLoading: true, qwenVLLoading: true, qwen30BLoading: true, qwenCoderPlusLoading: true, qwenVLPlusLoading: true, qwenMaxLoading: true, kimiK2Loading: true, doubaoSeedLoading: true, summaryLoading: false, timestamp: new Date() }
   messages.value.push(msg); const idx = messages.value.length - 1
   allModelsExpanded[idx] = true
   await scrollToBottom()
   const done = new Set<string>(); const resp: Record<string, string> = {}
   const finish = () => { isLoading.value = false; saveSession() }
   const check = () => {
-    if (done.size === 18 && !messages.value[idx].summaryLoading) {
+    if (done.size === 19 && !messages.value[idx].summaryLoading) {
       // 检查是否已经停止生成（只检查 isLoading 状态）
       if (!isLoading.value) return
 
@@ -915,9 +917,9 @@ const sendMessage = async () => {
       )
     }
   }
-  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', minimaxM21: 'minimaxM21Content', qwen: 'qwenContent', deepseekV32: 'deepseekV32Content', sonnet: 'sonnetContent', deepseek: 'deepseekContent', qwenVL: 'qwenVLContent', qwen30B: 'qwen30BContent', qwenCoderPlus: 'qwenCoderPlusContent', qwenVLPlus: 'qwenVLPlusContent', qwenMax: 'qwenMaxContent', kimiK2: 'kimiK2Content' }
-  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', minimaxM21: 'minimaxM21Loading', qwen: 'qwenLoading', deepseekV32: 'deepseekV32Loading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading', qwenVL: 'qwenVLLoading', qwen30B: 'qwen30BLoading', qwenCoderPlus: 'qwenCoderPlusLoading', qwenVLPlus: 'qwenVLPlusLoading', qwenMax: 'qwenMaxLoading', kimiK2: 'kimiK2Loading' }
-  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'minimaxM21', 'qwen', 'deepseekV32', 'sonnet', 'deepseek', 'qwenVL', 'qwen30B', 'qwenCoderPlus', 'qwenVLPlus', 'qwenMax', 'kimiK2']) {
+  const cKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProContent', mimo: 'mimoContent', glm: 'glmContent', opus: 'opusContent', grok: 'grokContent', geminiFlash: 'geminiFlashContent', minimax: 'minimaxContent', minimaxM21: 'minimaxM21Content', qwen: 'qwenContent', deepseekV32: 'deepseekV32Content', sonnet: 'sonnetContent', deepseek: 'deepseekContent', qwenVL: 'qwenVLContent', qwen30B: 'qwen30BContent', qwenCoderPlus: 'qwenCoderPlusContent', qwenVLPlus: 'qwenVLPlusContent', qwenMax: 'qwenMaxContent', kimiK2: 'kimiK2Content', doubaoSeed: 'doubaoSeedContent' }
+  const lKeys: Record<string, keyof Msg> = { geminiPro: 'geminiProLoading', mimo: 'mimoLoading', glm: 'glmLoading', opus: 'opusLoading', grok: 'grokLoading', geminiFlash: 'geminiFlashLoading', minimax: 'minimaxLoading', minimaxM21: 'minimaxM21Loading', qwen: 'qwenLoading', deepseekV32: 'deepseekV32Loading', sonnet: 'sonnetLoading', deepseek: 'deepseekLoading', qwenVL: 'qwenVLLoading', qwen30B: 'qwen30BLoading', qwenCoderPlus: 'qwenCoderPlusLoading', qwenVLPlus: 'qwenVLPlusLoading', qwenMax: 'qwenMaxLoading', kimiK2: 'kimiK2Loading', doubaoSeed: 'doubaoSeedLoading' }
+  for (const k of ['geminiPro', 'mimo', 'glm', 'opus', 'grok', 'geminiFlash', 'minimax', 'minimaxM21', 'qwen', 'deepseekV32', 'sonnet', 'deepseek', 'qwenVL', 'qwen30B', 'qwenCoderPlus', 'qwenVLPlus', 'qwenMax', 'kimiK2', 'doubaoSeed']) {
     const onController = (c: AbortController) => { modelControllers[`${idx}-${k}`] = c }
     const onChunk = (c: string) => { (messages.value[idx] as any)[cKeys[k]] = ((messages.value[idx] as any)[cKeys[k]] || '') + c; scrollToBottom() }
     const onSuccess = () => {
