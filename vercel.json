@@ -43,6 +43,38 @@
     {
       "source": "/api/minimaxm21/:path*",
       "destination": "https://routerpark.com/v1/:path*"
+    },
+    {
+      "source": "/api/qwen/:path*",
+      "destination": "https://routerpark.com/v1/:path*"
+    },
+    {
+      "source": "/api/deepseekv32/:path*",
+      "destination": "https://routerpark.com/v1/:path*"
+    },
+    {
+      "source": "/api/Qwen3VL32B/:path*",
+      "destination": "https://api.suanli.cn/v1/:path*"
+    },
+    {
+      "source": "/api/Qwen330BA3B/:path*",
+      "destination": "https://api.suanli.cn/v1/:path*"
+    },
+    {
+      "source": "/api/qwenCoderPlus/:path*",
+      "destination": "https://apis.iflow.cn/v1/:path*"
+    },
+    {
+      "source": "/api/qwenVLPlus/:path*",
+      "destination": "https://apis.iflow.cn/v1/:path*"
+    },
+    {
+      "source": "/api/qwenMax/:path*",
+      "destination": "https://apis.iflow.cn/v1/:path*"
+    },
+    {
+      "source": "/api/kimiK2/:path*",
+      "destination": "https://apis.iflow.cn/v1/:path*"
     }
   ]
 }
