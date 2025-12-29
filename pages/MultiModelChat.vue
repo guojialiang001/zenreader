@@ -169,7 +169,7 @@
                     <button @click="toggleAllModels(idx)" class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-600 transition-colors">
                       <ChevronRight :class="['w-4 h-4 transition-transform', isAllModelsExpanded(idx) ? 'rotate-90' : '']" />
                       <span>{{ isAllModelsExpanded(idx) ? '收起全部模型' : '展开全部模型' }}</span>
-                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/16)</span>
+                      <span class="text-xs text-slate-400">({{ getCompletedCount(msg) }}/18)</span>
                     </button>
                   </div>
                   <div v-if="isAllModelsExpanded(idx)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -818,14 +818,14 @@ const sendMessage = async () => {
   collapseAllPreviousModels()
   const q = inputMessage.value.trim(); inputMessage.value = ''; isLoading.value = true
   messages.value.push({ role: 'user', content: q, timestamp: new Date() })
-  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, qwenLoading: true, deepseekV32Loading: true, sonnetLoading: true, deepseekLoading: true, qwenCoderPlusLoading: true, qwenVLPlusLoading: true, qwenMaxLoading: true, kimiK2Loading: true, summaryLoading: false, timestamp: new Date() }
+  const msg: Msg = { role: 'assistant', geminiProLoading: true, mimoLoading: true, glmLoading: true, opusLoading: true, grokLoading: true, geminiFlashLoading: true, minimaxLoading: true, minimaxM21Loading: true, qwenLoading: true, deepseekV32Loading: true, sonnetLoading: true, deepseekLoading: true, qwenVLLoading: true, qwen30BLoading: true, qwenCoderPlusLoading: true, qwenVLPlusLoading: true, qwenMaxLoading: true, kimiK2Loading: true, summaryLoading: false, timestamp: new Date() }
   messages.value.push(msg); const idx = messages.value.length - 1
   allModelsExpanded[idx] = true
   await scrollToBottom()
   const done = new Set<string>(); const resp: Record<string, string> = {}
   const finish = () => { isLoading.value = false; saveSession() }
   const check = () => {
-    if (done.size === 16 && !messages.value[idx].summaryLoading) {
+    if (done.size === 18 && !messages.value[idx].summaryLoading) {
       // 检查是否已经停止生成（只检查 isLoading 状态）
       if (!isLoading.value) return
 
