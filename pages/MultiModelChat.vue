@@ -251,15 +251,64 @@
               </div>
             </div>
           </div>
-          <div class="border-t border-slate-200 p-2 sm:p-4 bg-white flex-shrink-0">
-            <div v-if="isLoading" class="mb-3">
-              <button @click="confirmStop" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg flex items-center justify-center gap-2 transition-colors">
+          
+          <!-- 语音识别状态提示 -->
+          <div v-if="isPressRecording || isTranscribing" class="mb-3 flex items-center justify-center gap-2">
+            <div v-if="isPressRecording" class="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-full text-sm text-red-600 font-medium">
+              <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+              <span>正在录制中...（松开停止）</span>
+            </div>
+            <div v-else-if="isTranscribing" class="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full text-sm text-blue-600 font-medium">
+              <Loader2 class="w-4 h-4 animate-spin" />
+              <span>正在识别语音...</span>
+            </div>
+          </div>
+          
+          <!-- 语音识别错误提示 -->
+          <div v-if="transcriptionError" class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+            {{ transcriptionError }}
+          </div>
+          
+           <div class="border-t border-slate-200 p-2 sm:p-4 bg-white flex-shrink-0">
+             <div v-if="isLoading" class="mb-3">
+               <button @click="confirmStop" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg flex items-center justify-center gap-2 transition-colors">
                 <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                 <span class="font-medium text-sm">正在生成中... 点击停止</span>
               </button>
             </div>
             <div class="flex gap-3">
-              <textarea v-model="inputMessage" @keydown="handleKeydown" placeholder="输入你的问题..." :rows="isMobile ? 1 : 2" class="flex-1 px-3 sm:px-4 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none text-sm sm:text-base" :disabled="isLoading"></textarea>
+              <!-- 按住说话按钮 -->
+              <button
+                @mousedown="startPressRecording"
+                @mouseup="stopPressRecording"
+                @mouseleave="stopPressRecording"
+                @touchstart.prevent="startPressRecording"
+                @touchend.prevent="stopPressRecording"
+                :disabled="isLoading"
+                :class="[
+                  'px-3 py-2 rounded-lg transition-colors flex items-center gap-2 flex-shrink-0 select-none touch-manipulation',
+                  isPressRecording
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600',
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                ]"
+                title="按住说话"
+              >
+                <component :is="isPressRecording ? MicOff : Mic" class="w-5 h-5" />
+                <span class="hidden sm:inline">{{ isPressRecording ? '松开' : '按住说话' }}</span>
+              </button>
+              
+              <textarea
+                ref="textareaRef"
+                v-model="inputMessage"
+                @keydown="handleKeydown"
+                @input="autoResizeTextarea"
+                placeholder="输入你的问题..."
+                :rows="isMobile ? 1 : 2"
+                class="flex-1 px-3 sm:px-4 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none text-sm sm:text-base min-h-[40px] max-h-[150px]"
+                :disabled="isLoading"
+                :style="{ height: isMobile ? textareaHeight + 'px' : 'auto' }"
+              ></textarea>
               <button @click="sendMessage" :disabled="!inputMessage.trim() || isLoading" class="px-6 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap min-w-[100px] justify-center">
                 <Send class="w-4 h-4 flex-shrink-0" />
                 <span class="flex-shrink-0">{{ isLoading ? '处理中' : '发送' }}</span>
@@ -303,7 +352,7 @@
 <script setup lang="ts">
 import { ref, nextTick, reactive, onMounted, onUnmounted, watch, computed, Teleport, Transition } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText, Menu, Globe } from 'lucide-vue-next'
+import { Home, MessageSquare, ChevronRight, ChevronLeft, Loader2, Send, Sparkles, History, Trash2, Plus, Maximize2, X, Copy, Check, Thermometer, AlertTriangle, HelpCircle, FileText, Menu, Globe, Mic, MicOff } from 'lucide-vue-next'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
@@ -454,6 +503,8 @@ const inputMessage = ref('')
 const messages = ref<Msg[]>([])
 const isLoading = ref(false)
 const chatContainer = ref<HTMLElement>()
+const textareaRef = ref<HTMLTextAreaElement>()
+const textareaHeight = ref(40)
 const expandedStates = reactive<Record<string, boolean>>({})
 const allModelsExpanded = reactive<Record<number, boolean>>({})
 const previewModal = ref<{ show: boolean; title: string; content: string }>({ show: false, title: '', content: '' })
@@ -463,6 +514,29 @@ const abortControllers = ref<AbortController[]>([])
 const modelControllers = reactive<Record<string, AbortController>>({})
 const temperature = ref(0.7)
 const webSearch = ref(false)
+
+// 语音录制相关
+let mediaRecorder: MediaRecorder | null = null
+let audioChunks: Blob[] = []
+let audioStream: MediaStream | null = null
+let audioContext: AudioContext | null = null
+let analyser: AnalyserNode | null = null
+let silenceTimer: number | null = null
+let dataArray: Uint8Array<ArrayBufferLike> | null = null
+
+const isPressRecording = ref(false)
+const isTranscribing = ref(false)
+const transcriptionError = ref<string | null>(null)
+
+// 静音检测配置
+const SILENCE_THRESHOLD = 30
+const SILENCE_DURATION = 1500
+
+// SiliconFlow API 配置
+const SPEECH_API_KEY = 'sk-yyqmrkevamdfuilmfdlfmjzuatoytqlywfalkjkfrzkffvdr'
+const SPEECH_API_URL = 'https://api.siliconflow.cn/v1/audio/transcriptions'
+const SPEECH_API_MODEL = 'FunAudioLLM/SenseVoiceSmall'
+
 // 移动端检测
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
 const isMobile = computed(() => windowWidth.value < 768)
@@ -594,8 +668,158 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 })
 
+// 开始按住录制
+const startPressRecording = async () => {
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaRecorder = new MediaRecorder(audioStream)
+    audioChunks = []
+
+    // 设置音频分析器用于静音检测
+    audioContext = new AudioContext()
+    const source = audioContext.createMediaStreamSource(audioStream)
+    analyser = audioContext.createAnalyser()
+    analyser.fftSize = 256
+    source.connect(analyser)
+    dataArray = new Uint8Array(analyser.frequencyBinCount)
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data)
+      }
+    }
+
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+      
+      // 自动调用 API 进行语音识别
+      transcribeAudio(audioBlob)
+    }
+
+    mediaRecorder.start()
+    isPressRecording.value = true
+    transcriptionError.value = null
+    
+    // 开始静音检测
+    detectSilence()
+  } catch (err) {
+    console.error('录制失败:', err)
+    transcriptionError.value = '无法访问麦克风，请检查权限设置'
+  }
+}
+
+// 停止按住录制
+const stopPressRecording = () => {
+  if (mediaRecorder && isPressRecording.value) {
+    mediaRecorder.stop()
+    isPressRecording.value = false
+    
+    // 停止音频流
+    if (audioStream) {
+      audioStream.getTracks().forEach(track => track.stop())
+    }
+    
+    // 清理静音检测
+    if (silenceTimer) {
+      clearTimeout(silenceTimer)
+      silenceTimer = null
+    }
+    if (audioContext) {
+      audioContext.close()
+      audioContext = null
+    }
+  }
+}
+
+// 静音检测
+const detectSilence = () => {
+  if (!analyser || !dataArray || !isPressRecording.value) return
+  
+  analyser.getByteFrequencyData(dataArray as Uint8Array)
+  
+  // 计算平均音量
+  let sum = 0
+  for (let i = 0; i < dataArray.length; i++) {
+    sum += dataArray[i]
+  }
+  const average = sum / dataArray.length
+  
+  // 如果音量低于阈值，开始计时
+  if (average < SILENCE_THRESHOLD) {
+    if (!silenceTimer) {
+      silenceTimer = window.setTimeout(() => {
+        stopPressRecording()
+      }, SILENCE_DURATION)
+    }
+  } else {
+    // 有声音，清除静音计时器
+    if (silenceTimer) {
+      clearTimeout(silenceTimer)
+      silenceTimer = null
+    }
+  }
+  
+  // 继续检测
+  if (isPressRecording.value) {
+    requestAnimationFrame(detectSilence)
+  }
+}
+
+// 调用 SiliconFlow API 进行语音识别
+const transcribeAudio = async (audioBlob: Blob) => {
+  if (!audioBlob) return
+  
+  isTranscribing.value = true
+  transcriptionError.value = null
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'audio.webm')
+    formData.append('model', SPEECH_API_MODEL)
+    
+    const response = await fetch(SPEECH_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SPEECH_API_KEY}`,
+      },
+      body: formData,
+    })
+    
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status}`)
+    }
+    
+    const result = await response.json()
+    const transcribedText = result.text || ''
+    
+    // 将识别结果添加到输入框
+    if (transcribedText) {
+      inputMessage.value = inputMessage.value + (inputMessage.value ? ' ' : '') + transcribedText
+    }
+  } catch (err) {
+    console.error('语音识别失败:', err)
+    transcriptionError.value = '语音识别失败，请重试'
+  } finally {
+    isTranscribing.value = false
+  }
+}
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  
+  // 清理音频录制
+  if (mediaRecorder && isPressRecording.value) {
+    mediaRecorder.stop()
+  }
+  if (audioStream) {
+    audioStream.getTracks().forEach(track => track.stop())
+  }
+  if (silenceTimer) {
+    clearTimeout(silenceTimer)
+  }
+  if (audioContext) {
+    audioContext.close()
+  }
 })
 
 const isExpanded = (i: number, m: string) => { const k = `${i}-${m}`; if (expandedStates[k] === undefined) expandedStates[k] = true; return expandedStates[k] }
@@ -623,6 +847,16 @@ const clearMessages = () => {
   })
 }
 const handleKeydown = (e: KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
+
+const autoResizeTextarea = () => {
+  if (!isMobile.value || !textareaRef.value) return
+  
+  const textarea = textareaRef.value
+  textarea.style.height = 'auto'
+  const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 150)
+  textareaHeight.value = newHeight
+  textarea.style.height = newHeight + 'px'
+}
 
 const stream = async (api: Api, content: string, onChunk: (c: string) => void, onDone: () => void, onErr: (e: string) => void, onController?: (c: AbortController) => void) => {
   const controller = new AbortController()

@@ -5,7 +5,7 @@ import { RouterLink } from 'vue-router'
 import {
   ArrowLeft, Home, Hand, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Palette, FileJson, Upload, Plus, ChevronRight, ChevronDown, X, Keyboard,
-  LayoutGrid, Link2, Sparkles, Menu, Clock, Trash2, AlertTriangle
+  LayoutGrid, Link2, Sparkles, Menu, Clock, Trash2, AlertTriangle, Image as ImageIcon, Download, ChevronUp
 } from 'lucide-vue-next'
 
 type LayoutType = 'mind-map' | 'org-chart' | 'right-only'
@@ -70,6 +70,7 @@ const tempName = ref('')
 const currentFileId = ref<string | null>(null)  // 当前文件ID
 const previousState = ref<string | null>(null)  // 新建前的状态（用于取消）
 const contextMenu = reactive({ show: false, x: 0, y: 0, node: null as MindNode | null })
+const showExportMenu = ref(false)  // 导出菜单显示状态
 
 // 确认弹窗状态
 const confirmDialog = reactive({
@@ -1157,6 +1158,387 @@ const exportJSON = () => {
   link.click()
 }
 
+// 导出SVG图片
+const exportSVG = () => {
+  // 计算内容边界
+  const nodes = flatNodes.value
+  if (nodes.length === 0) return
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  nodes.forEach(n => {
+    const hw = (n.width || 120) / 2
+    const hh = (n.height || 40) / 2
+    minX = Math.min(minX, n.x! - hw)
+    minY = Math.min(minY, n.y! - hh)
+    maxX = Math.max(maxX, n.x! + hw)
+    maxY = Math.max(maxY, n.y! + hh)
+  })
+
+  const exportPadding = 60
+  const exportWidth = (maxX - minX) + exportPadding * 2
+  const exportHeight = (maxY - minY) + exportPadding * 2
+  const offsetX = -minX + exportPadding
+  const offsetY = -minY + exportPadding
+
+  // 创建SVG元素
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('width', exportWidth.toString())
+  svg.setAttribute('height', exportHeight.toString())
+  svg.setAttribute('viewBox', `0 0 ${exportWidth} ${exportHeight}`)
+  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+
+  // 添加背景矩形
+  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  bgRect.setAttribute('width', exportWidth.toString())
+  bgRect.setAttribute('height', exportHeight.toString())
+  bgRect.setAttribute('fill', currentTheme.value.bg)
+  svg.appendChild(bgRect)
+
+  // 创建一个组来处理偏移
+  const mainGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  mainGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY})`)
+
+  // 添加渐变定义
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+  currentTheme.value.colors.forEach((color, idx) => {
+    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient')
+    gradient.setAttribute('id', `lineGradient-${idx}`)
+    gradient.setAttribute('gradientUnits', 'userSpaceOnUse')
+
+    const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop')
+    stop1.setAttribute('offset', '0%')
+    stop1.setAttribute('stop-color', color)
+
+    const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop')
+    stop2.setAttribute('offset', '100%')
+    stop2.setAttribute('stop-color', currentTheme.value.colors[(idx + 1) % currentTheme.value.colors.length])
+
+    gradient.appendChild(stop1)
+    gradient.appendChild(stop2)
+    defs.appendChild(gradient)
+  })
+  svg.appendChild(defs)
+
+  // 添加连接线到主组
+  flatNodes.value.forEach(node => {
+    if (node.parent && node.x !== undefined && node.y !== undefined) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      path.setAttribute('d', getConnectionPath(node))
+      path.setAttribute('fill', 'none')
+      path.setAttribute('stroke', `url(#lineGradient-${(parseInt(node.id, 36) % (currentTheme.value.colors.length - 1)) + 1})`)
+      path.setAttribute('stroke-width', node.level === 1 ? '3.5' : '2.5')
+      path.setAttribute('stroke-linecap', 'round')
+      path.setAttribute('stroke-linejoin', 'round')
+      mainGroup.appendChild(path)
+    }
+  })
+
+  // 添加节点到主组
+  flatNodes.value.forEach(node => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    g.setAttribute('transform', `translate(${node.x!}, ${node.y!})`)
+
+    const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
+    foreignObject.setAttribute('x', '-500')
+    foreignObject.setAttribute('y', '-500')
+    foreignObject.setAttribute('width', '1000')
+    foreignObject.setAttribute('height', '1000')
+    foreignObject.setAttribute('overflow', 'visible')
+
+    const wrapper = document.createElement('div')
+    wrapper.style.display = 'flex'
+    wrapper.style.alignItems = 'center'
+    wrapper.style.justifyContent = 'center'
+    wrapper.style.width = '1000px'
+    wrapper.style.height = '1000px'
+
+    const contentDiv = document.createElement('div')
+    const isRoot = node.level === 0
+    const isFirstLevel = node.level === 1
+    const isDark = currentTheme.value.name === '深邃黑'
+    const bgBase = isDark ? '#1e293b' : '#ffffff'
+
+    if (isRoot) {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      contentDiv.style.background = `linear-gradient(135deg, ${color} 0%, ${secondColor} 100%)`
+      contentDiv.style.border = 'none'
+      contentDiv.style.boxShadow = `0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)`
+      contentDiv.style.color = '#fff'
+      contentDiv.style.textShadow = '0 1px 2px rgba(0, 0, 0, 0.2)'
+      contentDiv.style.padding = '16px 32px'
+      contentDiv.style.borderRadius = '24px'
+    } else if (isFirstLevel) {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      const bgColor1 = blendWithBackground(color, isDark ? 0.35 : 0.2, bgBase)
+      const bgColor2 = blendWithBackground(secondColor, isDark ? 0.2 : 0.12, bgBase)
+      contentDiv.style.background = `linear-gradient(135deg, ${bgColor1} 0%, ${bgColor2} 100%)`
+      contentDiv.style.borderColor = color
+      contentDiv.style.borderWidth = '2px'
+      contentDiv.style.borderStyle = 'solid'
+      contentDiv.style.boxShadow = `0 3px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)`
+      contentDiv.style.color = isDark ? '#f1f5f9' : '#1e293b'
+      contentDiv.style.fontWeight = '600'
+      contentDiv.style.padding = '12px 24px'
+      contentDiv.style.borderRadius = '16px'
+    } else {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      const thirdColor = currentTheme.value.colors[(parseInt(node.id, 36) + 2) % currentTheme.value.colors.length]
+      const bgColor1 = blendWithBackground(color, isDark ? 0.25 : 0.15, bgBase)
+      const bgColor2 = blendWithBackground(secondColor, isDark ? 0.15 : 0.08, bgBase)
+      contentDiv.style.background = `linear-gradient(145deg, ${bgColor1} 0%, ${bgColor2} 25%, ${bgBase} 100%)`
+      contentDiv.style.borderColor = secondColor
+      contentDiv.style.borderWidth = '2px'
+      contentDiv.style.borderStyle = 'solid'
+      contentDiv.style.borderLeftWidth = '5px'
+      contentDiv.style.borderLeftColor = color
+      contentDiv.style.borderRightWidth = '1px'
+      contentDiv.style.borderRightColor = blendWithBackground(thirdColor, isDark ? 0.4 : 0.3, bgBase)
+      contentDiv.style.borderTopWidth = '1px'
+      contentDiv.style.borderTopColor = blendWithBackground(secondColor, isDark ? 0.5 : 0.4, bgBase)
+      contentDiv.style.borderBottomWidth = '2px'
+      contentDiv.style.borderBottomColor = thirdColor
+      contentDiv.style.boxShadow = `0 3px 8px -2px rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.08)`
+      contentDiv.style.color = isDark ? '#f1f5f9' : '#334155'
+      contentDiv.style.padding = '12px 24px'
+      contentDiv.style.borderRadius = '16px'
+    }
+
+    contentDiv.style.boxSizing = 'border-box'
+    contentDiv.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+    const textSpan = document.createElement('span')
+    textSpan.textContent = node.text
+    textSpan.style.display = 'block'
+    textSpan.style.fontWeight = 'bold'
+    textSpan.style.whiteSpace = 'pre-wrap'
+    textSpan.style.fontSize = isRoot ? '22px' : '15px'
+    textSpan.style.letterSpacing = isRoot ? '0.02em' : '-0.025em'
+    textSpan.style.maxWidth = '460px'
+    textSpan.style.wordBreak = 'break-word'
+    textSpan.style.lineHeight = '1.5'
+
+    contentDiv.appendChild(textSpan)
+    wrapper.appendChild(contentDiv)
+    foreignObject.appendChild(wrapper)
+    g.appendChild(foreignObject)
+    mainGroup.appendChild(g)
+  })
+
+  svg.appendChild(mainGroup)
+
+  // 下载SVG
+  const svgData = new XMLSerializer().serializeToString(svg)
+  const blob = new Blob([svgData], { type: 'image/svg+xml' })
+  const link = document.createElement('a')
+  link.download = `${mindMapName.value}.svg`
+  link.href = URL.createObjectURL(blob)
+  link.click()
+}
+
+// 导出PNG图片（通过 SVG 转换）
+const exportPNG = () => {
+  // 计算内容边界
+  const nodes = flatNodes.value
+  if (nodes.length === 0) return
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  nodes.forEach(n => {
+    const hw = (n.width || 120) / 2
+    const hh = (n.height || 40) / 2
+    minX = Math.min(minX, n.x! - hw)
+    minY = Math.min(minY, n.y! - hh)
+    maxX = Math.max(maxX, n.x! + hw)
+    maxY = Math.max(maxY, n.y! + hh)
+  })
+
+  const exportPadding = 100
+  const exportWidth = (maxX - minX) + exportPadding * 2
+  const exportHeight = (maxY - minY) + exportPadding * 2
+  const offsetX = -minX + exportPadding
+  const offsetY = -minY + exportPadding
+
+  // 创建SVG元素（与 exportSVG 相同的逻辑）
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('width', exportWidth.toString())
+  svg.setAttribute('height', exportHeight.toString())
+  svg.setAttribute('viewBox', `0 0 ${exportWidth} ${exportHeight}`)
+  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+
+  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  bgRect.setAttribute('width', exportWidth.toString())
+  bgRect.setAttribute('height', exportHeight.toString())
+  bgRect.setAttribute('fill', currentTheme.value.bg)
+  svg.appendChild(bgRect)
+
+  const mainGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  mainGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY})`)
+
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+  currentTheme.value.colors.forEach((color, idx) => {
+    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient')
+    gradient.setAttribute('id', `lineGradient-png-${idx}`)
+    gradient.setAttribute('gradientUnits', 'userSpaceOnUse')
+
+    const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop')
+    stop1.setAttribute('offset', '0%')
+    stop1.setAttribute('stop-color', color)
+
+    const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop')
+    stop2.setAttribute('offset', '100%')
+    stop2.setAttribute('stop-color', currentTheme.value.colors[(idx + 1) % currentTheme.value.colors.length])
+
+    gradient.appendChild(stop1)
+    gradient.appendChild(stop2)
+    defs.appendChild(gradient)
+  })
+  svg.appendChild(defs)
+
+  flatNodes.value.forEach(node => {
+    if (node.parent && node.x !== undefined && node.y !== undefined) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      path.setAttribute('d', getConnectionPath(node))
+      path.setAttribute('fill', 'none')
+      path.setAttribute('stroke', `url(#lineGradient-png-${(parseInt(node.id, 36) % (currentTheme.value.colors.length - 1)) + 1})`)
+      path.setAttribute('stroke-width', node.level === 1 ? '3.5' : '2.5')
+      path.setAttribute('stroke-linecap', 'round')
+      path.setAttribute('stroke-linejoin', 'round')
+      mainGroup.appendChild(path)
+    }
+  })
+
+  flatNodes.value.forEach(node => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    g.setAttribute('transform', `translate(${node.x!}, ${node.y!})`)
+
+    const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
+    foreignObject.setAttribute('x', '-500')
+    foreignObject.setAttribute('y', '-500')
+    foreignObject.setAttribute('width', '1000')
+    foreignObject.setAttribute('height', '1000')
+    foreignObject.setAttribute('overflow', 'visible')
+
+    const wrapper = document.createElement('div')
+    wrapper.style.display = 'flex'
+    wrapper.style.alignItems = 'center'
+    wrapper.style.justifyContent = 'center'
+    wrapper.style.width = '1000px'
+    wrapper.style.height = '1000px'
+
+    const contentDiv = document.createElement('div')
+    const isRoot = node.level === 0
+    const isFirstLevel = node.level === 1
+    const isDark = currentTheme.value.name === '深邃黑'
+    const bgBase = isDark ? '#1e293b' : '#ffffff'
+
+    if (isRoot) {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      contentDiv.style.background = `linear-gradient(135deg, ${color} 0%, ${secondColor} 100%)`
+      contentDiv.style.border = 'none'
+      contentDiv.style.boxShadow = `0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)`
+      contentDiv.style.color = '#fff'
+      contentDiv.style.textShadow = '0 1px 2px rgba(0, 0, 0, 0.2)'
+      contentDiv.style.padding = '16px 32px'
+      contentDiv.style.borderRadius = '24px'
+    } else if (isFirstLevel) {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      const bgColor1 = blendWithBackground(color, isDark ? 0.35 : 0.2, bgBase)
+      const bgColor2 = blendWithBackground(secondColor, isDark ? 0.2 : 0.12, bgBase)
+      contentDiv.style.background = `linear-gradient(135deg, ${bgColor1} 0%, ${bgColor2} 100%)`
+      contentDiv.style.borderColor = color
+      contentDiv.style.borderWidth = '2px'
+      contentDiv.style.borderStyle = 'solid'
+      contentDiv.style.boxShadow = `0 3px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)`
+      contentDiv.style.color = isDark ? '#f1f5f9' : '#1e293b'
+      contentDiv.style.fontWeight = '600'
+      contentDiv.style.padding = '12px 24px'
+      contentDiv.style.borderRadius = '16px'
+    } else {
+      const color = getNodeColor(node)
+      const secondColor = getNodeSecondColor(node)
+      const thirdColor = currentTheme.value.colors[(parseInt(node.id, 36) + 2) % currentTheme.value.colors.length]
+      const bgColor1 = blendWithBackground(color, isDark ? 0.25 : 0.15, bgBase)
+      const bgColor2 = blendWithBackground(secondColor, isDark ? 0.15 : 0.08, bgBase)
+      contentDiv.style.background = `linear-gradient(145deg, ${bgColor1} 0%, ${bgColor2} 25%, ${bgBase} 100%)`
+      contentDiv.style.borderColor = secondColor
+      contentDiv.style.borderWidth = '2px'
+      contentDiv.style.borderStyle = 'solid'
+      contentDiv.style.borderLeftWidth = '5px'
+      contentDiv.style.borderLeftColor = color
+      contentDiv.style.borderRightWidth = '1px'
+      contentDiv.style.borderRightColor = blendWithBackground(thirdColor, isDark ? 0.4 : 0.3, bgBase)
+      contentDiv.style.borderTopWidth = '1px'
+      contentDiv.style.borderTopColor = blendWithBackground(secondColor, isDark ? 0.5 : 0.4, bgBase)
+      contentDiv.style.borderBottomWidth = '2px'
+      contentDiv.style.borderBottomColor = thirdColor
+      contentDiv.style.boxShadow = `0 3px 8px -2px rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.08)`
+      contentDiv.style.color = isDark ? '#f1f5f9' : '#334155'
+      contentDiv.style.padding = '12px 24px'
+      contentDiv.style.borderRadius = '16px'
+    }
+
+    contentDiv.style.boxSizing = 'border-box'
+    contentDiv.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+    const textSpan = document.createElement('span')
+    textSpan.textContent = node.text
+    textSpan.style.display = 'block'
+    textSpan.style.fontWeight = 'bold'
+    textSpan.style.whiteSpace = 'pre-wrap'
+    textSpan.style.fontSize = isRoot ? '22px' : '15px'
+    textSpan.style.letterSpacing = isRoot ? '0.02em' : '-0.025em'
+    textSpan.style.maxWidth = '460px'
+    textSpan.style.wordBreak = 'break-word'
+    textSpan.style.lineHeight = '1.5'
+
+    contentDiv.appendChild(textSpan)
+    wrapper.appendChild(contentDiv)
+    foreignObject.appendChild(wrapper)
+    g.appendChild(foreignObject)
+    mainGroup.appendChild(g)
+  })
+
+  svg.appendChild(mainGroup)
+
+  // 将 SVG 转换为 PNG
+  const svgData = new XMLSerializer().serializeToString(svg)
+  const svgBase64 = btoa(unescape(encodeURIComponent(svgData)))
+  const dataUrl = `data:image/svg+xml;base64,${svgBase64}`
+
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = exportWidth * 2  // 2倍分辨率
+    canvas.height = exportHeight * 2
+    const ctx = canvas.getContext('2d')
+
+    if (ctx) {
+      ctx.scale(2, 2)
+      ctx.drawImage(img, 0, 0)
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const link = document.createElement('a')
+          link.download = `${mindMapName.value}.png`
+          link.href = URL.createObjectURL(blob)
+          link.click()
+          URL.revokeObjectURL(link.href)
+        }
+      }, 'image/png')
+    }
+  }
+
+  img.onerror = () => {
+    alert('PNG 导出失败，请重试')
+  }
+
+  img.src = dataUrl
+}
+
 const importJSON = () => {
   const input = document.createElement('input')
   input.type = 'file'
@@ -1387,11 +1769,31 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <button @click="exportJSON" class="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-lg" style="background-color: #0ea5e9; box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3);">
-          <FileJson class="w-4 h-4" />
-          <span>导出</span>
-        </button>
-        
+        <div class="relative">
+          <button @click="showExportMenu = !showExportMenu" class="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-lg" style="background-color: #0ea5e9; box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3);">
+            <ImageIcon class="w-4 h-4" />
+            <span>导出</span>
+            <ChevronUp :class="['w-4 h-4 transition-transform', showExportMenu ? 'rotate-180' : '']" />
+          </button>
+
+          <!-- 导出菜单 -->
+          <div v-if="showExportMenu" class="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <button @click="exportPNG(); showExportMenu = false" class="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+              <ImageIcon class="w-4 h-4" />
+              导出 PNG
+            </button>
+            <button @click="exportSVG(); showExportMenu = false" class="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+              <Download class="w-4 h-4" />
+              导出 SVG
+            </button>
+            <div class="my-1 border-t border-slate-100"></div>
+            <button @click="exportJSON(); showExportMenu = false" class="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+              <FileJson class="w-4 h-4" />
+              导出 JSON
+            </button>
+          </div>
+        </div>
+
         <button @click="showShortcuts = !showShortcuts" class="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all text-slate-500">
           <Keyboard class="w-4 h-4" />
         </button>

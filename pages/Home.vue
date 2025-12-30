@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode, Palette, FileEdit, GitBranch, Brain, Calculator } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode, Palette, FileEdit, GitBranch, Brain, Calculator, ImageIcon as ImageIcon2, LayoutTemplate, Wand2, Mic } from 'lucide-vue-next'
 
 const searchQuery = ref('')
 
 const tools = [
+  // { name: '语音识别', desc: '将语音转换为文本，支持多种语言和实时识别', route: '/speech', icon: 'speech', tags: ['语音', '识别', '转换', 'ASR'], features: ['实时识别', '多语言支持', '语音合成'], usageCount: '0k+' },
+  { name: '去AI味润色', desc: '将AI生成的文本改写得更自然、更具人情味', route: '/humanizer', icon: 'humanizer', tags: ['AI', '文案', '润色', '去AI味'], features: ['多种风格', '流式响应', '一键复制'], usageCount: '0k+' },
   { name: '流程画布', desc: '类似ProcessOn的流程图绘制工具，支持多种形状和连接线', route: '/flow', icon: 'flow', tags: ['流程图', '画布', '设计'], features: ['拖拽编辑', '自动保存', '导出PNG/JSON'], usageCount: '0k+' },
+  { name: '多模态问答', desc: '上传图片进行AI视觉问答，GLM-4.1V Thinking Flash智能分析', route: '/multimodal', icon: 'multimodal', tags: ['AI', '视觉', '问答', '图片'], features: ['图片上传', 'thinking模式', '流式响应'], usageCount: '0k+' },
   { name: '多模型问答', desc: '支持多种 AI 模型的智能对话，流式响应', route: '/chat', icon: 'chat', tags: ['AI', '对话', '问答'], features: ['多模型选择', '流式响应', '上下文记忆'], usageCount: '0.1k+' },
   { name: 'Markdown 编辑器', desc: '左右分栏实时预览，支持快捷键和格式工具栏', route: '/markdown', icon: 'markdown', tags: ['编辑', '预览', 'Markdown'], features: ['实时预览', '快捷键支持', '自动保存'], usageCount: '0k+' },
   { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
@@ -36,12 +39,15 @@ const getIcon = (icon: string) => {
     case 'string': return Hash
     case 'chat': return MessageSquare
     case 'image': return ImageIcon
+    case 'multimodal': return ImageIcon2
     case 'editor': return FileCode
     case 'palette': return Palette
     case 'markdown': return FileEdit
     case 'flow': return GitBranch
     case 'brain': return Brain
     case 'calculator': return Calculator
+    case 'humanizer': return Wand2
+    case 'speech': return Mic
     default: return FileText
   }
 }
