@@ -169,8 +169,12 @@
             </div>
             
             <!-- 语音识别状态提示 -->
-            <div v-if="isPressRecording || isTranscribing" class="mb-3 flex items-center justify-center gap-2">
-              <div v-if="isPressRecording" class="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-full text-sm text-red-600 font-medium">
+            <div v-if="isWaitingToRecord || isPressRecording || isTranscribing" class="mb-3 flex items-center justify-center gap-2">
+              <div v-if="isWaitingToRecord" class="flex items-center gap-2 px-4 py-2 bg-amber-50 rounded-full text-sm text-amber-600 font-medium">
+                <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                <span>准备录制中...</span>
+              </div>
+              <div v-else-if="isPressRecording" class="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-full text-sm text-red-600 font-medium">
                 <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
                 <span>正在录制中...（松开停止）</span>
               </div>
@@ -327,8 +331,10 @@ let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let silenceTimer: number | null = null
 let dataArray: Uint8Array<ArrayBufferLike> | null = null
+let recordingDelayTimer: number | null = null
 
 const isPressRecording = ref(false)
+const isWaitingToRecord = ref(false)
 const isTranscribing = ref(false)
 const transcriptionError = ref<string | null>(null)
 
@@ -429,48 +435,67 @@ const startNewSession = () => {
 }
 
 watch(messages, () => { if (messages.value.length > 0 && !isLoading.value) saveSession() }, { deep: true })
-// 开始按住录制
+// 开始按住录制（延迟0.5秒后开始）
 const startPressRecording = async () => {
-  try {
-    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaRecorder = new MediaRecorder(audioStream)
-    audioChunks = []
-
-    // 设置音频分析器用于静音检测
-    audioContext = new AudioContext()
-    const source = audioContext.createMediaStreamSource(audioStream)
-    analyser = audioContext.createAnalyser()
-    analyser.fftSize = 256
-    source.connect(analyser)
-    dataArray = new Uint8Array(analyser.frequencyBinCount)
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data)
-      }
-    }
-
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
-      
-      // 自动调用 API 进行语音识别
-      transcribeAudio(audioBlob)
-    }
-
-    mediaRecorder.start()
-    isPressRecording.value = true
-    transcriptionError.value = null
-    
-    // 开始静音检测
-    detectSilence()
-  } catch (err) {
-    console.error('录制失败:', err)
-    transcriptionError.value = '无法访问麦克风，请检查权限设置'
+  // 清除之前的延迟计时器
+  if (recordingDelayTimer) {
+    clearTimeout(recordingDelayTimer)
+    recordingDelayTimer = null
   }
+  
+  isWaitingToRecord.value = true
+  
+  // 延迟0.5秒后开始录制
+  recordingDelayTimer = window.setTimeout(async () => {
+    isWaitingToRecord.value = false
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaRecorder = new MediaRecorder(audioStream)
+      audioChunks = []
+
+      // 设置音频分析器用于静音检测
+      audioContext = new AudioContext()
+      const source = audioContext.createMediaStreamSource(audioStream)
+      analyser = audioContext.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      dataArray = new Uint8Array(analyser.frequencyBinCount)
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+        
+        // 自动调用 API 进行语音识别
+        transcribeAudio(audioBlob)
+      }
+
+      mediaRecorder.start()
+      isPressRecording.value = true
+      transcriptionError.value = null
+      
+      // 开始静音检测
+      detectSilence()
+    } catch (err) {
+      console.error('录制失败:', err)
+      transcriptionError.value = '无法访问麦克风，请检查权限设置'
+    }
+  }, 500)
 }
 
 // 停止按住录制
 const stopPressRecording = () => {
+  // 清除延迟计时器（如果还没开始录制就松开了）
+  if (recordingDelayTimer) {
+    clearTimeout(recordingDelayTimer)
+    recordingDelayTimer = null
+  }
+  isWaitingToRecord.value = false
+  
   if (mediaRecorder && isPressRecording.value) {
     mediaRecorder.stop()
     isPressRecording.value = false
