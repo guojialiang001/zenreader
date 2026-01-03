@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode, Palette, FileEdit, GitBranch, Brain, Calculator, ImageIcon as ImageIcon2, LayoutTemplate, Wand2, Mic } from 'lucide-vue-next'
+import { FileText, Braces, Clock, Type, Image as ImageIcon, Code, Hash, MessageSquare, Search, X, FileCode, Palette, FileEdit, GitBranch, Brain, Calculator, ImageIcon as ImageIcon2, LayoutTemplate, Wand2, Mic, Terminal } from 'lucide-vue-next'
 
 const searchQuery = ref('')
 
@@ -27,6 +27,7 @@ const tools = [
   { name: 'RGBA颜色工具', desc: '前端调色神器，支持多种颜色格式转换与渐变生成', route: '/color', icon: 'palette', tags: ['颜色', '调色', '前端'], features: ['RGBA调节', '格式转换', '渐变生成'], usageCount: '0k+' },
   { name: '脑图工具', desc: '类似XMind/GitMind的思维导图工具，支持多种主题和快捷键', route: '/mindmap', icon: 'brain', tags: ['脑图', '思维导图', '设计'], features: ['多彩主题', '快捷键操作', '导出JSON'], usageCount: '0k+' },
   { name: 'Token计算器', desc: '计算文本Token数量，支持GPT、Claude、LLaMA等模型', route: '/token', icon: 'calculator', tags: ['Token', 'AI', '计算'], features: ['多模型支持', '实时计算', '价格估算'], usageCount: '0k+' },
+  { name: '测试-沙箱', desc: '测试 Orchestrator 服务的 WebSocket 连接和沙箱功能', route: '/sandbox-test', icon: 'terminal', tags: ['测试', '沙箱', 'WebSocket', 'AI'], features: ['WebSocket连接', '沙箱管理', '实时日志'], usageCount: '0k+' },
 ]
 
 const getIcon = (icon: string) => {
@@ -48,6 +49,7 @@ const getIcon = (icon: string) => {
     case 'calculator': return Calculator
     case 'humanizer': return Wand2
     case 'speech': return Mic
+    case 'terminal': return Terminal
     default: return FileText
   }
 }

@@ -45,11 +45,11 @@ const collapseAll = () => treeRef.value?.collapseAll()
         </RouterLink>
       </div>
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 mb-6">
-        <div class="flex flex-wrap gap-2 sm:gap-3">
-          <button @click="validate" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg">校验</button>
-          <button @click="formatJson" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg">格式化</button>
-          <button @click="expandAll" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg">展开全部</button>
-          <button @click="collapseAll" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg">收起全部</button>
+        <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
+          <button @click="validate" class="flex-shrink-0 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors">校验</button>
+          <button @click="formatJson" class="flex-shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors">格式化</button>
+          <button @click="expandAll" class="flex-shrink-0 px-3 sm:px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition-colors text-sm sm:text-base">展开全部</button>
+          <button @click="collapseAll" class="flex-shrink-0 px-3 sm:px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition-colors text-sm sm:text-base">收起全部</button>
         </div>
       </div>
       <div v-if="status" :class="status.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 border rounded-lg px-4 py-3">

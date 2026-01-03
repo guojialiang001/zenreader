@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => {
               proxy.on('proxyReq', (proxyReq, req, _res) => {
                 // 确保流式响应不被缓冲
                 proxyReq.setHeader('Connection', 'keep-alive');
+                // 添加 origin 和 referer 头
+                proxyReq.setHeader('origin', 'https://www.toproject.cloud');
+                proxyReq.setHeader('referer', 'https://www.toproject.cloud/');
+                proxyReq.setHeader('priority', 'u=1, i');
               });
             }
           }
