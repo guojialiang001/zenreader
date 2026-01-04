@@ -2,6 +2,227 @@
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Home, Send, Trash2, RefreshCw, Terminal, Wifi, WifiOff, Settings, MessageSquare, Loader2, CheckCircle, XCircle, AlertCircle, Lock, Eye, EyeOff, Monitor, Brain, BarChart3, Eraser } from 'lucide-vue-next'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-light.css'
+
+// 覆盖 highlight.js 默认样式，使用更好看的颜色
+const overrideHljsStyles = () => {
+  const style = document.createElement('style')
+  style.textContent = `
+    .assistant-message .hljs { background: #f8faff !important; color: #334155 !important; }
+    .assistant-message .hljs-keyword, .assistant-message .hljs-selector-tag { color: #a626a4 !important; font-weight: bold; }
+    .assistant-message .hljs-title, .assistant-message .hljs-section, .assistant-message .hljs-selector-id { color: #4078f2 !important; font-weight: bold; }
+    .assistant-message .hljs-title.function_ { color: #4078f2 !important; }
+    .assistant-message .hljs-title.class_ { color: #c18401 !important; }
+    .assistant-message .hljs-string, .assistant-message .hljs-doctag { color: #50a14f !important; }
+    .assistant-message .hljs-type, .assistant-message .hljs-number, .assistant-message .hljs-selector-class, .assistant-message .hljs-quote, .assistant-message .hljs-template-tag, .assistant-message .hljs-deletion { color: #986801 !important; }
+    .assistant-message .hljs-comment, .assistant-message .hljs-meta { color: #a0a1a7 !important; font-style: italic; }
+    .assistant-message .hljs-variable, .assistant-message .hljs-template-variable, .assistant-message .hljs-attr, .assistant-message .hljs-attribute { color: #e45649 !important; }
+    .assistant-message .hljs-symbol, .assistant-message .hljs-bullet, .assistant-message .hljs-link, .assistant-message .hljs-selector-attr, .assistant-message .hljs-selector-pseudo { color: #0184bc !important; }
+    .assistant-message .hljs-built_in, .assistant-message .hljs-builtin-name { color: #c18401 !important; }
+    .assistant-message .hljs-literal { color: #0184bc !important; }
+    .assistant-message .hljs-params { color: #383a42 !important; }
+    .assistant-message .hljs-name { color: #e45649 !important; }
+  `
+  document.head.appendChild(style)
+}
+if (typeof window !== 'undefined') overrideHljsStyles()
+
+// 自定义渲染器 - 为代码块添加语言题头条
+const renderer = new marked.Renderer()
+
+// 语言名称映射
+const languageNames: Record<string, string> = {
+  'js': 'JavaScript',
+  'javascript': 'JavaScript',
+  'ts': 'TypeScript',
+  'typescript': 'TypeScript',
+  'py': 'Python',
+  'python': 'Python',
+  'java': 'Java',
+  'cpp': 'C++',
+  'c++': 'C++',
+  'c': 'C',
+  'cs': 'C#',
+  'csharp': 'C#',
+  'go': 'Go',
+  'rust': 'Rust',
+  'rb': 'Ruby',
+  'ruby': 'Ruby',
+  'php': 'PHP',
+  'swift': 'Swift',
+  'kotlin': 'Kotlin',
+  'scala': 'Scala',
+  'html': 'HTML',
+  'css': 'CSS',
+  'scss': 'SCSS',
+  'sass': 'Sass',
+  'less': 'Less',
+  'json': 'JSON',
+  'xml': 'XML',
+  'yaml': 'YAML',
+  'yml': 'YAML',
+  'md': 'Markdown',
+  'markdown': 'Markdown',
+  'sql': 'SQL',
+  'bash': 'Bash',
+  'sh': 'Shell',
+  'shell': 'Shell',
+  'powershell': 'PowerShell',
+  'ps1': 'PowerShell',
+  'dockerfile': 'Dockerfile',
+  'docker': 'Docker',
+  'vue': 'Vue',
+  'react': 'React',
+  'jsx': 'JSX',
+  'tsx': 'TSX',
+  'graphql': 'GraphQL',
+  'r': 'R',
+  'matlab': 'MATLAB',
+  'perl': 'Perl',
+  'lua': 'Lua',
+  'dart': 'Dart',
+  'elixir': 'Elixir',
+  'erlang': 'Erlang',
+  'haskell': 'Haskell',
+  'clojure': 'Clojure',
+  'lisp': 'Lisp',
+  'scheme': 'Scheme',
+  'assembly': 'Assembly',
+  'asm': 'Assembly',
+  'text': '纯文本',
+  'plaintext': '纯文本',
+  'txt': '纯文本'
+}
+
+// 生成唯一 ID
+let codeBlockIdCounter = 0
+const generateCodeBlockId = () => `code-block-${Date.now()}-${++codeBlockIdCounter}`
+
+// 自定义代码块渲染
+renderer.code = function(code: string | { text: string; lang?: string; escaped?: boolean }, lang?: string, escaped?: boolean): string {
+  // 处理新版 marked 的参数格式
+  let codeText: string
+  let language: string | undefined
+  
+  if (typeof code === 'object' && code !== null) {
+    codeText = code.text || ''
+    language = code.lang
+  } else {
+    codeText = code as string
+    language = lang
+  }
+  
+  const displayLang = language ? (languageNames[language.toLowerCase()] || language.toUpperCase()) : '代码'
+  
+  // 使用 highlight.js 进行语法高亮
+  let highlightedCode: string
+  if (language && hljs.getLanguage(language)) {
+    try {
+      highlightedCode = hljs.highlight(codeText, { language }).value
+    } catch {
+      highlightedCode = hljs.highlightAuto(codeText).value
+    }
+  } else {
+    highlightedCode = hljs.highlightAuto(codeText).value
+  }
+  
+  // 将原始代码存储在 data 属性中（用于复制）
+  const codeForCopy = codeText
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+  
+  const blockId = generateCodeBlockId()
+  
+  return `<div class="code-block-wrapper" data-code-id="${blockId}">
+    <div class="code-block-header">
+      <span class="code-lang">${displayLang}</span>
+      <button class="copy-code-btn" data-code-target="${blockId}" title="复制代码">
+        <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+        </svg>
+        <svg class="check-icon hidden" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </button>
+    </div>
+    <pre class="hljs"><code class="hljs language-${language || 'text'}" data-raw-code="${codeForCopy}">${highlightedCode}</code></pre>
+  </div>`
+}
+
+// 配置 marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  renderer: renderer
+})
+
+// Markdown 渲染函数
+const renderMarkdown = (content: string): string => {
+  if (!content) return ''
+  const rawHtml = marked.parse(content)
+  return DOMPurify.sanitize(rawHtml as string, {
+    ADD_TAGS: ['div', 'button', 'svg', 'rect', 'path', 'polyline'],
+    ADD_ATTR: ['class', 'data-code-id', 'data-code-target', 'data-raw-code', 'title', 'xmlns', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'x', 'y', 'rx', 'ry', 'd', 'points']
+  })
+}
+
+// 复制代码到剪贴板
+const copyCodeToClipboard = async (event: Event) => {
+  const target = event.target as HTMLElement
+  const button = target.closest('.copy-code-btn') as HTMLElement
+  if (!button) return
+  
+  const codeId = button.getAttribute('data-code-target')
+  if (!codeId) return
+  
+  const wrapper = document.querySelector(`[data-code-id="${codeId}"]`)
+  if (!wrapper) return
+  
+  const codeElement = wrapper.querySelector('code[data-raw-code]') as HTMLElement
+  if (!codeElement) return
+  
+  // 获取原始代码（从 data 属性解码）
+  const rawCode = codeElement.getAttribute('data-raw-code')
+    ?.replace(/&quot;/g, '"')
+    ?.replace(/&amp;/g, '&') || ''
+  
+  try {
+    await navigator.clipboard.writeText(rawCode)
+    
+    // 显示成功状态
+    const copyIcon = button.querySelector('.copy-icon')
+    const checkIcon = button.querySelector('.check-icon')
+    const copyText = button.querySelector('.copy-text')
+    
+    if (copyIcon && checkIcon && copyText) {
+      copyIcon.classList.add('hidden')
+      checkIcon.classList.remove('hidden')
+      copyText.textContent = '已复制'
+      
+      // 2秒后恢复
+      setTimeout(() => {
+        copyIcon.classList.remove('hidden')
+        checkIcon.classList.add('hidden')
+        copyText.textContent = '复制'
+      }, 2000)
+    }
+  } catch (err) {
+    console.error('复制失败:', err)
+    addLog('error', '复制代码失败')
+  }
+}
+
+// 处理消息容器的点击事件（事件委托）
+const handleMessagesClick = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (target.closest('.copy-code-btn')) {
+    copyCodeToClipboard(event)
+  }
+}
 
 // 登录状态
 const isAuthenticated = ref(false)
@@ -154,16 +375,27 @@ const connectionId = ref<string>('')
 // 消息
 const messages = ref<Array<{
   id: string
-  type: 'user' | 'assistant' | 'system' | 'error'
+  type: 'user' | 'assistant' | 'system' | 'error' | 'thinking_chain' | 'analysis_node'
   content: string
   timestamp: Date
-  thinking?: boolean
+  thinking?: boolean  // 用于流程节点的思考状态
+  collapsed?: boolean  // 是否折叠（用于分析节点）
+  nodeType?: string  // 节点类型
 }>>([])
+
+// 当前分析节点状态
+const currentAnalysisContent = ref('')
+const isAnalyzing = ref(false)
 
 const inputMessage = ref('')
 const isStreaming = ref(false)
 const currentStreamContent = ref('')
+const currentThinkingContent = ref('')  // 存储 <think> 标签内的内容
+const isInThinkTag = ref(false)  // 是否在 <think> 标签内
 const messagesContainer = ref<HTMLElement | null>(null)
+const currentAssistantMsgId = ref<string>('')  // 当前正在流式传输的助手消息 ID
+const currentThinkingChainMsgId = ref<string>('')  // 当前思维链消息 ID
+const currentAnalysisMsgId = ref<string>('')  // 当前分析节点消息 ID
 
 // 连接统计
 const connectionStats = ref<{
@@ -317,54 +549,178 @@ const handleWebSocketMessage = (data: any) => {
       break
 
     case 'chat_started':
-      // 对话开始
+      // 对话开始 - 重置当前消息状态
       isStreaming.value = true
       currentStreamContent.value = ''
+      currentThinkingContent.value = ''
+      isInThinkTag.value = false
+      currentAssistantMsgId.value = ''  // 重置，准备创建新消息
+      currentThinkingChainMsgId.value = ''
+      currentAnalysisMsgId.value = ''
       config.conversationId = data.conversation_id || payload.conversation_id || config.conversationId
       addLog('info', `对话开始, 会话ID: ${config.conversationId}, 消息ID: ${data.message_id || payload.message_id}`)
       break
 
     case 'thinking':
-      // 思考过程
-      const thinkingContent = data.content || payload.content || payload.thinking_step || '正在思考...'
-      if (!messages.value.find(m => m.type === 'assistant' && m.thinking)) {
+      // 流程节点思考状态 - 显示为分析节点
+      const thinkingStep = payload.thinking_step || {}
+      const thinkingContent = data.content || payload.content || thinkingStep.content || '正在分析...'
+      const thinkingType = data.step_type || payload.type || thinkingStep.type || 'analysis'
+      
+      isAnalyzing.value = true
+      currentAnalysisContent.value = thinkingContent
+      
+      // 查找当前分析节点消息（使用 ID 跟踪）
+      if (currentAnalysisMsgId.value) {
+        const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
+        if (analysisMsg && !analysisMsg.collapsed) {
+          // 更新现有分析节点的内容
+          analysisMsg.content = thinkingContent
+          analysisMsg.nodeType = thinkingType
+        } else {
+          // 创建新的分析节点
+          const newId = 'analysis-' + Date.now().toString()
+          currentAnalysisMsgId.value = newId
+          messages.value.push({
+            id: newId,
+            type: 'analysis_node',
+            content: thinkingContent,
+            timestamp: new Date(),
+            collapsed: false,
+            nodeType: thinkingType
+          })
+        }
+      } else {
+        // 创建新的分析节点
+        const newId = 'analysis-' + Date.now().toString()
+        currentAnalysisMsgId.value = newId
         messages.value.push({
-          id: Date.now().toString(),
-          type: 'assistant',
+          id: newId,
+          type: 'analysis_node',
           content: thinkingContent,
           timestamp: new Date(),
-          thinking: true
+          collapsed: false,
+          nodeType: thinkingType
         })
-      } else {
-        const thinkingMsg = messages.value.find(m => m.type === 'assistant' && m.thinking)
-        if (thinkingMsg) {
-          thinkingMsg.content = thinkingContent
-        }
       }
-      addLog('info', `思考: ${data.step_type || payload.type || ''} - ${thinkingContent.substring(0, 50)}...`)
+      
+      addLog('info', `分析节点 [${thinkingType}]: ${thinkingContent.substring(0, 50)}${thinkingContent.length > 50 ? '...' : ''}`)
       scrollToBottom()
       break
 
     case 'token':
     case 'chat_token':
-      // 文本增量
-      const tokenContent = data.content || data.delta || payload.content || payload.delta || ''
-      currentStreamContent.value += tokenContent
-      // 更新最后一条消息
-      const lastMsg = messages.value[messages.value.length - 1]
-      if (lastMsg && lastMsg.type === 'assistant') {
-        lastMsg.content = currentStreamContent.value
-        lastMsg.thinking = false
-      } else {
-        messages.value.push({
-          id: Date.now().toString(),
-          type: 'assistant',
-          content: currentStreamContent.value,
-          timestamp: new Date(),
-          thinking: false
-        })
+    case 'chat_response':
+      // 文本增量 - 内容可能在 delta 或 content 中
+      const tokenContent = data.delta || data.content || payload.delta || payload.content || ''
+      if (tokenContent) {
+        // 解析 <think> 标签 - 思维链内容
+        let remaining = tokenContent
+        
+        while (remaining.length > 0) {
+          if (isInThinkTag.value) {
+            // 在 think 标签内，查找结束标签
+            const endIndex = remaining.indexOf('</think>')
+            if (endIndex !== -1) {
+              // 找到结束标签
+              currentThinkingContent.value += remaining.substring(0, endIndex)
+              isInThinkTag.value = false
+              remaining = remaining.substring(endIndex + 8) // 跳过 </think>
+              
+              // 更新思维链消息（使用 ID 跟踪）
+              if (currentThinkingChainMsgId.value) {
+                const thinkingChainMsg = messages.value.find(m => m.id === currentThinkingChainMsgId.value)
+                if (thinkingChainMsg) {
+                  thinkingChainMsg.content = currentThinkingContent.value.trim()
+                }
+              }
+            } else {
+              // 没有结束标签，全部是思考内容
+              currentThinkingContent.value += remaining
+              remaining = ''
+              
+              // 更新思维链消息（使用 ID 跟踪）- 只有已经创建了思维链消息才更新
+              if (currentThinkingChainMsgId.value) {
+                const thinkingChainMsg = messages.value.find(m => m.id === currentThinkingChainMsgId.value)
+                if (thinkingChainMsg) {
+                  thinkingChainMsg.content = currentThinkingContent.value.trim()
+                }
+              }
+              // 注意：不在这里创建思维链消息，只有在检测到 <think> 开始标签时才创建
+            }
+          } else {
+            // 不在 think 标签内，查找开始标签
+            const startIndex = remaining.indexOf('<think>')
+            if (startIndex !== -1) {
+              // 找到开始标签，先处理标签前的内容
+              const beforeThink = remaining.substring(0, startIndex)
+              if (beforeThink.trim()) {
+                currentStreamContent.value += beforeThink
+              }
+              isInThinkTag.value = true
+              remaining = remaining.substring(startIndex + 7) // 跳过 <think>
+              
+              // 如果当前没有思维链消息，创建一个
+              if (!currentThinkingChainMsgId.value) {
+                // 先折叠分析节点
+                if (currentAnalysisMsgId.value) {
+                  const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
+                  if (analysisMsg && !analysisMsg.collapsed) {
+                    analysisMsg.collapsed = true
+                    isAnalyzing.value = false
+                  }
+                }
+                
+                const newId = 'thinking-chain-' + Date.now().toString()
+                currentThinkingChainMsgId.value = newId
+                messages.value.push({
+                  id: newId,
+                  type: 'thinking_chain',
+                  content: '正在思考...',
+                  timestamp: new Date()
+                })
+              }
+            } else {
+              // 没有开始标签，全部是正常内容
+              currentStreamContent.value += remaining
+              remaining = ''
+            }
+          }
+        }
+        
+        // 更新正常回复消息（非思考内容）- 使用 ID 跟踪
+        if (currentStreamContent.value.trim()) {
+          // 折叠分析节点（如果有的话）
+          if (currentAnalysisMsgId.value) {
+            const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
+            if (analysisMsg && !analysisMsg.collapsed) {
+              analysisMsg.collapsed = true
+              isAnalyzing.value = false
+            }
+          }
+          
+          // 查找当前助手消息（使用 ID 跟踪）
+          if (currentAssistantMsgId.value) {
+            const normalMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
+            if (normalMsg) {
+              normalMsg.content = currentStreamContent.value.trim()
+            }
+          } else {
+            // 创建新的助手消息
+            const newId = payload.message_id || Date.now().toString()
+            currentAssistantMsgId.value = newId
+            messages.value.push({
+              id: newId,
+              type: 'assistant',
+              content: currentStreamContent.value.trim(),
+              timestamp: new Date(),
+              thinking: false
+            })
+          }
+        }
+        
+        scrollToBottom()
       }
-      scrollToBottom()
       break
 
     case 'task_analysis':
@@ -441,20 +797,42 @@ const handleWebSocketMessage = (data: any) => {
       // 对话完成 - 处理 payload 中的内容
       isStreaming.value = false
       
-      // 如果 payload 中有完整内容，显示它
-      if (payload.content && payload.is_complete) {
-        // 查找或创建助手消息
-        const existingMsg = messages.value.find(m => m.type === 'assistant' && !m.thinking)
-        if (existingMsg) {
-          existingMsg.content = payload.content
-        } else {
-          messages.value.push({
-            id: payload.message_id || Date.now().toString(),
-            type: 'assistant',
-            content: payload.content,
-            timestamp: new Date(),
-            thinking: false
-          })
+      // 优先使用流式传输过程中累积的内容（已经过滤了 <think> 标签）
+      // 只有当没有流式内容时，才使用 payload.content
+      if (currentStreamContent.value.trim()) {
+        // 已经有流式内容，不需要再处理 payload.content
+        // 流式内容已经在 token 事件中正确过滤了 <think> 标签
+        addLog('info', '使用流式传输的内容')
+      } else if (payload.content && payload.is_complete) {
+        // 没有流式内容，使用 payload.content（需要过滤 <think> 标签）
+        // 过滤掉 <think>...</think> 标签内容
+        let cleanContent = payload.content
+        const thinkRegex = /<think>[\s\S]*?<\/think>/g
+        cleanContent = cleanContent.replace(thinkRegex, '').trim()
+        
+        // 如果过滤后内容和思维链内容相同，说明没有正常回复内容
+        // 这种情况下不应该显示
+        if (currentThinkingContent.value.trim() && cleanContent === currentThinkingContent.value.trim()) {
+          addLog('info', '过滤后内容与思维链相同，跳过')
+        } else if (cleanContent) {
+          // 查找当前助手消息（使用 ID 跟踪）
+          if (currentAssistantMsgId.value) {
+            const existingMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
+            if (existingMsg) {
+              existingMsg.content = cleanContent
+            }
+          } else {
+            // 创建新的助手消息
+            const newId = payload.message_id || Date.now().toString()
+            currentAssistantMsgId.value = newId
+            messages.value.push({
+              id: newId,
+              type: 'assistant',
+              content: cleanContent,
+              timestamp: new Date(),
+              thinking: false
+            })
+          }
         }
       }
       
@@ -506,15 +884,19 @@ const handleWebSocketMessage = (data: any) => {
       addLog('warn', `未知消息类型: ${msgType}`)
       console.log('未知消息:', data)
       
-      // 如果有 payload.content，尝试显示
+      // 如果有 payload.content，尝试显示（使用 ID 跟踪）
       if (payload.content) {
-        const lastAssistantMsg = messages.value.find(m => m.type === 'assistant')
-        if (lastAssistantMsg) {
-          lastAssistantMsg.content = payload.content
-          lastAssistantMsg.thinking = false
+        if (currentAssistantMsgId.value) {
+          const lastAssistantMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
+          if (lastAssistantMsg) {
+            lastAssistantMsg.content = payload.content
+            lastAssistantMsg.thinking = false
+          }
         } else {
+          const newId = Date.now().toString()
+          currentAssistantMsgId.value = newId
           messages.value.push({
-            id: Date.now().toString(),
+            id: newId,
             type: 'assistant',
             content: payload.content,
             timestamp: new Date(),
@@ -604,8 +986,15 @@ const getStats = () => {
 const clearMessages = () => {
   messages.value = []
   currentStreamContent.value = ''
+  currentThinkingContent.value = ''
+  currentAnalysisContent.value = ''
+  isInThinkTag.value = false
+  isAnalyzing.value = false
   flowNodes.value = []
   taskAnalysis.value = null
+  currentAssistantMsgId.value = ''
+  currentThinkingChainMsgId.value = ''
+  currentAnalysisMsgId.value = ''
   addLog('info', '消息已清空')
 }
 
@@ -964,7 +1353,7 @@ onUnmounted(() => {
           </div>
           
           <!-- 消息列表 -->
-          <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref="messagesContainer" @click="handleMessagesClick" class="flex-1 overflow-y-auto p-4 space-y-4">
             <div v-if="messages.length === 0 && wsStatus === 'connecting'" class="text-center text-slate-400 py-8">
               <Loader2 class="w-8 h-8 animate-spin mx-auto mb-2" />
               正在连接服务器...
@@ -978,21 +1367,47 @@ onUnmounted(() => {
             </div>
             
             <div v-for="msg in messages" :key="msg.id" :class="[
-              'max-w-[80%] rounded-xl p-3',
-              msg.type === 'user' ? 'ml-auto bg-brand-600 text-white' :
-              msg.type === 'assistant' ? 'bg-slate-100 text-slate-800' :
-              msg.type === 'system' ? 'mx-auto bg-blue-50 text-blue-700 text-sm max-w-full' :
-              'bg-red-50 text-red-800'
+              'rounded-xl',
+              msg.type === 'user' ? 'ml-auto bg-brand-50 text-brand-800 border border-brand-200 p-3 max-w-fit' :
+              msg.type === 'analysis_node' ? (msg.collapsed ? 'bg-amber-50 text-amber-700 border border-amber-200 p-3 max-w-[80%]' : 'bg-amber-50 text-amber-800 border border-amber-300 p-3 max-w-[80%]') :
+              msg.type === 'thinking_chain' ? 'bg-purple-50 text-purple-800 border border-purple-200 p-3 max-w-[80%]' :
+              msg.type === 'assistant' ? 'bg-white border border-slate-200 shadow-sm overflow-hidden max-w-[80%]' :
+              msg.type === 'system' ? 'mx-auto bg-blue-50 text-blue-700 text-sm max-w-full p-3' :
+              'bg-red-50 text-red-800 p-3 max-w-[80%]'
             ]">
-              <div v-if="msg.thinking" class="flex items-center gap-2">
-                <Loader2 class="w-4 h-4 animate-spin" />
-                <span>{{ msg.content }}</span>
+              <!-- 分析节点 -->
+              <div v-if="msg.type === 'analysis_node'" class="space-y-2">
+                <div class="flex items-center gap-2 text-amber-600 text-sm font-medium">
+                  <Loader2 v-if="!msg.collapsed" class="w-4 h-4 animate-spin" />
+                  <CheckCircle v-else class="w-4 h-4" />
+                  <span>{{ msg.collapsed ? '分析完成' : '分析中...' }}</span>
+                  <span v-if="msg.nodeType" class="text-xs text-amber-500">[{{ msg.nodeType }}]</span>
+                </div>
+                <div v-if="!msg.collapsed" class="whitespace-pre-wrap text-amber-700 text-sm">{{ msg.content }}</div>
               </div>
+              <!-- 思维链 -->
+              <div v-else-if="msg.type === 'thinking_chain'" class="space-y-2">
+                <div class="flex items-center gap-2 text-purple-600 text-sm font-medium">
+                  <Brain class="w-4 h-4" />
+                  <span>思维链</span>
+                </div>
+                <div class="whitespace-pre-wrap text-purple-700">{{ msg.content }}</div>
+              </div>
+              <!-- AI 回复 - 带淡蓝色题头条和 Markdown 渲染 -->
+              <div v-else-if="msg.type === 'assistant'" class="assistant-message">
+                <div class="bg-sky-100 px-4 py-2 border-b border-sky-200">
+                  <span class="text-sky-700 font-medium text-sm">AI 回复</span>
+                </div>
+                <div class="p-4">
+                  <div class="prose prose-slate prose-sm max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-code:text-pink-600 prose-code:bg-pink-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none" v-html="renderMarkdown(msg.content)"></div>
+                  <div class="text-xs mt-3 text-slate-400">
+                    {{ msg.timestamp.toLocaleTimeString() }}
+                  </div>
+                </div>
+              </div>
+              <!-- 其他消息类型 -->
               <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
-              <div :class="[
-                'text-xs mt-1 opacity-60',
-                msg.type === 'user' ? 'text-right' : ''
-              ]">
+              <div v-if="msg.type !== 'assistant' && msg.type !== 'user'" class="text-xs mt-1 opacity-60">
                 {{ msg.timestamp.toLocaleTimeString() }}
               </div>
             </div>
@@ -1028,3 +1443,129 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Markdown 内容样式 */
+
+/* 代码块包装器 */
+.assistant-message :deep(.code-block-wrapper) {
+  @apply my-4 rounded-lg overflow-hidden border border-blue-100 shadow-sm;
+}
+
+/* 代码块题头条 - 浅蓝色 */
+.assistant-message :deep(.code-block-header) {
+  @apply bg-blue-50 px-4 py-2 flex items-center justify-between border-b border-blue-100;
+}
+
+.assistant-message :deep(.code-lang) {
+  @apply text-blue-700 text-xs font-bold;
+}
+
+/* 复制按钮 - 只有图标 */
+.assistant-message :deep(.copy-code-btn) {
+  @apply p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors;
+}
+
+.assistant-message :deep(.copy-code-btn .hidden) {
+  display: none;
+}
+
+.assistant-message :deep(.copy-code-btn .check-icon) {
+  @apply text-green-500;
+}
+
+/* 代码块内容 - 浅色背景带语法高亮 */
+.assistant-message :deep(.code-block-wrapper pre) {
+  @apply bg-[#f8faff] p-4 overflow-x-auto m-0 rounded-none;
+}
+
+.assistant-message :deep(.code-block-wrapper pre code) {
+  @apply bg-transparent p-0 text-sm leading-relaxed;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  color: #334155;
+}
+
+/* 代码语法高亮颜色 */
+.assistant-message :deep(.code-block-wrapper pre code .keyword),
+.assistant-message :deep(.code-block-wrapper pre code) {
+  color: #334155;
+}
+
+/* 独立的 pre 标签（没有包装器的情况） */
+.assistant-message :deep(pre:not(.code-block-wrapper pre)) {
+  @apply bg-slate-800 text-slate-100 rounded-lg p-4 overflow-x-auto my-3;
+}
+
+.assistant-message :deep(pre:not(.code-block-wrapper pre) code) {
+  @apply bg-transparent text-slate-100 p-0;
+}
+
+/* 行内代码 */
+.assistant-message :deep(code:not(pre code)) {
+  @apply text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded text-sm;
+}
+
+.assistant-message :deep(h1),
+.assistant-message :deep(h2),
+.assistant-message :deep(h3) {
+  @apply font-bold text-slate-800 mt-4 mb-2;
+}
+
+.assistant-message :deep(h1) {
+  @apply text-xl;
+}
+
+.assistant-message :deep(h2) {
+  @apply text-lg;
+}
+
+.assistant-message :deep(h3) {
+  @apply text-base;
+}
+
+.assistant-message :deep(p) {
+  @apply my-2 leading-relaxed;
+}
+
+.assistant-message :deep(ul),
+.assistant-message :deep(ol) {
+  @apply my-2 pl-5;
+}
+
+.assistant-message :deep(li) {
+  @apply my-1;
+}
+
+.assistant-message :deep(blockquote) {
+  @apply border-l-4 border-slate-300 pl-4 my-3 text-slate-600 italic;
+}
+
+.assistant-message :deep(strong) {
+  @apply font-bold text-slate-900;
+}
+
+.assistant-message :deep(em) {
+  @apply italic;
+}
+
+.assistant-message :deep(a) {
+  @apply text-brand-600 hover:underline;
+}
+
+.assistant-message :deep(hr) {
+  @apply my-4 border-slate-200;
+}
+
+.assistant-message :deep(table) {
+  @apply w-full my-3 border-collapse;
+}
+
+.assistant-message :deep(th),
+.assistant-message :deep(td) {
+  @apply border border-slate-200 px-3 py-2 text-left;
+}
+
+.assistant-message :deep(th) {
+  @apply bg-slate-50 font-semibold;
+}
+</style>
