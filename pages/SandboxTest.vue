@@ -59,17 +59,29 @@ const initAfterLogin = async () => {
     const data = await response.json()
     console.log('获取 Token 成功:', data)
     
-    // 保存 token
-    if (data.token) {
-      chatToken.value = data.token
-      addLog('success', `Token 获取成功: ${data.token.substring(0, 20)}...`)
+    // 检查响应是否成功
+    if (!data.success) {
+      throw new Error(data.message || '请求失败')
+    }
+    
+    // 保存 access_token
+    if (data.data?.access_token) {
+      chatToken.value = data.data.access_token
+      addLog('success', `Token 获取成功: ${data.data.access_token.substring(0, 30)}...`)
     } else {
-      throw new Error('响应中没有 token 字段')
+      throw new Error('响应中没有 access_token 字段')
     }
     
     // 如果返回了 conversation_id，使用它
-    if (data.conversation_id) {
-      config.conversationId = data.conversation_id
+    if (data.data?.conversation_id) {
+      config.conversationId = data.data.conversation_id
+      addLog('info', `会话 ID: ${data.data.conversation_id}`)
+    }
+    
+    // 保存 user_id
+    if (data.data?.user_id) {
+      config.userId = data.data.user_id
+      addLog('info', `用户 ID: ${data.data.user_id}`)
     }
     
     // 使用 token 连接 WebSocket
@@ -285,18 +297,19 @@ const reconnect = async () => {
 // 处理 WebSocket 消息
 const handleWebSocketMessage = (data: any) => {
   const msgType = data.type
+  const payload = data.payload || {}
 
   switch (msgType) {
     case 'connected':
-      connectionId.value = data.connection_id
+      connectionId.value = data.connection_id || payload.connection_id
       // 更新会话信息
       sessionInfo.value = {
-        userId: data.user_id,
+        userId: data.user_id || payload.user_id || config.userId,
         conversationId: config.conversationId,
-        connectionId: data.connection_id,
+        connectionId: data.connection_id || payload.connection_id || '',
         connectedAt: new Date().toLocaleString()
       }
-      addLog('success', `连接已建立, ID: ${data.connection_id}, 用户: ${data.user_id}`)
+      addLog('success', `连接已建立, ID: ${sessionInfo.value.connectionId}, 用户: ${sessionInfo.value.userId}`)
       break
 
     case 'pong':
@@ -307,33 +320,36 @@ const handleWebSocketMessage = (data: any) => {
       // 对话开始
       isStreaming.value = true
       currentStreamContent.value = ''
-      config.conversationId = data.conversation_id
-      addLog('info', `对话开始, 会话ID: ${data.conversation_id}, 消息ID: ${data.message_id}`)
+      config.conversationId = data.conversation_id || payload.conversation_id || config.conversationId
+      addLog('info', `对话开始, 会话ID: ${config.conversationId}, 消息ID: ${data.message_id || payload.message_id}`)
       break
 
     case 'thinking':
       // 思考过程
+      const thinkingContent = data.content || payload.content || payload.thinking_step || '正在思考...'
       if (!messages.value.find(m => m.type === 'assistant' && m.thinking)) {
         messages.value.push({
           id: Date.now().toString(),
           type: 'assistant',
-          content: data.content || '正在思考...',
+          content: thinkingContent,
           timestamp: new Date(),
           thinking: true
         })
       } else {
         const thinkingMsg = messages.value.find(m => m.type === 'assistant' && m.thinking)
         if (thinkingMsg) {
-          thinkingMsg.content = data.content || '正在思考...'
+          thinkingMsg.content = thinkingContent
         }
       }
-      addLog('info', `思考: ${data.step_type || ''} - ${(data.content || '').substring(0, 50)}...`)
+      addLog('info', `思考: ${data.step_type || payload.type || ''} - ${thinkingContent.substring(0, 50)}...`)
       scrollToBottom()
       break
 
     case 'token':
+    case 'chat_token':
       // 文本增量
-      currentStreamContent.value += data.content || data.delta || ''
+      const tokenContent = data.content || data.delta || payload.content || payload.delta || ''
+      currentStreamContent.value += tokenContent
       // 更新最后一条消息
       const lastMsg = messages.value[messages.value.length - 1]
       if (lastMsg && lastMsg.type === 'assistant') {
@@ -353,23 +369,23 @@ const handleWebSocketMessage = (data: any) => {
 
     case 'task_analysis':
       // 任务分析结果
-      taskAnalysis.value = data.analysis
-      addLog('info', `任务分析完成: ${JSON.stringify(data.analysis).substring(0, 100)}...`)
+      taskAnalysis.value = data.analysis || payload.analysis
+      addLog('info', `任务分析完成: ${JSON.stringify(taskAnalysis.value).substring(0, 100)}...`)
       break
 
     case 'sandbox_ready':
       // 沙箱就绪
       sandboxInfo.value = {
         has_sandbox: true,
-        session_id: data.session_id,
-        vnc_url: data.vnc_url,
-        vnc_password: data.vnc_password
+        session_id: data.session_id || payload.session_id,
+        vnc_url: data.vnc_url || payload.vnc_url,
+        vnc_password: data.vnc_password || payload.vnc_password
       }
-      addLog('success', `沙箱就绪: ${data.session_id}`)
+      addLog('success', `沙箱就绪: ${sandboxInfo.value.session_id}`)
       messages.value.push({
         id: Date.now().toString(),
         type: 'system',
-        content: `🖥️ 沙箱环境已就绪 (ID: ${data.session_id})`,
+        content: `🖥️ 沙箱环境已就绪 (ID: ${sandboxInfo.value.session_id})`,
         timestamp: new Date()
       })
       scrollToBottom()
@@ -378,63 +394,86 @@ const handleWebSocketMessage = (data: any) => {
     case 'flow_node':
       // 流程节点状态
       flowNodes.value.push({
-        node: data.node,
-        status: data.status,
-        message: data.message,
-        data: data.data,
+        node: data.node || payload.node,
+        status: data.status || payload.status,
+        message: data.message || payload.message,
+        data: data.data || payload.data,
         timestamp: new Date()
       })
-      addLog('info', `流程节点: ${data.node} - ${data.status}: ${data.message}`)
+      addLog('info', `流程节点: ${data.node || payload.node} - ${data.status || payload.status}: ${data.message || payload.message}`)
       break
 
     case 'plan_start':
     case 'plan_complete':
     case 'plan_revision':
     case 'plan_revised':
-      addLog('info', `计划事件 [${msgType}]: ${data.message || ''}`)
+      addLog('info', `计划事件 [${msgType}]: ${data.message || payload.message || ''}`)
       break
 
     case 'step_start':
     case 'step_success':
     case 'step_failed':
     case 'step_retry':
-      addLog('info', `步骤事件 [${msgType}]: ${data.message || ''}`)
+      addLog('info', `步骤事件 [${msgType}]: ${data.message || payload.message || ''}`)
       break
 
     case 'tool_call':
-      addLog('info', `工具调用: ${data.tool} - ${JSON.stringify(data.arguments || {}).substring(0, 100)}`)
+      addLog('info', `工具调用: ${data.tool || payload.tool} - ${JSON.stringify(data.arguments || payload.arguments || {}).substring(0, 100)}`)
       break
 
     case 'tool_result':
-      addLog('info', `工具结果: ${data.tool} - ${JSON.stringify(data.result || {}).substring(0, 100)}`)
+      addLog('info', `工具结果: ${data.tool || payload.tool} - ${JSON.stringify(data.result || payload.result || {}).substring(0, 100)}`)
       break
 
     case 'llm_call':
-      addLog('info', `LLM 调用: ${data.purpose || ''} - ${(data.message || '').substring(0, 50)}`)
+      addLog('info', `LLM 调用: ${data.purpose || payload.purpose || ''} - ${(data.message || payload.message || '').substring(0, 50)}`)
       break
 
     case 'variable_set':
-      addLog('info', `变量设置: ${JSON.stringify(data.data || {})}`)
+      addLog('info', `变量设置: ${JSON.stringify(data.data || payload.data || {})}`)
       break
 
     case 'retry':
-      addLog('warn', `重试 ${data.attempt}/${data.max_retries}: ${data.error}, 延迟 ${data.delay}s`)
+      addLog('warn', `重试 ${data.attempt || payload.attempt}/${data.max_retries || payload.max_retries}: ${data.error || payload.error}, 延迟 ${data.delay || payload.delay}s`)
       break
 
     case 'chat_complete':
-      // 对话完成
+      // 对话完成 - 处理 payload 中的内容
       isStreaming.value = false
-      addLog('success', `对话完成, 消息ID: ${data.message_id}`)
+      
+      // 如果 payload 中有完整内容，显示它
+      if (payload.content && payload.is_complete) {
+        // 查找或创建助手消息
+        const existingMsg = messages.value.find(m => m.type === 'assistant' && !m.thinking)
+        if (existingMsg) {
+          existingMsg.content = payload.content
+        } else {
+          messages.value.push({
+            id: payload.message_id || Date.now().toString(),
+            type: 'assistant',
+            content: payload.content,
+            timestamp: new Date(),
+            thinking: false
+          })
+        }
+      }
+      
+      // 更新会话 ID
+      if (payload.conversation_id) {
+        config.conversationId = payload.conversation_id
+      }
+      
+      addLog('success', `对话完成, 消息ID: ${data.message_id || payload.message_id}`)
       scrollToBottom()
       break
 
     case 'sandbox_info':
       // 沙箱信息响应
       sandboxInfo.value = {
-        has_sandbox: data.has_sandbox,
-        ...data.sandbox_info
+        has_sandbox: data.has_sandbox || payload.has_sandbox,
+        ...(data.sandbox_info || payload.sandbox_info || {})
       }
-      addLog('info', `沙箱信息: ${data.has_sandbox ? '已创建' : '未创建'}`)
+      addLog('info', `沙箱信息: ${sandboxInfo.value.has_sandbox ? '已创建' : '未创建'}`)
       break
 
     case 'memory_cleared':
@@ -443,27 +482,47 @@ const handleWebSocketMessage = (data: any) => {
 
     case 'stats':
       connectionStats.value = {
-        total_connections: data.active_connections,
-        total_users: data.active_users,
-        total_conversations: data.active_agents
+        total_connections: data.active_connections || payload.active_connections || 0,
+        total_users: data.active_users || payload.active_users || 0,
+        total_conversations: data.active_agents || payload.active_agents || 0
       }
       break
 
     case 'error':
       isStreaming.value = false
+      const errorMsg = data.error || data.message || payload.error || payload.message || '发生错误'
       messages.value.push({
         id: Date.now().toString(),
         type: 'error',
-        content: data.error || data.message || '发生错误',
+        content: errorMsg,
         timestamp: new Date()
       })
-      addLog('error', `错误: ${data.error || data.message}`)
+      addLog('error', `错误: ${errorMsg}`)
       scrollToBottom()
       break
 
     default:
-      // 记录未知消息类型
+      // 记录未知消息类型，但也尝试处理 payload 中的内容
       addLog('warn', `未知消息类型: ${msgType}`)
+      console.log('未知消息:', data)
+      
+      // 如果有 payload.content，尝试显示
+      if (payload.content) {
+        const lastAssistantMsg = messages.value.find(m => m.type === 'assistant')
+        if (lastAssistantMsg) {
+          lastAssistantMsg.content = payload.content
+          lastAssistantMsg.thinking = false
+        } else {
+          messages.value.push({
+            id: Date.now().toString(),
+            type: 'assistant',
+            content: payload.content,
+            timestamp: new Date(),
+            thinking: false
+          })
+        }
+        scrollToBottom()
+      }
       break
   }
 }
