@@ -24,14 +24,68 @@ const handleLogin = () => {
       isAuthenticated.value = true
       // 保存登录状态到 sessionStorage（页面刷新后需要重新登录）
       sessionStorage.setItem('sandbox_authenticated', 'true')
-      // 登录成功后自动连接
-      generateConversationId()
-      connectWebSocket()
+      // 登录成功后进入主界面，然后初始化
+      initAfterLogin()
     } else {
       loginError.value = '密码错误，请重试'
     }
     isLoggingIn.value = false
   }, 500)
+}
+
+// 存储从 API 获取的 token
+const chatToken = ref<string>('')
+
+// 登录后初始化：调用 API 获取 token，然后使用 token 连接 WebSocket
+const initAfterLogin = async () => {
+  try {
+    addLog('info', '正在获取 Token...')
+    
+    // 调用后端接口获取 token
+    const response = await fetch('https://sandbox.toproject.cloud/endpoint/chat/conversations/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        title: '测试对话'
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    console.log('获取 Token 成功:', data)
+    
+    // 保存 token
+    if (data.token) {
+      chatToken.value = data.token
+      addLog('success', `Token 获取成功: ${data.token.substring(0, 20)}...`)
+    } else {
+      throw new Error('响应中没有 token 字段')
+    }
+    
+    // 如果返回了 conversation_id，使用它
+    if (data.conversation_id) {
+      config.conversationId = data.conversation_id
+    }
+    
+    // 使用 token 连接 WebSocket
+    connectWebSocket()
+  } catch (error) {
+    console.error('获取 Token 失败:', error)
+    addLog('error', `获取 Token 失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    
+    // 显示错误消息
+    messages.value.push({
+      id: Date.now().toString(),
+      type: 'error',
+      content: `获取 Token 失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      timestamp: new Date()
+    })
+  }
 }
 
 // 检查是否已登录
@@ -46,7 +100,7 @@ const checkAuthentication = () => {
 
 // 配置
 const config = reactive({
-  orchestratorUrl: 'ws://localhost:8001',
+  orchestratorUrl: 'wss://sandbox.toproject.cloud/endpoint/ws/chat',
   userId: 'test-user-' + Math.random().toString(36).substring(7),
   conversationId: '',
   includeThinking: true
@@ -150,11 +204,16 @@ const connectWebSocket = () => {
     return
   }
 
-  wsStatus.value = 'connecting'
-  addLog('info', `正在连接到 ${config.orchestratorUrl}...`)
+  if (!chatToken.value) {
+    addLog('error', '没有有效的 Token，无法连接 WebSocket')
+    return
+  }
 
-  // 新的 WebSocket 端点格式: /ws?user_id=xxx
-  const wsUrl = `${config.orchestratorUrl}/ws?user_id=${encodeURIComponent(config.userId)}`
+  wsStatus.value = 'connecting'
+  
+  // 使用 token 连接 WebSocket
+  const wsUrl = `wss://sandbox.toproject.cloud/endpoint/ws/chat?token=${encodeURIComponent(chatToken.value)}`
+  addLog('info', `正在连接到 WebSocket...`)
   
   try {
     ws.value = new WebSocket(wsUrl)
@@ -216,12 +275,11 @@ const disconnectWebSocket = () => {
   }
 }
 
-// 重新连接
-const reconnect = () => {
+// 重新连接（需要重新获取 token）
+const reconnect = async () => {
   disconnectWebSocket()
-  setTimeout(() => {
-    connectWebSocket()
-  }, 500)
+  // 重新获取 token 并连接
+  await initAfterLogin()
 }
 
 // 处理 WebSocket 消息
@@ -531,9 +589,8 @@ let heartbeatInterval: number | null = null
 onMounted(() => {
   // 检查是否已登录
   if (checkAuthentication()) {
-    generateConversationId()
-    // 自动连接
-    connectWebSocket()
+    // 已登录，执行初始化（调用 API 创建对话，然后连接 WebSocket）
+    initAfterLogin()
   }
   
   // 启动心跳
