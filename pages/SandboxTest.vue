@@ -1,1571 +1,2218 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, Send, Trash2, RefreshCw, Terminal, Wifi, WifiOff, Settings, MessageSquare, Loader2, CheckCircle, XCircle, AlertCircle, Lock, Eye, EyeOff, Monitor, Brain, BarChart3, Eraser } from 'lucide-vue-next'
+import { Home, Send, Trash2, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle, XCircle, Lock, Eye, EyeOff, Monitor, Clock, SkipForward, ChevronRight, ChevronDown, File, Folder, ExternalLink, ListTodo, FolderTree, Wrench, FileText, Download, Archive } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
 
-// 覆盖 highlight.js 默认样式，使用更好看的颜色
-const overrideHljsStyles = () => {
-  const style = document.createElement('style')
-  style.textContent = `
-    .assistant-message .hljs { background: #f8faff !important; color: #334155 !important; }
-    .assistant-message .hljs-keyword, .assistant-message .hljs-selector-tag { color: #a626a4 !important; font-weight: bold; }
-    .assistant-message .hljs-title, .assistant-message .hljs-section, .assistant-message .hljs-selector-id { color: #4078f2 !important; font-weight: bold; }
-    .assistant-message .hljs-title.function_ { color: #4078f2 !important; }
-    .assistant-message .hljs-title.class_ { color: #c18401 !important; }
-    .assistant-message .hljs-string, .assistant-message .hljs-doctag { color: #50a14f !important; }
-    .assistant-message .hljs-type, .assistant-message .hljs-number, .assistant-message .hljs-selector-class, .assistant-message .hljs-quote, .assistant-message .hljs-template-tag, .assistant-message .hljs-deletion { color: #986801 !important; }
-    .assistant-message .hljs-comment, .assistant-message .hljs-meta { color: #a0a1a7 !important; font-style: italic; }
-    .assistant-message .hljs-variable, .assistant-message .hljs-template-variable, .assistant-message .hljs-attr, .assistant-message .hljs-attribute { color: #e45649 !important; }
-    .assistant-message .hljs-symbol, .assistant-message .hljs-bullet, .assistant-message .hljs-link, .assistant-message .hljs-selector-attr, .assistant-message .hljs-selector-pseudo { color: #0184bc !important; }
-    .assistant-message .hljs-built_in, .assistant-message .hljs-builtin-name { color: #c18401 !important; }
-    .assistant-message .hljs-literal { color: #0184bc !important; }
-    .assistant-message .hljs-params { color: #383a42 !important; }
-    .assistant-message .hljs-name { color: #e45649 !important; }
-  `
-  document.head.appendChild(style)
-}
-if (typeof window !== 'undefined') overrideHljsStyles()
-
-// 自定义渲染器 - 为代码块添加语言题头条
-const renderer = new marked.Renderer()
-
-// 语言名称映射
-const languageNames: Record<string, string> = {
-  'js': 'JavaScript',
-  'javascript': 'JavaScript',
-  'ts': 'TypeScript',
-  'typescript': 'TypeScript',
-  'py': 'Python',
-  'python': 'Python',
-  'java': 'Java',
-  'cpp': 'C++',
-  'c++': 'C++',
-  'c': 'C',
-  'cs': 'C#',
-  'csharp': 'C#',
-  'go': 'Go',
-  'rust': 'Rust',
-  'rb': 'Ruby',
-  'ruby': 'Ruby',
-  'php': 'PHP',
-  'swift': 'Swift',
-  'kotlin': 'Kotlin',
-  'scala': 'Scala',
-  'html': 'HTML',
-  'css': 'CSS',
-  'scss': 'SCSS',
-  'sass': 'Sass',
-  'less': 'Less',
-  'json': 'JSON',
-  'xml': 'XML',
-  'yaml': 'YAML',
-  'yml': 'YAML',
-  'md': 'Markdown',
-  'markdown': 'Markdown',
-  'sql': 'SQL',
-  'bash': 'Bash',
-  'sh': 'Shell',
-  'shell': 'Shell',
-  'powershell': 'PowerShell',
-  'ps1': 'PowerShell',
-  'dockerfile': 'Dockerfile',
-  'docker': 'Docker',
-  'vue': 'Vue',
-  'react': 'React',
-  'jsx': 'JSX',
-  'tsx': 'TSX',
-  'graphql': 'GraphQL',
-  'r': 'R',
-  'matlab': 'MATLAB',
-  'perl': 'Perl',
-  'lua': 'Lua',
-  'dart': 'Dart',
-  'elixir': 'Elixir',
-  'erlang': 'Erlang',
-  'haskell': 'Haskell',
-  'clojure': 'Clojure',
-  'lisp': 'Lisp',
-  'scheme': 'Scheme',
-  'assembly': 'Assembly',
-  'asm': 'Assembly',
-  'text': '纯文本',
-  'plaintext': '纯文本',
-  'txt': '纯文本'
-}
-
-// 生成唯一 ID
+// Markdown
+const languageNames: Record<string, string> = { js: 'JavaScript', ts: 'TypeScript', py: 'Python', java: 'Java', go: 'Go', bash: 'Bash', json: 'JSON', html: 'HTML', css: 'CSS', vue: 'Vue' }
 let codeBlockIdCounter = 0
-const generateCodeBlockId = () => `code-block-${Date.now()}-${++codeBlockIdCounter}`
-
-// 自定义代码块渲染
-renderer.code = function(code: string | { text: string; lang?: string; escaped?: boolean }, lang?: string, escaped?: boolean): string {
-  // 处理新版 marked 的参数格式
-  let codeText: string
-  let language: string | undefined
-  
-  if (typeof code === 'object' && code !== null) {
-    codeText = code.text || ''
-    language = code.lang
-  } else {
-    codeText = code as string
-    language = lang
-  }
-  
+const generateCodeBlockId = () => `cb-${Date.now()}-${++codeBlockIdCounter}`
+const renderer = new marked.Renderer()
+renderer.code = function(code: string | { text: string; lang?: string }, lang?: string): string {
+  let codeText: string, language: string | undefined
+  if (typeof code === 'object') { codeText = code.text || ''; language = code.lang } else { codeText = code as string; language = lang }
   const displayLang = language ? (languageNames[language.toLowerCase()] || language.toUpperCase()) : '代码'
-  
-  // 使用 highlight.js 进行语法高亮
-  let highlightedCode: string
-  if (language && hljs.getLanguage(language)) {
-    try {
-      highlightedCode = hljs.highlight(codeText, { language }).value
-    } catch {
-      highlightedCode = hljs.highlightAuto(codeText).value
-    }
-  } else {
-    highlightedCode = hljs.highlightAuto(codeText).value
-  }
-  
-  // 将原始代码存储在 data 属性中（用于复制）
-  const codeForCopy = codeText
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-  
+  let highlighted: string
+  try { highlighted = language && hljs.getLanguage(language) ? hljs.highlight(codeText, { language }).value : hljs.highlightAuto(codeText).value } catch { highlighted = hljs.highlightAuto(codeText).value }
+  const codeForCopy = codeText.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
   const blockId = generateCodeBlockId()
-  
-  return `<div class="code-block-wrapper" data-code-id="${blockId}">
-    <div class="code-block-header">
-      <span class="code-lang">${displayLang}</span>
-      <button class="copy-code-btn" data-code-target="${blockId}" title="复制代码">
-        <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
-          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
-        </svg>
-        <svg class="check-icon hidden" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-      </button>
-    </div>
-    <pre class="hljs"><code class="hljs language-${language || 'text'}" data-raw-code="${codeForCopy}">${highlightedCode}</code></pre>
-  </div>`
+  return `<div class="code-block-wrapper" data-code-id="${blockId}"><div class="code-block-header"><span class="code-lang">${displayLang}</span><button class="copy-code-btn" data-code-target="${blockId}" title="复制">📋</button></div><pre class="hljs"><code data-raw-code="${codeForCopy}">${highlighted}</code></pre></div>`
 }
-
-// 配置 marked
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-  renderer: renderer
-})
-
-// Markdown 渲染函数
-const renderMarkdown = (content: string): string => {
-  if (!content) return ''
-  const rawHtml = marked.parse(content)
-  return DOMPurify.sanitize(rawHtml as string, {
-    ADD_TAGS: ['div', 'button', 'svg', 'rect', 'path', 'polyline'],
-    ADD_ATTR: ['class', 'data-code-id', 'data-code-target', 'data-raw-code', 'title', 'xmlns', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'x', 'y', 'rx', 'ry', 'd', 'points']
-  })
-}
-
-// 复制代码到剪贴板
+marked.setOptions({ breaks: true, gfm: true, renderer })
+const renderMarkdown = (content: string): string => content ? DOMPurify.sanitize(marked.parse(content) as string) : ''
 const copyCodeToClipboard = async (event: Event) => {
-  const target = event.target as HTMLElement
-  const button = target.closest('.copy-code-btn') as HTMLElement
-  if (!button) return
-  
-  const codeId = button.getAttribute('data-code-target')
-  if (!codeId) return
-  
-  const wrapper = document.querySelector(`[data-code-id="${codeId}"]`)
-  if (!wrapper) return
-  
-  const codeElement = wrapper.querySelector('code[data-raw-code]') as HTMLElement
-  if (!codeElement) return
-  
-  // 获取原始代码（从 data 属性解码）
-  const rawCode = codeElement.getAttribute('data-raw-code')
-    ?.replace(/&quot;/g, '"')
-    ?.replace(/&amp;/g, '&') || ''
-  
-  try {
-    await navigator.clipboard.writeText(rawCode)
-    
-    // 显示成功状态
-    const copyIcon = button.querySelector('.copy-icon')
-    const checkIcon = button.querySelector('.check-icon')
-    const copyText = button.querySelector('.copy-text')
-    
-    if (copyIcon && checkIcon && copyText) {
-      copyIcon.classList.add('hidden')
-      checkIcon.classList.remove('hidden')
-      copyText.textContent = '已复制'
-      
-      // 2秒后恢复
-      setTimeout(() => {
-        copyIcon.classList.remove('hidden')
-        checkIcon.classList.add('hidden')
-        copyText.textContent = '复制'
-      }, 2000)
-    }
-  } catch (err) {
-    console.error('复制失败:', err)
-    addLog('error', '复制代码失败')
+  const btn = (event.target as HTMLElement).closest('.copy-code-btn') as HTMLElement
+  if (!btn) return
+  const codeId = btn.getAttribute('data-code-target')
+  const wrapper = codeId ? document.querySelector(`[data-code-id="${codeId}"]`) : null
+  const codeEl = wrapper?.querySelector('code[data-raw-code]') as HTMLElement
+  if (codeEl) {
+    const raw = codeEl.getAttribute('data-raw-code')?.replace(/&quot;/g, '"').replace(/&amp;/g, '&') || ''
+    try { await navigator.clipboard.writeText(raw); addLog('success', '已复制') } catch { addLog('error', '复制失败') }
   }
 }
+const handleMessagesClick = (event: Event) => { if ((event.target as HTMLElement).closest('.copy-code-btn')) copyCodeToClipboard(event) }
 
-// 处理消息容器的点击事件（事件委托）
-const handleMessagesClick = (event: Event) => {
-  const target = event.target as HTMLElement
-  if (target.closest('.copy-code-btn')) {
-    copyCodeToClipboard(event)
-  }
-}
-
-// 登录状态
+// 登录
 const isAuthenticated = ref(false)
 const passwordInput = ref('')
 const showPassword = ref(false)
 const loginError = ref('')
 const isLoggingIn = ref(false)
-
-// 正确的密码（实际项目中应该从环境变量或后端获取）
 const CORRECT_PASSWORD = 'sandbox2024'
-
-// 登录函数
 const handleLogin = () => {
-  loginError.value = ''
-  isLoggingIn.value = true
-  
-  // 模拟登录验证延迟
+  loginError.value = ''; isLoggingIn.value = true
   setTimeout(() => {
-    if (passwordInput.value === CORRECT_PASSWORD) {
-      isAuthenticated.value = true
-      // 保存登录状态到 sessionStorage（页面刷新后需要重新登录）
-      sessionStorage.setItem('sandbox_authenticated', 'true')
-      // 登录成功后进入主界面，然后初始化
-      initAfterLogin()
-    } else {
-      loginError.value = '密码错误，请重试'
-    }
+    if (passwordInput.value === CORRECT_PASSWORD) { isAuthenticated.value = true; sessionStorage.setItem('sandbox_authenticated', 'true'); initAfterLogin() }
+    else { loginError.value = '密码错误' }
     isLoggingIn.value = false
   }, 500)
 }
-
-// 存储从 API 获取的 token
-const chatToken = ref<string>('')
-
-// 登录后初始化：调用 API 获取 token，然后使用 token 连接 WebSocket
+const chatToken = ref('')
 const initAfterLogin = async () => {
   try {
-    addLog('info', '正在获取 Token...')
-    
-    // 调用后端接口获取 token
-    const response = await fetch('https://sandbox.toproject.cloud/endpoint/chat/conversations/start', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        title: '测试对话'
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    console.log('获取 Token 成功:', data)
-    
-    // 检查响应是否成功
-    if (!data.success) {
-      throw new Error(data.message || '请求失败')
-    }
-    
-    // 保存 access_token
-    if (data.data?.access_token) {
-      chatToken.value = data.data.access_token
-      addLog('success', `Token 获取成功: ${data.data.access_token.substring(0, 30)}...`)
-    } else {
-      throw new Error('响应中没有 access_token 字段')
-    }
-    
-    // 如果返回了 conversation_id，使用它
-    if (data.data?.conversation_id) {
-      config.conversationId = data.data.conversation_id
-      addLog('info', `会话 ID: ${data.data.conversation_id}`)
-    }
-    
-    // 保存 user_id
-    if (data.data?.user_id) {
-      config.userId = data.data.user_id
-      addLog('info', `用户 ID: ${data.data.user_id}`)
-    }
-    
-    // 使用 token 连接 WebSocket
+    addLog('info', '获取 Token...')
+    const resp = await fetch('https://sandbox.toproject.cloud/endpoint/chat/conversations/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '测试对话' }) })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    if (!data.success) throw new Error(data.message || '失败')
+    if (data.data?.access_token) { chatToken.value = data.data.access_token; addLog('success', 'Token 获取成功') }
+    if (data.data?.conversation_id) config.conversationId = data.data.conversation_id
+    if (data.data?.user_id) config.userId = data.data.user_id
     connectWebSocket()
-  } catch (error) {
-    console.error('获取 Token 失败:', error)
-    addLog('error', `获取 Token 失败: ${error instanceof Error ? error.message : '未知错误'}`)
-    
-    // 显示错误消息
-    messages.value.push({
-      id: Date.now().toString(),
-      type: 'error',
-      content: `获取 Token 失败: ${error instanceof Error ? error.message : '未知错误'}`,
-      timestamp: new Date()
-    })
-  }
+  } catch (e) { addLog('error', `获取 Token 失败: ${e instanceof Error ? e.message : '未知'}`) }
 }
-
-// 检查是否已登录
-const checkAuthentication = () => {
-  const authenticated = sessionStorage.getItem('sandbox_authenticated')
-  if (authenticated === 'true') {
-    isAuthenticated.value = true
-    return true
-  }
-  return false
-}
+const checkAuthentication = () => { if (sessionStorage.getItem('sandbox_authenticated') === 'true') { isAuthenticated.value = true; return true }; return false }
 
 // 配置
-const config = reactive({
-  orchestratorUrl: 'wss://sandbox.toproject.cloud/endpoint/ws/chat',
-  userId: 'test-user-' + Math.random().toString(36).substring(7),
-  conversationId: '',
-  includeThinking: true
-})
+const config = reactive({ orchestratorUrl: 'wss://sandbox.toproject.cloud/endpoint/ws/chat', userId: 'test-user-' + Math.random().toString(36).substring(7), conversationId: '', includeThinking: true })
 
-// 沙箱信息
-const sandboxInfo = ref<{
-  has_sandbox: boolean
-  session_id?: string
-  vnc_url?: string
-  vnc_password?: string
-} | null>(null)
+// 类型
+interface TodoItem { id: string; content: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped' }
+interface TodoList { id: string; title: string; items: TodoItem[]; total_items: number; completed_items: number }
+interface FileNode { name: string; path: string; type: 'file' | 'directory'; status?: string; children?: FileNode[] }
+interface FileChange { path: string; status: 'created' | 'modified' | 'deleted' | 'renamed' }
+interface PlanStep { id: string; description: string; status: 'pending' | 'in_progress' | 'completed' | 'failed'; tool?: string; error?: string }
+interface ExecutionPlan { id: string; title?: string; steps: PlanStep[]; total_steps: number; current_step: number; status: 'pending' | 'running' | 'completed' | 'failed' | 'revising' }
+interface ToolCall { id: string; tool: string; arguments: any; status: 'running' | 'success' | 'failed'; result?: any; timestamp: Date; stepId?: number; executionTime?: number }
+interface ToolExecutionMessage { id: string; type: 'tool_execution'; tool: string; status: 'running' | 'success' | 'failed'; arguments: any; result?: any; stepId?: number; executionTime?: number; timestamp: Date; description?: string }
 
-// 会话信息（登录后立即显示）
-const sessionInfo = ref<{
-  userId: string
-  conversationId: string
-  connectionId: string
-  connectedAt: string
-} | null>(null)
+// 交互式输入相关类型
+interface InteractivePromptData {
+  stepId: number
+  tool: string
+  promptText: string
+  options: string[]
+  promptType: 'select' | 'confirm' | 'input' | 'unknown'
+  command: string
+  stdout?: string
+}
 
-// 当前任务分析
-const taskAnalysis = ref<any>(null)
+interface UserInputRequiredData {
+  stepId: number
+  tool: string
+  promptText: string
+  options: string[]
+  optionsExplanation?: Array<{ option: string; description: string }>
+  promptType: 'select' | 'confirm' | 'input' | 'unknown'
+  defaultResponse?: string
+  context: {
+    stepDescription: string
+    command: string
+  }
+}
 
-// 流程节点状态
-const flowNodes = ref<Array<{
-  node: string
-  status: string
+// 流程节点类型
+interface FlowNodeData {
+  node: 'planning' | 'execution' | 'step_execution' | 'replanning' | 'summarizing' | 'analysis'
+  status: 'started' | 'completed' | 'failed'
   message: string
   data?: any
-  timestamp: Date
-}>>([])
+}
 
-// WebSocket 状态
-const wsStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
-const ws = ref<WebSocket | null>(null)
-const connectionId = ref<string>('')
+// 状态
+const sandboxInfo = ref<{ has_sandbox: boolean; session_id?: string; vnc_url?: string; vnc_password?: string } | null>(null)
+const showVncEmbed = ref(false)
+const todoList = ref<TodoList | null>(null)
+const todoStats = ref({ total: 0, completed: 0, in_progress: 0, failed: 0, pending: 0 })
+const updateTodoStats = () => { if (!todoList.value) return; const items = todoList.value.items; todoStats.value = { total: items.length, completed: items.filter(i => i.status === 'completed').length, in_progress: items.filter(i => i.status === 'in_progress').length, failed: items.filter(i => i.status === 'failed').length, pending: items.filter(i => i.status === 'pending').length } }
+const fileTree = ref<FileNode[]>([])
+const fileChanges = ref<FileChange[]>([])
+const expandedFolders = ref<Set<string>>(new Set())
+const toggleFolder = (p: string) => { if (expandedFolders.value.has(p)) expandedFolders.value.delete(p); else expandedFolders.value.add(p) }
+const isDownloading = ref(false)
+const downloadingFile = ref<string | null>(null)
 
-// 消息
-const messages = ref<Array<{
-  id: string
-  type: 'user' | 'assistant' | 'system' | 'error' | 'thinking_chain' | 'analysis_node'
-  content: string
-  timestamp: Date
-  thinking?: boolean  // 用于流程节点的思考状态
-  collapsed?: boolean  // 是否折叠（用于分析节点）
-  nodeType?: string  // 节点类型
-}>>([])
-
-// 当前分析节点状态
-const currentAnalysisContent = ref('')
-const isAnalyzing = ref(false)
-
-const inputMessage = ref('')
-const isStreaming = ref(false)
-const currentStreamContent = ref('')
-const currentThinkingContent = ref('')  // 存储 <think> 标签内的内容
-const isInThinkTag = ref(false)  // 是否在 <think> 标签内
-const messagesContainer = ref<HTMLElement | null>(null)
-const currentAssistantMsgId = ref<string>('')  // 当前正在流式传输的助手消息 ID
-const currentThinkingChainMsgId = ref<string>('')  // 当前思维链消息 ID
-const currentAnalysisMsgId = ref<string>('')  // 当前分析节点消息 ID
-
-// 连接统计
-const connectionStats = ref<{
-  total_connections: number
-  total_users: number
-  total_conversations: number
-}>({
-  total_connections: 0,
-  total_users: 0,
-  total_conversations: 0
-})
-
-// 日志
-const logs = ref<Array<{
-  time: string
-  level: 'info' | 'warn' | 'error' | 'success'
-  message: string
-}>>([])
-
-const addLog = (level: 'info' | 'warn' | 'error' | 'success', message: string) => {
-  logs.value.unshift({
-    time: new Date().toLocaleTimeString(),
-    level,
-    message
-  })
-  // 保留最近100条日志
-  if (logs.value.length > 100) {
-    logs.value.pop()
+// 文件下载功能
+const downloadSingleFile = async (node: FileNode) => {
+  if (!sandboxInfo.value?.session_id || node.type !== 'file') return
+  downloadingFile.value = node.path
+  try {
+    addLog('info', `下载文件: ${node.path}`)
+    // 使用正确的 API 端点: /endpoint/file/sandbox/{session_id}/download?path=...
+    const resp = await fetch(
+      `https://sandbox.toproject.cloud/endpoint/file/sandbox/${sandboxInfo.value.session_id}/download?path=${encodeURIComponent(node.path)}`,
+      { headers: chatToken.value ? { 'Authorization': `Bearer ${chatToken.value}` } : {} }
+    )
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = node.name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    addLog('success', `文件下载成功: ${node.name}`)
+  } catch (e) {
+    addLog('error', `下载失败: ${e instanceof Error ? e.message : '未知错误'}`)
+  } finally {
+    downloadingFile.value = null
   }
 }
 
-// 生成会话ID
-const generateConversationId = () => {
-  config.conversationId = 'conv-' + Date.now() + '-' + Math.random().toString(36).substring(7)
-}
-
-// 滚动到底部
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+const downloadAllFiles = async () => {
+  if (!sandboxInfo.value?.session_id || fileTree.value.length === 0) return
+  isDownloading.value = true
+  try {
+    addLog('info', '打包下载所有文件...')
+    // 使用正确的 API 端点: /endpoint/file/sandbox/{session_id}/download-workspace
+    const resp = await fetch(
+      `https://sandbox.toproject.cloud/endpoint/file/sandbox/${sandboxInfo.value.session_id}/download-workspace`,
+      { headers: chatToken.value ? { 'Authorization': `Bearer ${chatToken.value}` } : {} }
+    )
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    
+    // 从响应头获取文件名
+    const contentDisposition = resp.headers.get('Content-Disposition')
+    let filename = `workspace-${Date.now()}.zip`
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/)
+      if (match) filename = match[1]
     }
-  })
+    
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    addLog('success', '所有文件下载成功')
+  } catch (e) {
+    addLog('error', `打包下载失败: ${e instanceof Error ? e.message : '未知错误'}`)
+  } finally {
+    isDownloading.value = false
+  }
 }
 
-// 连接 WebSocket
-const connectWebSocket = () => {
-  if (ws.value?.readyState === WebSocket.OPEN) {
-    addLog('warn', 'WebSocket 已连接')
-    return
+// 下载指定目录为 ZIP
+const downloadDirectory = async (node: FileNode) => {
+  if (!sandboxInfo.value?.session_id || node.type !== 'directory') return
+  downloadingFile.value = node.path
+  try {
+    addLog('info', `下载目录: ${node.path}`)
+    // 使用 download-workspace 端点并指定 path 参数
+    const resp = await fetch(
+      `https://sandbox.toproject.cloud/endpoint/file/sandbox/${sandboxInfo.value.session_id}/download-workspace?path=${encodeURIComponent(node.path)}`,
+      { headers: chatToken.value ? { 'Authorization': `Bearer ${chatToken.value}` } : {} }
+    )
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    
+    // 从响应头获取文件名
+    const contentDisposition = resp.headers.get('Content-Disposition')
+    let filename = `${node.name}-${Date.now()}.zip`
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/)
+      if (match) filename = match[1]
+    }
+    
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    addLog('success', `目录下载成功: ${node.name}`)
+  } catch (e) {
+    addLog('error', `目录下载失败: ${e instanceof Error ? e.message : '未知错误'}`)
+  } finally {
+    downloadingFile.value = null
   }
+}
 
-  if (!chatToken.value) {
-    addLog('error', '没有有效的 Token，无法连接 WebSocket')
-    return
+// 扁平化文件树类型
+interface FlatFileNode extends FileNode {
+  depth: number
+}
+
+// 递归渲染文件树节点
+const renderFileNode = (node: FileNode, depth: number = 0): FlatFileNode[] => {
+  const result: FlatFileNode[] = [{ ...node, depth }]
+  if (node.type === 'directory' && node.children && expandedFolders.value.has(node.path)) {
+    for (const child of node.children) {
+      result.push(...renderFileNode(child, depth + 1))
+    }
   }
+  return result
+}
 
-  wsStatus.value = 'connecting'
-  
-  // 使用 token 连接 WebSocket
-  const wsUrl = `wss://sandbox.toproject.cloud/endpoint/ws/chat?token=${encodeURIComponent(chatToken.value)}`
-  addLog('info', `正在连接到 WebSocket...`)
+const flattenedFileTree = computed((): FlatFileNode[] => {
+  const result: FlatFileNode[] = []
+  for (const node of fileTree.value) {
+    result.push(...renderFileNode(node))
+  }
+  return result
+})
+const executionPlan = ref<ExecutionPlan | null>(null)
+const toolCalls = ref<ToolCall[]>([])
+const activeSideTab = ref<'todo' | 'files' | 'tools'>('todo')
+
+// 标签
+const getComplexityLabel = (c: string) => ({ simple: '🟢 简单', moderate: '🟡 中等', complex: '🔴 复杂' }[c] || c)
+const getTaskTypeLabel = (t: string) => ({ chat: '💬 对话', code: '💻 代码', file: '📁 文件', shell: '🖥️ 命令', gui: '🖼️ 图形', browser: '🌐 浏览器', analysis: '📊 分析', creative: '🎨 创意' }[t] || t)
+// 工具名称和图标映射
+const getToolDisplayInfo = (tool: string): { name: string; icon: string; color: string } => {
+  const toolMap: Record<string, { name: string; icon: string; color: string }> = {
+    'file_manager': { name: '文件管理器', icon: '📁', color: 'text-blue-600' },
+    'code_executor': { name: '代码执行器', icon: '⚡', color: 'text-yellow-600' },
+    'shell': { name: '终端命令', icon: '🖥️', color: 'text-green-600' },
+    'browser': { name: '浏览器', icon: '🌐', color: 'text-purple-600' },
+    'search': { name: '搜索', icon: '🔍', color: 'text-indigo-600' },
+    'read_file': { name: '读取文件', icon: '📖', color: 'text-cyan-600' },
+    'write_file': { name: '写入文件', icon: '✏️', color: 'text-orange-600' },
+    'create_file': { name: '创建文件', icon: '📝', color: 'text-teal-600' },
+    'delete_file': { name: '删除文件', icon: '🗑️', color: 'text-red-600' },
+    'list_files': { name: '列出文件', icon: '📋', color: 'text-slate-600' },
+    'execute_command': { name: '执行命令', icon: '⌨️', color: 'text-emerald-600' },
+    'python': { name: 'Python 执行', icon: '🐍', color: 'text-yellow-500' },
+    'javascript': { name: 'JavaScript 执行', icon: '📜', color: 'text-amber-500' },
+    'api_call': { name: 'API 调用', icon: '🔗', color: 'text-violet-600' },
+    'database': { name: '数据库操作', icon: '🗄️', color: 'text-rose-600' },
+  }
+  return toolMap[tool] || { name: tool, icon: '🔧', color: 'text-gray-600' }
+}
+// 获取工具操作描述
+const getToolActionDescription = (tool: string, args: any): string => {
+  if (!args) return '执行中...'
+  switch (tool) {
+    case 'file_manager':
+      if (args.action === 'read') return `读取文件: ${args.path || args.file_path || '未知'}`
+      if (args.action === 'write') return `写入文件: ${args.path || args.file_path || '未知'}`
+      if (args.action === 'create') return `创建文件: ${args.path || args.file_path || '未知'}`
+      if (args.action === 'delete') return `删除文件: ${args.path || args.file_path || '未知'}`
+      if (args.action === 'list') return `列出目录: ${args.path || args.directory || '/'}`
+      return `文件操作: ${args.action || '未知操作'}`
+    case 'read_file':
+      return `读取文件: ${args.path || args.file_path || '未知'}`
+    case 'write_file':
+      return `写入文件: ${args.path || args.file_path || '未知'}`
+    case 'create_file':
+      return `创建文件: ${args.path || args.file_path || '未知'}`
+    case 'delete_file':
+      return `删除文件: ${args.path || args.file_path || '未知'}`
+    case 'list_files':
+      return `列出目录: ${args.path || args.directory || '/'}`
+    case 'shell':
+    case 'execute_command':
+      return `执行命令: ${args.command || args.cmd || '未知命令'}`
+    case 'code_executor':
+      return `执行 ${args.language || '代码'}: ${(args.code || '').substring(0, 50)}${(args.code || '').length > 50 ? '...' : ''}`
+    case 'python':
+      return `执行 Python: ${(args.code || '').substring(0, 50)}${(args.code || '').length > 50 ? '...' : ''}`
+    case 'javascript':
+      return `执行 JavaScript: ${(args.code || '').substring(0, 50)}${(args.code || '').length > 50 ? '...' : ''}`
+    case 'browser':
+      if (args.action === 'navigate') return `导航到: ${args.url || '未知'}`
+      if (args.action === 'click') return `点击元素: ${args.selector || '未知'}`
+      if (args.action === 'type') return `输入文本: ${args.text || '未知'}`
+      if (args.action === 'screenshot') return '截取屏幕'
+      return `浏览器操作: ${args.action || '未知'}`
+    case 'search':
+      return `搜索: ${args.query || args.keyword || '未知'}`
+    case 'api_call':
+      return `API 调用: ${args.method || 'GET'} ${args.url || '未知'}`
+    case 'database':
+      return `数据库: ${args.action || args.query?.substring(0, 30) || '未知操作'}`
+    default:
+      return `执行 ${tool}`
+  }
+}
+
+// 格式化工具参数显示
+const formatToolArguments = (tool: string, args: any): string => {
+  if (!args) return '无参数'
   
   try {
-    ws.value = new WebSocket(wsUrl)
-
-    ws.value.onopen = () => {
-      wsStatus.value = 'connected'
-      addLog('success', 'WebSocket 连接成功，可以开始对话')
+    // 根据工具类型格式化参数
+    switch (tool) {
+      case 'file_manager':
+      case 'read_file':
+      case 'write_file':
+      case 'create_file':
+      case 'delete_file':
+        const filePath = args.path || args.file_path || '未知路径'
+        const action = args.action || tool.replace('_', ' ')
+        let result = `操作: ${action}\n路径: ${filePath}`
+        if (args.content) {
+          const contentPreview = args.content.length > 200
+            ? args.content.substring(0, 200) + '...(省略)'
+            : args.content
+          result += `\n内容:\n${contentPreview}`
+        }
+        return result
       
-      // 添加欢迎消息
-      messages.value.push({
-        id: Date.now().toString(),
-        type: 'system',
-        content: '已连接到 AI 助手，请输入您的问题',
-        timestamp: new Date()
-      })
-    }
-
-    ws.value.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        handleWebSocketMessage(data)
-      } catch (e) {
-        addLog('error', `消息解析失败: ${event.data}`)
-      }
-    }
-
-    ws.value.onerror = (error) => {
-      wsStatus.value = 'error'
-      addLog('error', `WebSocket 连接失败，请检查服务是否启动`)
+      case 'list_files':
+        return `目录: ${args.path || args.directory || '/'}\n递归: ${args.recursive ? '是' : '否'}`
       
-      messages.value.push({
-        id: Date.now().toString(),
-        type: 'error',
-        content: '连接失败，请确保后端服务已启动 (python server/orchestrator_service.py)',
-        timestamp: new Date()
-      })
-    }
-
-    ws.value.onclose = (event) => {
-      wsStatus.value = 'disconnected'
-      connectionId.value = ''
-      addLog('info', `WebSocket 连接关闭: ${event.code}`)
+      case 'shell':
+      case 'execute_command':
+        const cmd = args.command || args.cmd || '未知命令'
+        let cmdResult = `命令: ${cmd}`
+        if (args.cwd) cmdResult += `\n工作目录: ${args.cwd}`
+        if (args.timeout) cmdResult += `\n超时: ${args.timeout}ms`
+        return cmdResult
+      
+      case 'code_executor':
+      case 'python':
+      case 'javascript':
+        const lang = args.language || tool
+        const code = args.code || ''
+        const codePreview = code.length > 300 ? code.substring(0, 300) + '...(省略)' : code
+        return `语言: ${lang}\n代码:\n${codePreview}`
+      
+      case 'browser':
+        let browserResult = `操作: ${args.action || '未知'}`
+        if (args.url) browserResult += `\nURL: ${args.url}`
+        if (args.selector) browserResult += `\n选择器: ${args.selector}`
+        if (args.text) browserResult += `\n文本: ${args.text}`
+        return browserResult
+      
+      case 'search':
+        return `关键词: ${args.query || args.keyword || '未知'}`
+      
+      case 'api_call':
+        let apiResult = `方法: ${args.method || 'GET'}\nURL: ${args.url || '未知'}`
+        if (args.headers) apiResult += `\n请求头: ${JSON.stringify(args.headers, null, 2)}`
+        if (args.body) apiResult += `\n请求体: ${typeof args.body === 'object' ? JSON.stringify(args.body, null, 2) : args.body}`
+        return apiResult
+      
+      default:
+        // 默认格式化为 JSON
+        return JSON.stringify(args, null, 2)
     }
   } catch (e) {
-    wsStatus.value = 'error'
-    addLog('error', `连接失败: ${e}`)
+    return JSON.stringify(args, null, 2)
   }
 }
 
-// 断开 WebSocket
-const disconnectWebSocket = () => {
-  if (ws.value) {
-    ws.value.close()
-    ws.value = null
-    wsStatus.value = 'disconnected'
-    connectionId.value = ''
-    sessionInfo.value = null
-    addLog('info', 'WebSocket 已断开')
+// 格式化工具执行结果
+const formatToolResult = (result: any): string => {
+  if (result === null || result === undefined) return '无返回结果'
+  
+  try {
+    if (typeof result === 'string') {
+      // 如果是字符串，限制长度
+      return result.length > 1000 ? result.substring(0, 1000) + '\n...(结果过长，已截断)' : result
+    }
+    
+    if (typeof result === 'object') {
+      // 处理常见的结果格式
+      if (result.success !== undefined) {
+        let formatted = `状态: ${result.success ? '成功' : '失败'}`
+        if (result.message) formatted += `\n消息: ${result.message}`
+        if (result.error) formatted += `\n错误: ${result.error}`
+        if (result.output) formatted += `\n输出:\n${result.output}`
+        if (result.data) {
+          const dataStr = JSON.stringify(result.data, null, 2)
+          formatted += `\n数据:\n${dataStr.length > 500 ? dataStr.substring(0, 500) + '...' : dataStr}`
+        }
+        return formatted
+      }
+      
+      // 默认 JSON 格式化
+      const jsonStr = JSON.stringify(result, null, 2)
+      return jsonStr.length > 1000 ? jsonStr.substring(0, 1000) + '\n...(结果过长，已截断)' : jsonStr
+    }
+    
+    return String(result)
+  } catch (e) {
+    return String(result)
   }
 }
 
-// 重新连接（需要重新获取 token）
-const reconnect = async () => {
-  disconnectWebSocket()
-  // 重新获取 token 并连接
-  await initAfterLogin()
+const getTodoStatusIcon = (s: string) => ({ pending: Clock, in_progress: Loader2, completed: CheckCircle, failed: XCircle, skipped: SkipForward }[s] || Clock)
+const getTodoStatusColor = (s: string) => ({ pending: 'text-slate-400', in_progress: 'text-blue-500', completed: 'text-green-500', failed: 'text-red-500', skipped: 'text-orange-500' }[s] || 'text-slate-400')
+const getFileStatusColor = (s?: string) => ({ created: 'text-green-600', modified: 'text-yellow-600', deleted: 'text-red-600', renamed: 'text-blue-600' }[s || ''] || 'text-slate-400')
+const getFileChangeIcon = (changeType: string) => {
+  switch (changeType) {
+    case 'created': return '➕'
+    case 'modified': return '✏️'
+    case 'deleted': return '🗑️'
+    case 'renamed': return '📝'
+    default: return '📄'
+  }
+}
+const getFileChangeLabel = (changeType: string) => {
+  switch (changeType) {
+    case 'created': return '新建'
+    case 'modified': return '修改'
+    case 'deleted': return '删除'
+    case 'renamed': return '重命名'
+    default: return '变更'
+  }
+}
+const getFileChangeBgColor = (changeType: string) => {
+  switch (changeType) {
+    case 'created': return 'bg-green-50'
+    case 'modified': return 'bg-yellow-50'
+    case 'deleted': return 'bg-red-50'
+    case 'renamed': return 'bg-blue-50'
+    default: return 'bg-gray-50'
+  }
+}
+const getStepStatusIcon = (s: string) => ({ pending: Clock, in_progress: Loader2, completed: CheckCircle, failed: XCircle }[s] || Clock)
+const getStepStatusColor = (s: string) => ({ pending: 'text-slate-400', in_progress: 'text-blue-500', completed: 'text-green-500', failed: 'text-red-500' }[s] || 'text-slate-400')
+
+// 会话
+const sessionInfo = ref<{ userId: string; conversationId: string; connectionId: string; connectedAt: string } | null>(null)
+const taskAnalysis = ref<{ complexity: string; task_type: string; requires_sandbox: boolean } | null>(null)
+const wsStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
+const ws = ref<WebSocket | null>(null)
+const connectionId = ref('')
+
+// 消息类型定义
+type MessageType = 'user' | 'assistant' | 'system' | 'error' | 'thinking_chain' | 'analysis_node' | 'todo_list' | 'tool_execution' | 'file_changes' | 'tool_fix' | 'interactive_prompt' | 'interactive_response' | 'user_input_required' | 'flow_node' | 'verification' | 'llm_call' | 'variable_event'
+
+interface Message {
+  id: string
+  type: MessageType
+  content: string
+  timestamp: Date
+  collapsed?: boolean
+  nodeType?: string
+  toolData?: {
+    tool: string
+    status: 'running' | 'success' | 'failed' | 'fixing'
+    arguments: any
+    result?: any
+    stepId?: number
+    executionTime?: number
+    description?: string
+  }
+  fileChangesData?: {
+    changes: Array<{ path: string; changeType: string; oldPath?: string }>
+    totalChanges: number
+  }
+  toolFixData?: {
+    tool: string
+    error: string
+    fixAttempt: number
+    originalArgs?: any
+    fixedArgs?: any
+    fixedCommand?: string
+    explanation?: string
+    status: 'fixing' | 'fixed' | 'failed'
+  }
+  interactiveData?: {
+    type: 'prompt' | 'response' | 'user_input_required' | 'user_input_received'
+    stepId: number
+    tool?: string
+    promptText?: string
+    options?: string[]
+    optionsExplanation?: Array<{ option: string; description: string }>
+    promptType?: string
+    command?: string
+    response?: string
+    reasoning?: string
+    autoResponded?: boolean
+    defaultResponse?: string
+    userInput?: string
+  }
+  flowNodeData?: {
+    node: string
+    status: string
+    message: string
+    data?: any
+  }
+  verificationData?: {
+    type: 'start' | 'result'
+    expected?: string
+    actualPreview?: string
+    isValid?: boolean
+  }
+  llmData?: {
+    type: 'call' | 'response'
+    purpose?: string
+    context?: string
+    responsePreview?: string
+  }
+  variableData?: {
+    type: 'set' | 'resolve'
+    name?: string
+    value?: any
+    valueType?: string
+    originalArgs?: any
+    resolvedArgs?: any
+    variablesUsed?: string[]
+  }
 }
 
-// 处理 WebSocket 消息
+// 消息
+const messages = ref<Message[]>([])
+
+// 交互式输入状态
+const userInputDialog = ref<{
+  show: boolean
+  stepId: number
+  promptText: string
+  options: string[]
+  optionsExplanation: Array<{ option: string; description: string }>
+  promptType: string
+  defaultResponse: string
+  context: { stepDescription: string; command: string }
+  selectedOption: string
+  customInput: string
+}>({
+  show: false,
+  stepId: 0,
+  promptText: '',
+  options: [],
+  optionsExplanation: [],
+  promptType: 'select',
+  defaultResponse: '',
+  context: { stepDescription: '', command: '' },
+  selectedOption: '',
+  customInput: ''
+})
+const inputMessage = ref('')
+const isStreaming = ref(false)
+const isProcessing = ref(false)
+const currentStreamContent = ref('')
+const currentThinkingContent = ref('')
+const isInThinkTag = ref(false)
+const messagesContainer = ref<HTMLElement | null>(null)
+const currentAssistantMsgId = ref('')
+const currentThinkingChainMsgId = ref('')
+const currentAnalysisMsgId = ref('')
+const isAnalyzing = ref(false)
+
+// 交互式提示检测和解析
+const detectInteractivePrompt = (text: string): boolean => {
+  if (!text || typeof text !== 'string') return false
+  
+  // 检测常见的交互式提示模式
+  const patterns = [
+    /[?？]\s*$/,                           // 以问号结尾
+    /是\s*[/／]\s*否/,                      // 是/否
+    /yes\s*[/／]\s*no/i,                   // yes/no
+    /y\s*[/／]\s*n/i,                      // y/n
+    /\[y\/n\]/i,                           // [y/n]
+    /\(y\/n\)/i,                           // (y/n)
+    /○\s+.*\s+[/／●]\s+/,                  // ○ 选项 / ● 选项 (Vue CLI 风格)
+    /●\s+.*\s+[/／○]\s+/,                  // ● 选项 / ○ 选项
+    />\s*\(\s*\)/,                         // > ( ) 选择框
+    /\[\s*\]\s+.*\s+\[\s*[xX✓]\s*\]/,     // [ ] 选项 [x] 选项
+    /请选择|please\s+select|choose/i,      // 请选择
+    /确认|confirm/i,                       // 确认
+    /是否覆盖|overwrite/i,                 // 是否覆盖
+    /是否继续|continue/i,                  // 是否继续
+    /\?\s*\[.*\]/,                         // ? [选项]
+  ]
+  
+  return patterns.some(pattern => pattern.test(text))
+}
+
+const parseInteractivePrompt = (text: string): {
+  promptText: string
+  options: string[]
+  defaultOption: string
+  command: string
+} => {
+  const result = {
+    promptText: '',
+    options: [] as string[],
+    defaultOption: '',
+    command: ''
+  }
+  
+  // 提取命令（通常在 > 之后）
+  const cmdMatch = text.match(/>\s*([^\n]+)/)
+  if (cmdMatch) {
+    result.command = cmdMatch[1].trim()
+  }
+  
+  // 提取问题文本
+  const lines = text.split('\n').filter(l => l.trim())
+  for (const line of lines) {
+    // 查找包含问号的行作为提示文本
+    if (line.includes('?') || line.includes('？')) {
+      result.promptText = line.replace(/[│┌└├┤┬┴┼]/g, '').trim()
+      break
+    }
+  }
+  
+  // 如果没找到问题，使用整个文本
+  if (!result.promptText) {
+    result.promptText = text.replace(/[│┌└├┤┬┴┼\[\]]/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200)
+  }
+  
+  // 解析选项
+  // 模式1: ○ 是 / ● 否 或 ● 是 / ○ 否
+  const optionMatch1 = text.match(/([○●])\s*([^\s/]+)\s*[/／]\s*([○●])\s*([^\s\n]+)/)
+  if (optionMatch1) {
+    const opt1 = optionMatch1[2].trim()
+    const opt2 = optionMatch1[4].trim()
+    result.options = [opt1, opt2]
+    // ● 表示当前选中/默认
+    if (optionMatch1[1] === '●') {
+      result.defaultOption = opt1
+    } else if (optionMatch1[3] === '●') {
+      result.defaultOption = opt2
+    }
+    return result
+  }
+  
+  // 模式2: yes/no, y/n
+  const ynMatch = text.match(/\b(yes|no|y|n)\s*[/／]\s*(yes|no|y|n)\b/i)
+  if (ynMatch) {
+    result.options = ['yes', 'no']
+    return result
+  }
+  
+  // 模式3: 是/否
+  if (/是\s*[/／]\s*否/.test(text)) {
+    result.options = ['是', '否']
+    return result
+  }
+  
+  // 模式4: [选项列表]
+  const bracketMatch = text.match(/\[([^\]]+)\]/)
+  if (bracketMatch) {
+    const opts = bracketMatch[1].split(/[,，/／]/).map(o => o.trim()).filter(o => o)
+    if (opts.length > 0) {
+      result.options = opts
+    }
+  }
+  
+  // 如果没有解析出选项，提供默认的是/否选项
+  if (result.options.length === 0) {
+    result.options = ['是', '否']
+  }
+  
+  return result
+}
+
+// 日志
+const logs = ref<Array<{ time: string; level: 'info' | 'warn' | 'error' | 'success'; message: string }>>([])
+const addLog = (level: 'info' | 'warn' | 'error' | 'success', message: string) => { logs.value.unshift({ time: new Date().toLocaleTimeString(), level, message }); if (logs.value.length > 100) logs.value.pop() }
+const scrollToBottom = () => { nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight }) }
+
+// WebSocket
+const connectWebSocket = () => {
+  if (ws.value?.readyState === WebSocket.OPEN) return
+  if (!chatToken.value) { addLog('error', '无 Token'); return }
+  wsStatus.value = 'connecting'
+  try {
+    ws.value = new WebSocket(`wss://sandbox.toproject.cloud/endpoint/ws/chat?token=${encodeURIComponent(chatToken.value)}`)
+    ws.value.onopen = () => { wsStatus.value = 'connected'; addLog('success', 'WebSocket 已连接'); messages.value.push({ id: Date.now().toString(), type: 'system', content: '已连接到 AI 助手', timestamp: new Date() }) }
+    ws.value.onmessage = (e) => { try { handleWebSocketMessage(JSON.parse(e.data)) } catch { addLog('error', '消息解析失败') } }
+    ws.value.onerror = () => { wsStatus.value = 'error'; addLog('error', '连接失败') }
+    ws.value.onclose = (e) => { wsStatus.value = 'disconnected'; connectionId.value = ''; addLog('info', `断开: ${e.code}`) }
+  } catch (e) { wsStatus.value = 'error'; addLog('error', `连接错误: ${e}`) }
+}
+const disconnectWebSocket = () => { if (ws.value) { ws.value.close(); ws.value = null; wsStatus.value = 'disconnected'; sessionInfo.value = null } }
+const reconnect = async () => { disconnectWebSocket(); await initAfterLogin() }
+
+// 消息处理
 const handleWebSocketMessage = (data: any) => {
-  const msgType = data.type
-  const payload = data.payload || {}
-
+  const msgType = data.type, payload = data.payload || {}
   switch (msgType) {
     case 'connected':
-      connectionId.value = data.connection_id || payload.connection_id
-      // 更新会话信息
-      sessionInfo.value = {
-        userId: data.user_id || payload.user_id || config.userId,
-        conversationId: config.conversationId,
-        connectionId: data.connection_id || payload.connection_id || '',
-        connectedAt: new Date().toLocaleString()
-      }
-      addLog('success', `连接已建立, ID: ${sessionInfo.value.connectionId}, 用户: ${sessionInfo.value.userId}`)
+      connectionId.value = payload.connection_id || data.connection_id
+      sessionInfo.value = { userId: payload.user_id || config.userId, conversationId: config.conversationId, connectionId: connectionId.value, connectedAt: new Date().toLocaleString() }
+      addLog('success', `连接 ID: ${connectionId.value}`)
       break
-
-    case 'pong':
-      // 静默处理心跳
-      break
-
-    case 'chat_started':
-      // 对话开始 - 重置当前消息状态
-      isStreaming.value = true
+    case 'pong': break
+    case 'process_started':
+      // 处理开始，初始化状态（不在聊天区域显示消息）
+      isProcessing.value = true
+      isStreaming.value = false
       currentStreamContent.value = ''
       currentThinkingContent.value = ''
       isInThinkTag.value = false
-      currentAssistantMsgId.value = ''  // 重置，准备创建新消息
+      currentAssistantMsgId.value = ''
       currentThinkingChainMsgId.value = ''
       currentAnalysisMsgId.value = ''
-      config.conversationId = data.conversation_id || payload.conversation_id || config.conversationId
-      addLog('info', `对话开始, 会话ID: ${config.conversationId}, 消息ID: ${data.message_id || payload.message_id}`)
+      isAnalyzing.value = false
+      executionPlan.value = null
+      toolCalls.value = []
+      if (payload.data?.conversation_id) config.conversationId = payload.data.conversation_id
+      addLog('info', '处理开始')
       break
-
+    case 'process_completed':
+      // 处理完成，重置状态（不在聊天区域显示消息）
+      isProcessing.value = false
+      isStreaming.value = false
+      if (payload.success) {
+        addLog('success', '处理完成')
+      } else {
+        const errorMsg = payload.data?.error || payload.message || '处理失败'
+        addLog('error', `处理失败: ${errorMsg}`)
+      }
+      break
+    case 'chat_started':
+      isStreaming.value = true; currentStreamContent.value = ''; currentThinkingContent.value = ''; isInThinkTag.value = false
+      currentAssistantMsgId.value = ''; currentThinkingChainMsgId.value = ''; currentAnalysisMsgId.value = ''
+      executionPlan.value = null; toolCalls.value = []
+      config.conversationId = payload.conversation_id || data.conversation_id || config.conversationId
+      addLog('info', '对话开始')
+      break
     case 'thinking':
-      // 流程节点思考状态 - 显示为分析节点
-      const thinkingStep = payload.thinking_step || {}
-      const thinkingContent = data.content || payload.content || thinkingStep.content || '正在分析...'
-      const thinkingType = data.step_type || payload.type || thinkingStep.type || 'analysis'
-      
+      const thinkContent = payload.content || payload.thinking_step?.content || '分析中...'
+      const thinkType = payload.type || payload.thinking_step?.type || 'analysis'
       isAnalyzing.value = true
-      currentAnalysisContent.value = thinkingContent
-      
-      // 查找当前分析节点消息（使用 ID 跟踪）
+      if (!currentAnalysisMsgId.value) { currentAnalysisMsgId.value = 'analysis-' + Date.now(); messages.value.push({ id: currentAnalysisMsgId.value, type: 'analysis_node', content: thinkContent, timestamp: new Date(), collapsed: false, nodeType: thinkType }) }
+      else { const msg = messages.value.find(m => m.id === currentAnalysisMsgId.value); if (msg && !msg.collapsed) { msg.content = thinkContent; msg.nodeType = thinkType } }
+      scrollToBottom()
+      break
+    case 'chat_response': case 'token': case 'chat_token':
+      const delta = payload.delta || payload.content || data.delta || data.content || ''
+      if (delta) {
+        let rem = delta
+        while (rem.length > 0) {
+          if (isInThinkTag.value) {
+            const end = rem.indexOf('</think>')
+            if (end !== -1) { currentThinkingContent.value += rem.substring(0, end); isInThinkTag.value = false; rem = rem.substring(end + 8); if (currentThinkingChainMsgId.value) { const m = messages.value.find(x => x.id === currentThinkingChainMsgId.value); if (m) m.content = currentThinkingContent.value.trim() } }
+            else { currentThinkingContent.value += rem; rem = ''; if (currentThinkingChainMsgId.value) { const m = messages.value.find(x => x.id === currentThinkingChainMsgId.value); if (m) m.content = currentThinkingContent.value.trim() } }
+          } else {
+            const start = rem.indexOf('<think>')
+            if (start !== -1) { if (start > 0) currentStreamContent.value += rem.substring(0, start); isInThinkTag.value = true; rem = rem.substring(start + 7); if (!currentThinkingChainMsgId.value) { if (currentAnalysisMsgId.value) { const a = messages.value.find(x => x.id === currentAnalysisMsgId.value); if (a && !a.collapsed) { a.collapsed = true; isAnalyzing.value = false } }; currentThinkingChainMsgId.value = 'think-' + Date.now(); messages.value.push({ id: currentThinkingChainMsgId.value, type: 'thinking_chain', content: '思考中...', timestamp: new Date() }) } }
+            else { currentStreamContent.value += rem; rem = '' }
+          }
+        }
+        if (currentStreamContent.value.trim()) {
+          if (currentAnalysisMsgId.value) { const a = messages.value.find(x => x.id === currentAnalysisMsgId.value); if (a && !a.collapsed) { a.collapsed = true; isAnalyzing.value = false } }
+          if (!currentAssistantMsgId.value) { currentAssistantMsgId.value = 'asst-' + Date.now(); messages.value.push({ id: currentAssistantMsgId.value, type: 'assistant', content: currentStreamContent.value.trim(), timestamp: new Date() }) }
+          else { const m = messages.value.find(x => x.id === currentAssistantMsgId.value); if (m) m.content = currentStreamContent.value.trim() }
+        }
+        scrollToBottom()
+      }
+      break
+    case 'task_analysis':
+      const ana = payload.analysis || payload
+      taskAnalysis.value = { complexity: ana.complexity || 'simple', task_type: ana.task_type || 'chat', requires_sandbox: ana.requires_sandbox || false }
+      messages.value.push({ id: 'ta-' + Date.now(), type: 'system', content: `📊 ${getComplexityLabel(taskAnalysis.value.complexity)} | ${getTaskTypeLabel(taskAnalysis.value.task_type)}${taskAnalysis.value.requires_sandbox ? ' | 沙箱' : ''}`, timestamp: new Date() })
+      scrollToBottom()
+      break
+    case 'task_analysis_complete':
+      // 任务分析完成，更新分析节点状态
+      isAnalyzing.value = false
       if (currentAnalysisMsgId.value) {
         const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
-        if (analysisMsg && !analysisMsg.collapsed) {
-          // 更新现有分析节点的内容
-          analysisMsg.content = thinkingContent
-          analysisMsg.nodeType = thinkingType
-        } else {
-          // 创建新的分析节点
-          const newId = 'analysis-' + Date.now().toString()
-          currentAnalysisMsgId.value = newId
-          messages.value.push({
-            id: newId,
-            type: 'analysis_node',
-            content: thinkingContent,
-            timestamp: new Date(),
-            collapsed: false,
-            nodeType: thinkingType
-          })
+        if (analysisMsg) {
+          analysisMsg.collapsed = true
+          analysisMsg.nodeType = 'analysis_complete'
         }
-      } else {
-        // 创建新的分析节点
-        const newId = 'analysis-' + Date.now().toString()
-        currentAnalysisMsgId.value = newId
-        messages.value.push({
-          id: newId,
-          type: 'analysis_node',
-          content: thinkingContent,
-          timestamp: new Date(),
-          collapsed: false,
-          nodeType: thinkingType
-        })
       }
-      
-      addLog('info', `分析节点 [${thinkingType}]: ${thinkingContent.substring(0, 50)}${thinkingContent.length > 50 ? '...' : ''}`)
+      // 显示分析完成的摘要信息
+      const completeData = payload.data || payload
+      if (completeData.complexity || completeData.task_type) {
+        taskAnalysis.value = {
+          complexity: completeData.complexity || taskAnalysis.value?.complexity || 'simple',
+          task_type: completeData.task_type || taskAnalysis.value?.task_type || 'chat',
+          requires_sandbox: completeData.requires_sandbox ?? taskAnalysis.value?.requires_sandbox ?? false
+        }
+      }
+      addLog('success', '任务分析完成')
       scrollToBottom()
       break
-
-    case 'token':
-    case 'chat_token':
-    case 'chat_response':
-      // 文本增量 - 内容可能在 delta 或 content 中
-      const tokenContent = data.delta || data.content || payload.delta || payload.content || ''
-      if (tokenContent) {
-        // 解析 <think> 标签 - 思维链内容
-        let remaining = tokenContent
-        
-        while (remaining.length > 0) {
-          if (isInThinkTag.value) {
-            // 在 think 标签内，查找结束标签
-            const endIndex = remaining.indexOf('</think>')
-            if (endIndex !== -1) {
-              // 找到结束标签
-              currentThinkingContent.value += remaining.substring(0, endIndex)
-              isInThinkTag.value = false
-              remaining = remaining.substring(endIndex + 8) // 跳过 </think>
-              
-              // 更新思维链消息（使用 ID 跟踪）
-              if (currentThinkingChainMsgId.value) {
-                const thinkingChainMsg = messages.value.find(m => m.id === currentThinkingChainMsgId.value)
-                if (thinkingChainMsg) {
-                  thinkingChainMsg.content = currentThinkingContent.value.trim()
-                }
-              }
-            } else {
-              // 没有结束标签，全部是思考内容
-              currentThinkingContent.value += remaining
-              remaining = ''
-              
-              // 更新思维链消息（使用 ID 跟踪）- 只有已经创建了思维链消息才更新
-              if (currentThinkingChainMsgId.value) {
-                const thinkingChainMsg = messages.value.find(m => m.id === currentThinkingChainMsgId.value)
-                if (thinkingChainMsg) {
-                  thinkingChainMsg.content = currentThinkingContent.value.trim()
-                }
-              }
-              // 注意：不在这里创建思维链消息，只有在检测到 <think> 开始标签时才创建
-            }
-          } else {
-            // 不在 think 标签内，查找开始标签
-            const startIndex = remaining.indexOf('<think>')
-            if (startIndex !== -1) {
-              // 找到开始标签，先处理标签前的内容
-              const beforeThink = remaining.substring(0, startIndex)
-              if (beforeThink.trim()) {
-                currentStreamContent.value += beforeThink
-              }
-              isInThinkTag.value = true
-              remaining = remaining.substring(startIndex + 7) // 跳过 <think>
-              
-              // 如果当前没有思维链消息，创建一个
-              if (!currentThinkingChainMsgId.value) {
-                // 先折叠分析节点
-                if (currentAnalysisMsgId.value) {
-                  const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
-                  if (analysisMsg && !analysisMsg.collapsed) {
-                    analysisMsg.collapsed = true
-                    isAnalyzing.value = false
-                  }
-                }
-                
-                const newId = 'thinking-chain-' + Date.now().toString()
-                currentThinkingChainMsgId.value = newId
-                messages.value.push({
-                  id: newId,
-                  type: 'thinking_chain',
-                  content: '正在思考...',
-                  timestamp: new Date()
-                })
-              }
-            } else {
-              // 没有开始标签，全部是正常内容
-              currentStreamContent.value += remaining
-              remaining = ''
-            }
-          }
+    case 'sandbox_ready':
+      sandboxInfo.value = { has_sandbox: true, session_id: payload.session_id, vnc_url: payload.vnc_url, vnc_password: payload.vnc_password }
+      messages.value.push({ id: 'sb-' + Date.now(), type: 'system', content: '🖥️ 沙箱就绪', timestamp: new Date() })
+      addLog('success', '沙箱就绪')
+      scrollToBottom()
+      break
+    case 'plan_start':
+      const pd = payload.data || payload
+      executionPlan.value = { id: 'plan-' + Date.now(), title: pd.plan || '计划', steps: (pd.steps_preview || []).map((s: any, i: number) => ({ id: `s${i}`, description: typeof s === 'string' ? s : s.description || `步骤${i+1}`, status: 'pending' as const })), total_steps: pd.total_steps || 0, current_step: 0, status: 'running' }
+      messages.value.push({ id: 'ps-' + Date.now(), type: 'system', content: `📋 计划开始 (${executionPlan.value.total_steps} 步)`, timestamp: new Date() })
+      scrollToBottom()
+      break
+    case 'plan_complete':
+      if (executionPlan.value) executionPlan.value.status = (payload.data?.success ?? payload.success) ? 'completed' : 'failed'
+      messages.value.push({ id: 'pc-' + Date.now(), type: 'system', content: executionPlan.value?.status === 'completed' ? '✅ 计划完成' : '❌ 计划失败', timestamp: new Date() })
+      scrollToBottom()
+      break
+    case 'plan_revision':
+      if (executionPlan.value) executionPlan.value.status = 'revising'
+      messages.value.push({ id: 'pr-' + Date.now(), type: 'system', content: '🔄 修订计划', timestamp: new Date() })
+      scrollToBottom()
+      break
+    case 'plan_revised':
+      if (executionPlan.value) { executionPlan.value.status = 'running'; const ns = payload.data?.new_steps || []; executionPlan.value.steps.push(...ns.map((s: any, i: number) => ({ id: `rs${Date.now()}${i}`, description: typeof s === 'string' ? s : s.description, status: 'pending' as const }))); executionPlan.value.total_steps = executionPlan.value.steps.length }
+      messages.value.push({ id: 'prd-' + Date.now(), type: 'system', content: '📝 计划已修订', timestamp: new Date() })
+      scrollToBottom()
+      break
+    case 'step_start':
+      if (executionPlan.value) { executionPlan.value.current_step++; const s = executionPlan.value.steps[executionPlan.value.current_step - 1]; if (s) s.status = 'in_progress' }
+      break
+    case 'step_success':
+      if (executionPlan.value) { const s = executionPlan.value.steps[executionPlan.value.current_step - 1]; if (s) s.status = 'completed' }
+      break
+    case 'step_failed':
+      if (executionPlan.value) { const s = executionPlan.value.steps[executionPlan.value.current_step - 1]; if (s) { s.status = 'failed'; s.error = payload.data?.error || payload.error } }
+      break
+    case 'step_retry':
+      addLog('warn', `重试: ${payload.data?.retry_count || 1}/${payload.data?.max_retries || 3}`)
+      break
+    case 'tool_call':
+      const toolName = payload.tool || payload.data?.tool || data.tool
+      const toolArgs = payload.arguments || payload.data?.arguments || data.arguments || {}
+      const toolStepId = payload.step_id ?? payload.data?.step_id
+      const toolInfo = getToolDisplayInfo(toolName)
+      const toolDescription = getToolActionDescription(toolName, toolArgs)
+      
+      // 添加到工具调用列表
+      toolCalls.value.unshift({
+        id: 'tc-' + Date.now(),
+        tool: toolName,
+        arguments: toolArgs,
+        status: 'running',
+        timestamp: new Date(),
+        stepId: toolStepId
+      })
+      if (toolCalls.value.length > 50) toolCalls.value.pop()
+      
+      // 在聊天区域添加工具执行消息
+      messages.value.push({
+        id: 'tool-' + Date.now(),
+        type: 'tool_execution',
+        content: '',
+        timestamp: new Date(),
+        toolData: {
+          tool: toolName,
+          status: 'running',
+          arguments: toolArgs,
+          stepId: toolStepId,
+          description: toolDescription
         }
-        
-        // 更新正常回复消息（非思考内容）- 使用 ID 跟踪
-        if (currentStreamContent.value.trim()) {
-          // 折叠分析节点（如果有的话）
-          if (currentAnalysisMsgId.value) {
-            const analysisMsg = messages.value.find(m => m.id === currentAnalysisMsgId.value)
-            if (analysisMsg && !analysisMsg.collapsed) {
-              analysisMsg.collapsed = true
-              isAnalyzing.value = false
-            }
-          }
-          
-          // 查找当前助手消息（使用 ID 跟踪）
-          if (currentAssistantMsgId.value) {
-            const normalMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
-            if (normalMsg) {
-              normalMsg.content = currentStreamContent.value.trim()
-            }
-          } else {
-            // 创建新的助手消息
-            const newId = payload.message_id || Date.now().toString()
-            currentAssistantMsgId.value = newId
-            messages.value.push({
-              id: newId,
-              type: 'assistant',
-              content: currentStreamContent.value.trim(),
-              timestamp: new Date(),
-              thinking: false
-            })
-          }
+      })
+      addLog('info', `🔧 调用工具: ${toolInfo.name} - ${toolDescription}`)
+      scrollToBottom()
+      break
+    case 'tool_result':
+      const resultTool = payload.tool || payload.data?.tool || data.tool
+      const resultSuccess = payload.success ?? payload.data?.success ?? true
+      const resultData = payload.result || payload.data?.result || data.result
+      const resultStepId = payload.step_id ?? payload.data?.step_id
+      const resultExecTime = payload.execution_time ?? payload.data?.execution_time
+      
+      // 更新工具调用列表中的状态
+      const tc = toolCalls.value.find(t => t.tool === resultTool && t.status === 'running')
+      if (tc) {
+        tc.status = resultSuccess !== false ? 'success' : 'failed'
+        tc.result = resultData
+        tc.executionTime = resultExecTime
+      }
+      
+      // 更新聊天区域中对应的工具执行消息
+      const toolMsg = [...messages.value].reverse().find(m =>
+        m.type === 'tool_execution' &&
+        m.toolData?.tool === resultTool &&
+        m.toolData?.status === 'running'
+      )
+      if (toolMsg && toolMsg.toolData) {
+        toolMsg.toolData.status = resultSuccess !== false ? 'success' : 'failed'
+        toolMsg.toolData.result = resultData
+        toolMsg.toolData.executionTime = resultExecTime
+      }
+      
+      const resultToolInfo = getToolDisplayInfo(resultTool)
+      if (resultSuccess !== false) {
+        addLog('success', `✅ ${resultToolInfo.name} 执行成功${resultExecTime ? ` (${resultExecTime}ms)` : ''}`)
+      } else {
+        addLog('error', `❌ ${resultToolInfo.name} 执行失败`)
+      }
+      scrollToBottom()
+      break
+    case 'tool_fix':
+      // 工具修复开始
+      const fixTool = payload.data?.tool || payload.tool
+      const fixError = payload.data?.error || payload.error || '执行失败'
+      const fixAttempt = payload.data?.fix_attempt || 1
+      const fixStepId = payload.data?.step_id
+      const fixOriginalArgs = payload.data?.original_args
+      const fixToolInfo = getToolDisplayInfo(fixTool)
+      
+      // 在聊天区域添加工具修复消息
+      messages.value.push({
+        id: 'tool-fix-' + Date.now(),
+        type: 'tool_fix',
+        content: '',
+        timestamp: new Date(),
+        toolFixData: {
+          tool: fixTool,
+          error: fixError,
+          fixAttempt: fixAttempt,
+          originalArgs: fixOriginalArgs,
+          status: 'fixing'
         }
-        
+      })
+      
+      // 更新对应的工具执行消息状态为修复中
+      const fixingToolMsg = [...messages.value].reverse().find(m =>
+        m.type === 'tool_execution' &&
+        m.toolData?.tool === fixTool &&
+        (m.toolData?.status === 'running' || m.toolData?.status === 'failed')
+      )
+      if (fixingToolMsg && fixingToolMsg.toolData) {
+        fixingToolMsg.toolData.status = 'fixing' as any
+      }
+      
+      addLog('warn', `🔧 工具修复中: ${fixToolInfo.name} - 尝试 ${fixAttempt}`)
+      scrollToBottom()
+      break
+    case 'tool_fixed':
+      // 工具修复完成
+      const fixedTool = payload.data?.tool || payload.tool
+      const fixedStepId = payload.data?.step_id
+      const fixedArgs = payload.data?.fixed_args
+      const fixedCommand = payload.data?.fixed_command
+      const fixExplanation = payload.data?.explanation
+      const fixAnalysis = payload.data?.analysis
+      const fixedToolInfo = getToolDisplayInfo(fixedTool)
+      
+      // 更新最近的 tool_fix 消息
+      const toolFixMsg = [...messages.value].reverse().find(m =>
+        m.type === 'tool_fix' &&
+        m.toolFixData?.tool === fixedTool &&
+        m.toolFixData?.status === 'fixing'
+      )
+      if (toolFixMsg && toolFixMsg.toolFixData) {
+        toolFixMsg.toolFixData.status = 'fixed'
+        toolFixMsg.toolFixData.fixedArgs = fixedArgs
+        toolFixMsg.toolFixData.fixedCommand = fixedCommand
+        toolFixMsg.toolFixData.explanation = fixExplanation || fixAnalysis
+      }
+      
+      addLog('success', `✅ 工具已修复: ${fixedToolInfo.name}`)
+      scrollToBottom()
+      break
+    case 'todo_list_update':
+      todoList.value = { id: payload.todo_list?.id || 'main', title: payload.todo_list?.title || '任务', items: (payload.todo_list?.items || []).map((i: any) => ({ id: i.id, content: i.content || i.description || i.title, status: i.status || 'pending' })), total_items: payload.todo_list?.total_items || 0, completed_items: payload.todo_list?.completed_items || 0 }
+      updateTodoStats()
+      // 在消息区域展示任务列表（只添加一次，后续更新会自动反映）
+      if (!messages.value.find(m => m.type === 'todo_list')) {
+        messages.value.push({ id: 'todo-' + Date.now(), type: 'todo_list' as any, content: '', timestamp: new Date() })
+      }
+      scrollToBottom()
+      break
+    case 'todo_item_update':
+      if (todoList.value && payload.item) {
+        const ex = todoList.value.items.find(i => i.id === payload.item.id)
+        if (ex) {
+          ex.status = payload.item.status
+          if (payload.item.content) ex.content = payload.item.content
+        } else {
+          todoList.value.items.push({ id: payload.item.id, content: payload.item.content || '', status: payload.item.status || 'pending' })
+        }
+        updateTodoStats()
         scrollToBottom()
       }
       break
-
-    case 'task_analysis':
-      // 任务分析结果
-      taskAnalysis.value = data.analysis || payload.analysis
-      addLog('info', `任务分析完成: ${JSON.stringify(taskAnalysis.value).substring(0, 100)}...`)
-      break
-
-    case 'sandbox_ready':
-      // 沙箱就绪
-      sandboxInfo.value = {
-        has_sandbox: true,
-        session_id: data.session_id || payload.session_id,
-        vnc_url: data.vnc_url || payload.vnc_url,
-        vnc_password: data.vnc_password || payload.vnc_password
+    case 'file_tree_update':
+      // 文件树更新 - 只展示最新文件树，不展示变更状态
+      if (payload.file_tree) {
+        const processFileNode = (n: any): FileNode => ({
+          name: n.name || n.path?.split('/').pop() || '',
+          path: n.path || '',
+          type: n.type || (n.children ? 'directory' : 'file'),
+          // 不再保留 status 字段，文件树只展示最新结构
+          children: n.children ? n.children.map(processFileNode) : undefined
+        })
+        fileTree.value = Array.isArray(payload.file_tree)
+          ? payload.file_tree.map(processFileNode)
+          : payload.file_tree.root
+            ? [processFileNode(payload.file_tree.root)]
+            : []
       }
-      addLog('success', `沙箱就绪: ${sandboxInfo.value.session_id}`)
-      messages.value.push({
-        id: Date.now().toString(),
-        type: 'system',
-        content: `🖥️ 沙箱环境已就绪 (ID: ${sandboxInfo.value.session_id})`,
-        timestamp: new Date()
-      })
-      scrollToBottom()
       break
-
-    case 'flow_node':
-      // 流程节点状态
-      flowNodes.value.push({
-        node: data.node || payload.node,
-        status: data.status || payload.status,
-        message: data.message || payload.message,
-        data: data.data || payload.data,
-        timestamp: new Date()
-      })
-      addLog('info', `流程节点: ${data.node || payload.node} - ${data.status || payload.status}: ${data.message || payload.message}`)
-      break
-
-    case 'plan_start':
-    case 'plan_complete':
-    case 'plan_revision':
-    case 'plan_revised':
-      addLog('info', `计划事件 [${msgType}]: ${data.message || payload.message || ''}`)
-      break
-
-    case 'step_start':
-    case 'step_success':
-    case 'step_failed':
-    case 'step_retry':
-      addLog('info', `步骤事件 [${msgType}]: ${data.message || payload.message || ''}`)
-      break
-
-    case 'tool_call':
-      addLog('info', `工具调用: ${data.tool || payload.tool} - ${JSON.stringify(data.arguments || payload.arguments || {}).substring(0, 100)}`)
-      break
-
-    case 'tool_result':
-      addLog('info', `工具结果: ${data.tool || payload.tool} - ${JSON.stringify(data.result || payload.result || {}).substring(0, 100)}`)
-      break
-
-    case 'llm_call':
-      addLog('info', `LLM 调用: ${data.purpose || payload.purpose || ''} - ${(data.message || payload.message || '').substring(0, 50)}`)
-      break
-
-    case 'variable_set':
-      addLog('info', `变量设置: ${JSON.stringify(data.data || payload.data || {})}`)
-      break
-
-    case 'retry':
-      addLog('warn', `重试 ${data.attempt || payload.attempt}/${data.max_retries || payload.max_retries}: ${data.error || payload.error}, 延迟 ${data.delay || payload.delay}s`)
-      break
-
-    case 'chat_complete':
-      // 对话完成 - 处理 payload 中的内容
-      isStreaming.value = false
-      
-      // 优先使用流式传输过程中累积的内容（已经过滤了 <think> 标签）
-      // 只有当没有流式内容时，才使用 payload.content
-      if (currentStreamContent.value.trim()) {
-        // 已经有流式内容，不需要再处理 payload.content
-        // 流式内容已经在 token 事件中正确过滤了 <think> 标签
-        addLog('info', '使用流式传输的内容')
-      } else if (payload.content && payload.is_complete) {
-        // 没有流式内容，使用 payload.content（需要过滤 <think> 标签）
-        // 过滤掉 <think>...</think> 标签内容
-        let cleanContent = payload.content
-        const thinkRegex = /<think>[\s\S]*?<\/think>/g
-        cleanContent = cleanContent.replace(thinkRegex, '').trim()
-        
-        // 如果过滤后内容和思维链内容相同，说明没有正常回复内容
-        // 这种情况下不应该显示
-        if (currentThinkingContent.value.trim() && cleanContent === currentThinkingContent.value.trim()) {
-          addLog('info', '过滤后内容与思维链相同，跳过')
-        } else if (cleanContent) {
-          // 查找当前助手消息（使用 ID 跟踪）
-          if (currentAssistantMsgId.value) {
-            const existingMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
-            if (existingMsg) {
-              existingMsg.content = cleanContent
-            }
-          } else {
-            // 创建新的助手消息
-            const newId = payload.message_id || Date.now().toString()
-            currentAssistantMsgId.value = newId
-            messages.value.push({
-              id: newId,
-              type: 'assistant',
-              content: cleanContent,
-              timestamp: new Date(),
-              thinking: false
-            })
+    case 'file_changes_update':
+      // 文件变更记录，只在聊天区域展示，不更新到文件树
+      const changes = payload.changes || []
+      if (changes.length > 0) {
+        // 在聊天区域添加文件变更消息
+        messages.value.push({
+          id: 'file-changes-' + Date.now(),
+          type: 'file_changes' as any,
+          content: '',
+          timestamp: new Date(),
+          fileChangesData: {
+            changes: changes.map((c: any) => ({
+              path: c.path,
+              changeType: c.change_type || c.status || 'modified',
+              oldPath: c.old_path
+            })),
+            totalChanges: payload.total_changes || changes.length
           }
+        })
+        addLog('info', `📝 文件变更: ${changes.length} 个文件`)
+        scrollToBottom()
+      }
+      break
+    case 'chat_complete':
+      isStreaming.value = false
+      if (!currentStreamContent.value.trim() && payload.content) {
+        const clean = payload.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+        if (clean && clean !== currentThinkingContent.value.trim()) {
+          if (!currentAssistantMsgId.value) { currentAssistantMsgId.value = 'asst-' + Date.now(); messages.value.push({ id: currentAssistantMsgId.value, type: 'assistant', content: clean, timestamp: new Date() }) }
+          else { const m = messages.value.find(x => x.id === currentAssistantMsgId.value); if (m) m.content = clean }
         }
       }
-      
-      // 更新会话 ID
-      if (payload.conversation_id) {
-        config.conversationId = payload.conversation_id
-      }
-      
-      addLog('success', `对话完成, 消息ID: ${data.message_id || payload.message_id}`)
+      if (payload.conversation_id) config.conversationId = payload.conversation_id
+      addLog('success', '对话完成')
       scrollToBottom()
       break
-
-    case 'sandbox_info':
-      // 沙箱信息响应
-      sandboxInfo.value = {
-        has_sandbox: data.has_sandbox || payload.has_sandbox,
-        ...(data.sandbox_info || payload.sandbox_info || {})
-      }
-      addLog('info', `沙箱信息: ${sandboxInfo.value.has_sandbox ? '已创建' : '未创建'}`)
-      break
-
-    case 'memory_cleared':
-      addLog('success', '对话记忆已清空')
-      break
-
-    case 'stats':
-      connectionStats.value = {
-        total_connections: data.active_connections || payload.active_connections || 0,
-        total_users: data.active_users || payload.active_users || 0,
-        total_conversations: data.active_agents || payload.active_agents || 0
-      }
-      break
-
     case 'error':
       isStreaming.value = false
-      const errorMsg = data.error || data.message || payload.error || payload.message || '发生错误'
-      messages.value.push({
-        id: Date.now().toString(),
-        type: 'error',
-        content: errorMsg,
-        timestamp: new Date()
-      })
-      addLog('error', `错误: ${errorMsg}`)
+      messages.value.push({ id: 'err-' + Date.now(), type: 'error', content: payload.message || payload.error || data.message || '错误', timestamp: new Date() })
+      addLog('error', payload.message || '错误')
       scrollToBottom()
       break
-
-    default:
-      // 记录未知消息类型，但也尝试处理 payload 中的内容
-      addLog('warn', `未知消息类型: ${msgType}`)
-      console.log('未知消息:', data)
-      
-      // 如果有 payload.content，尝试显示（使用 ID 跟踪）
-      if (payload.content) {
-        if (currentAssistantMsgId.value) {
-          const lastAssistantMsg = messages.value.find(m => m.id === currentAssistantMsgId.value)
-          if (lastAssistantMsg) {
-            lastAssistantMsg.content = payload.content
-            lastAssistantMsg.thinking = false
-          }
-        } else {
-          const newId = Date.now().toString()
-          currentAssistantMsgId.value = newId
-          messages.value.push({
-            id: newId,
-            type: 'assistant',
-            content: payload.content,
-            timestamp: new Date(),
-            thinking: false
-          })
+    
+    // ========== 交互式命令事件 ==========
+    case 'interactive_prompt':
+      // 交互式提示 - 命令需要用户输入
+      const promptData = payload.data || payload
+      messages.value.push({
+        id: 'interactive-prompt-' + Date.now(),
+        type: 'interactive_prompt',
+        content: '',
+        timestamp: new Date(),
+        interactiveData: {
+          type: 'prompt',
+          stepId: promptData.step_id,
+          tool: promptData.tool,
+          promptText: promptData.prompt_text || promptData.prompt,
+          options: promptData.options || [],
+          promptType: promptData.prompt_type || 'unknown',
+          command: promptData.command
         }
-        scrollToBottom()
-      }
+      })
+      addLog('info', `🔔 交互式提示: ${promptData.prompt_text || promptData.prompt}`)
+      scrollToBottom()
       break
+    
+    case 'interactive_response':
+      // 交互式响应 - AI 自动响应了交互式提示
+      const respData = payload.data || payload
+      messages.value.push({
+        id: 'interactive-response-' + Date.now(),
+        type: 'interactive_response',
+        content: '',
+        timestamp: new Date(),
+        interactiveData: {
+          type: 'response',
+          stepId: respData.step_id,
+          response: respData.response,
+          reasoning: respData.reasoning,
+          autoResponded: true
+        }
+      })
+      addLog('success', `✅ 自动响应: ${respData.response}`)
+      scrollToBottom()
+      break
+    
+    case 'user_input_required':
+      // 需要用户输入 - 显示输入对话框
+      const inputReqData = payload.data || payload
+      userInputDialog.value = {
+        show: true,
+        stepId: inputReqData.step_id,
+        promptText: inputReqData.prompt_text || inputReqData.prompt,
+        options: inputReqData.options || [],
+        optionsExplanation: inputReqData.options_explanation || [],
+        promptType: inputReqData.prompt_type || 'select',
+        defaultResponse: inputReqData.default_response || '',
+        context: {
+          stepDescription: inputReqData.context?.step_description || '',
+          command: inputReqData.context?.command || ''
+        },
+        selectedOption: inputReqData.default_response || '',
+        customInput: ''
+      }
+      // 在聊天区域也显示提示
+      messages.value.push({
+        id: 'user-input-required-' + Date.now(),
+        type: 'user_input_required',
+        content: '',
+        timestamp: new Date(),
+        interactiveData: {
+          type: 'user_input_required',
+          stepId: inputReqData.step_id,
+          tool: inputReqData.tool,
+          promptText: inputReqData.prompt_text || inputReqData.prompt,
+          options: inputReqData.options || [],
+          optionsExplanation: inputReqData.options_explanation || [],
+          promptType: inputReqData.prompt_type || 'select',
+          defaultResponse: inputReqData.default_response
+        }
+      })
+      addLog('warn', `⚠️ 需要用户输入: ${inputReqData.prompt_text || inputReqData.prompt}`)
+      scrollToBottom()
+      break
+    
+    case 'user_input_received':
+      // 用户输入已接收
+      const inputRecvData = payload.data || payload
+      // 关闭对话框
+      userInputDialog.value.show = false
+      // 在聊天区域显示用户的输入
+      messages.value.push({
+        id: 'user-input-received-' + Date.now(),
+        type: 'interactive_response',
+        content: '',
+        timestamp: new Date(),
+        interactiveData: {
+          type: 'user_input_received',
+          stepId: inputRecvData.step_id,
+          userInput: inputRecvData.user_input,
+          autoResponded: false
+        }
+      })
+      addLog('success', `✅ 用户输入已提交: ${inputRecvData.user_input}`)
+      scrollToBottom()
+      break
+    
+    // ========== 流程节点事件 ==========
+    case 'flow_node':
+      // 注意：payload 结构是 { node, status, message, data, ... }，不是嵌套在 data 里
+      const flowNode = payload.node || payload.data?.node
+      const flowStatus = payload.status || payload.data?.status
+      const flowMessage = payload.message || payload.data?.message || ''
+      const flowExtraData = payload.data
+      
+      // 根据节点类型和状态生成显示内容
+      const flowNodeLabels: Record<string, string> = {
+        'planning': '📋 规划',
+        'execution': '⚡ 执行',
+        'step_execution': '🔧 步骤执行',
+        'replanning': '🔄 重新规划',
+        'summarizing': '📝 总结',
+        'analysis': '🔍 分析',
+        'sandbox_creation': '🖥️ 沙箱创建',
+        'tool_execution': '🔧 工具执行',
+        'verification': '✅ 验证'
+      }
+      const flowStatusLabels: Record<string, string> = {
+        'started': '开始',
+        'completed': '完成',
+        'failed': '失败'
+      }
+      
+      // 如果是 completed 或 failed 状态，尝试更新已有的 started 消息
+      if (flowStatus === 'completed' || flowStatus === 'failed') {
+        const existingMsg = [...messages.value].reverse().find(m =>
+          m.type === 'flow_node' &&
+          m.flowNodeData?.node === flowNode &&
+          m.flowNodeData?.status === 'started'
+        )
+        if (existingMsg && existingMsg.flowNodeData) {
+          existingMsg.flowNodeData.status = flowStatus
+          existingMsg.flowNodeData.message = flowMessage || existingMsg.flowNodeData.message
+          if (flowExtraData) existingMsg.flowNodeData.data = flowExtraData
+          addLog(flowStatus === 'completed' ? 'success' : 'error', `${flowNodeLabels[flowNode] || flowNode} ${flowStatusLabels[flowStatus]}${flowMessage ? ': ' + flowMessage : ''}`)
+          scrollToBottom()
+          break
+        }
+      }
+      
+      // 否则创建新消息
+      messages.value.push({
+        id: 'flow-node-' + Date.now(),
+        type: 'flow_node',
+        content: '',
+        timestamp: new Date(),
+        flowNodeData: {
+          node: flowNode,
+          status: flowStatus,
+          message: flowMessage,
+          data: flowExtraData
+        }
+      })
+      addLog('info', `${flowNodeLabels[flowNode] || flowNode} ${flowStatusLabels[flowStatus] || flowStatus}${flowMessage ? ': ' + flowMessage : ''}`)
+      scrollToBottom()
+      break
+    
+    // ========== 验证事件 ==========
+    case 'verification_start':
+      const verifyStartData = payload.data || payload
+      messages.value.push({
+        id: 'verify-start-' + Date.now(),
+        type: 'verification',
+        content: '',
+        timestamp: new Date(),
+        verificationData: {
+          type: 'start',
+          expected: verifyStartData.expected
+        }
+      })
+      addLog('info', `🔍 开始验证: ${verifyStartData.expected || '检查执行结果'}`)
+      scrollToBottom()
+      break
+    
+    case 'verification_result':
+      const verifyResultData = payload.data || payload
+      messages.value.push({
+        id: 'verify-result-' + Date.now(),
+        type: 'verification',
+        content: '',
+        timestamp: new Date(),
+        verificationData: {
+          type: 'result',
+          isValid: verifyResultData.is_valid ?? verifyResultData.success,
+          actualPreview: verifyResultData.actual_preview || verifyResultData.actual
+        }
+      })
+      if (verifyResultData.is_valid ?? verifyResultData.success) {
+        addLog('success', `✅ 验证通过`)
+      } else {
+        addLog('warn', `⚠️ 验证失败: ${verifyResultData.actual_preview || '结果不符合预期'}`)
+      }
+      scrollToBottom()
+      break
+    
+    // ========== LLM 事件 ==========
+    case 'llm_call':
+      const llmCallData = payload.data || payload
+      messages.value.push({
+        id: 'llm-call-' + Date.now(),
+        type: 'llm_call',
+        content: '',
+        timestamp: new Date(),
+        llmData: {
+          type: 'call',
+          purpose: llmCallData.purpose,
+          context: llmCallData.context
+        }
+      })
+      addLog('info', `🤖 LLM 调用: ${llmCallData.purpose || '处理请求'}`)
+      scrollToBottom()
+      break
+    
+    case 'llm_response':
+      const llmRespData = payload.data || payload
+      // 更新最近的 llm_call 消息
+      const llmCallMsg = [...messages.value].reverse().find(m =>
+        m.type === 'llm_call' && m.llmData?.type === 'call'
+      )
+      if (llmCallMsg && llmCallMsg.llmData) {
+        llmCallMsg.llmData.type = 'response'
+        llmCallMsg.llmData.responsePreview = llmRespData.response_preview || llmRespData.response?.substring(0, 100)
+      }
+      addLog('success', `✅ LLM 响应完成`)
+      scrollToBottom()
+      break
+    
+    // ========== 变量事件 ==========
+    case 'variable_set':
+      const varSetData = payload.data || payload
+      const varName = varSetData.name || ''
+      const varValue = varSetData.value || ''
+      const varValueStr = typeof varValue === 'string' ? varValue : JSON.stringify(varValue)
+      
+      // 检测是否是交互式命令输出（包含选择提示）
+      const isInteractivePrompt = detectInteractivePrompt(varValueStr)
+      
+      if (isInteractivePrompt) {
+        // 解析交互式提示并显示用户输入对话框
+        const parsedPrompt = parseInteractivePrompt(varValueStr)
+        userInputDialog.value = {
+          show: true,
+          stepId: varSetData.step_id || 0,
+          promptText: parsedPrompt.promptText || '请选择一个选项',
+          options: parsedPrompt.options,
+          optionsExplanation: [],
+          promptType: parsedPrompt.options.length > 0 ? 'select' : 'input',
+          defaultResponse: parsedPrompt.defaultOption || '',
+          context: {
+            stepDescription: varName,
+            command: parsedPrompt.command || ''
+          },
+          selectedOption: parsedPrompt.defaultOption || '',
+          customInput: ''
+        }
+        // 在聊天区域也显示提示
+        messages.value.push({
+          id: 'var-interactive-' + Date.now(),
+          type: 'user_input_required',
+          content: '',
+          timestamp: new Date(),
+          interactiveData: {
+            type: 'user_input_required',
+            stepId: varSetData.step_id || 0,
+            promptText: parsedPrompt.promptText || '请选择一个选项',
+            options: parsedPrompt.options,
+            promptType: parsedPrompt.options.length > 0 ? 'select' : 'input',
+            defaultResponse: parsedPrompt.defaultOption
+          }
+        })
+        addLog('warn', `⚠️ 检测到交互式提示，需要用户输入`)
+      } else {
+        // 普通变量设置
+        messages.value.push({
+          id: 'var-set-' + Date.now(),
+          type: 'variable_event',
+          content: '',
+          timestamp: new Date(),
+          variableData: {
+            type: 'set',
+            name: varName,
+            value: varValue,
+            valueType: varSetData.value_type || typeof varValue
+          }
+        })
+        addLog('info', `📌 变量设置: ${varName} = ${varValueStr.substring(0, 50)}`)
+      }
+      scrollToBottom()
+      break
+    
+    case 'variable_resolve':
+      const varResolveData = payload.data || payload
+      messages.value.push({
+        id: 'var-resolve-' + Date.now(),
+        type: 'variable_event',
+        content: '',
+        timestamp: new Date(),
+        variableData: {
+          type: 'resolve',
+          originalArgs: varResolveData.original_args,
+          resolvedArgs: varResolveData.resolved_args,
+          variablesUsed: varResolveData.variables_used || []
+        }
+      })
+      addLog('info', `🔗 变量解析: ${(varResolveData.variables_used || []).join(', ')}`)
+      scrollToBottom()
+      break
+    
+    // ========== 上下文事件 ==========
+    case 'context_update':
+      const ctxUpdateData = payload.data || payload
+      addLog('info', `📋 上下文更新: ${ctxUpdateData.update_type || '状态变更'}`)
+      break
+    
+    case 'context_compressed':
+      const ctxCompressData = payload.data || payload
+      addLog('info', `🗜️ 上下文压缩: ${ctxCompressData.original_tokens || '?'} → ${ctxCompressData.compressed_tokens || '?'} tokens`)
+      break
+    
+    default:
+      addLog('warn', `未知消息: ${msgType}`)
   }
 }
 
 // 发送消息
 const sendMessage = () => {
-  if (!inputMessage.value.trim() || !ws.value || ws.value.readyState !== WebSocket.OPEN) {
-    return
-  }
-
-  const message = inputMessage.value.trim()
-  const requestId = `req-${Date.now()}`
-  
-  // 添加用户消息
-  messages.value.push({
-    id: Date.now().toString(),
-    type: 'user',
-    content: message,
-    timestamp: new Date()
-  })
+  if (!inputMessage.value.trim() || !ws.value || ws.value.readyState !== WebSocket.OPEN) return
+  const msg = inputMessage.value.trim()
+  messages.value.push({ id: 'u-' + Date.now(), type: 'user', content: msg, timestamp: new Date() })
   scrollToBottom()
-
-  // 发送到服务器（新的消息格式）
-  ws.value.send(JSON.stringify({
-    type: 'chat',
-    payload: {
-      message: message,
-      conversation_id: config.conversationId || undefined,
-      include_thinking: config.includeThinking
-    },
-    request_id: requestId
-  }))
-
+  ws.value.send(JSON.stringify({ type: 'chat', payload: { message: msg, conversation_id: config.conversationId || undefined, include_thinking: config.includeThinking }, request_id: 'req-' + Date.now() }))
   inputMessage.value = ''
-  addLog('info', `发送: ${message.substring(0, 30)}${message.length > 30 ? '...' : ''}`)
+  addLog('info', '已发送')
 }
 
-// 发送心跳
-const sendPing = () => {
-  if (ws.value?.readyState === WebSocket.OPEN) {
-    ws.value.send(JSON.stringify({
-      type: 'ping',
-      request_id: `ping-${Date.now()}`
-    }))
+// 发送用户输入响应
+const sendUserInput = (input: string) => {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
+  ws.value.send(JSON.stringify({
+    type: 'user_input',
+    payload: {
+      step_id: userInputDialog.value.stepId,
+      user_input: input,
+      conversation_id: config.conversationId
+    },
+    request_id: 'req-' + Date.now()
+  }))
+  userInputDialog.value.show = false
+  addLog('info', `用户输入已发送: ${input}`)
+}
+
+// 提交用户输入对话框
+const submitUserInput = () => {
+  const input = userInputDialog.value.promptType === 'input'
+    ? userInputDialog.value.customInput
+    : userInputDialog.value.selectedOption
+  if (input) {
+    sendUserInput(input)
   }
 }
 
-// 获取沙箱信息
-const getSandboxInfo = () => {
-  if (ws.value?.readyState === WebSocket.OPEN) {
-    ws.value.send(JSON.stringify({
-      type: 'get_sandbox_info',
-      request_id: `sandbox-${Date.now()}`
-    }))
+// 取消用户输入（使用默认值）
+const cancelUserInput = () => {
+  if (userInputDialog.value.defaultResponse) {
+    sendUserInput(userInputDialog.value.defaultResponse)
+  } else {
+    userInputDialog.value.show = false
+    addLog('warn', '用户取消输入')
   }
 }
 
-// 清空对话记忆
-const clearMemory = () => {
-  if (ws.value?.readyState === WebSocket.OPEN) {
-    ws.value.send(JSON.stringify({
-      type: 'clear_memory',
-      request_id: `clear-${Date.now()}`
-    }))
-  }
-}
+const sendPing = () => { if (ws.value?.readyState === WebSocket.OPEN) ws.value.send(JSON.stringify({ type: 'ping' })) }
+const clearMessages = () => { messages.value = []; currentStreamContent.value = ''; currentThinkingContent.value = ''; isInThinkTag.value = false; isAnalyzing.value = false; isProcessing.value = false; currentAssistantMsgId.value = ''; currentThinkingChainMsgId.value = ''; currentAnalysisMsgId.value = ''; executionPlan.value = null; toolCalls.value = []; todoList.value = null; fileTree.value = []; fileChanges.value = []; addLog('info', '已清空') }
+const clearLogs = () => { logs.value = [] }
 
-// 获取统计信息
-const getStats = () => {
-  if (ws.value?.readyState === WebSocket.OPEN) {
-    ws.value.send(JSON.stringify({
-      type: 'get_stats',
-      request_id: `stats-${Date.now()}`
-    }))
-  }
-}
+// 状态计算
+const statusIcon = computed(() => ({ connected: CheckCircle, connecting: Loader2, error: XCircle, disconnected: WifiOff }[wsStatus.value]))
+const statusColor = computed(() => ({ connected: 'text-green-500', connecting: 'text-yellow-500 animate-spin', error: 'text-red-500', disconnected: 'text-gray-400' }[wsStatus.value]))
+const statusText = computed(() => ({ connected: '已连接', connecting: '连接中...', error: '连接失败', disconnected: '未连接' }[wsStatus.value]))
 
-// 清空消息
-const clearMessages = () => {
-  messages.value = []
-  currentStreamContent.value = ''
-  currentThinkingContent.value = ''
-  currentAnalysisContent.value = ''
-  isInThinkTag.value = false
-  isAnalyzing.value = false
-  flowNodes.value = []
-  taskAnalysis.value = null
-  currentAssistantMsgId.value = ''
-  currentThinkingChainMsgId.value = ''
-  currentAnalysisMsgId.value = ''
-  addLog('info', '消息已清空')
-}
-
-// 清空日志
-const clearLogs = () => {
-  logs.value = []
-}
-
-// 状态图标
-const statusIcon = computed(() => {
-  switch (wsStatus.value) {
-    case 'connected': return CheckCircle
-    case 'connecting': return Loader2
-    case 'error': return XCircle
-    default: return WifiOff
-  }
-})
-
-const statusColor = computed(() => {
-  switch (wsStatus.value) {
-    case 'connected': return 'text-green-500'
-    case 'connecting': return 'text-yellow-500 animate-spin'
-    case 'error': return 'text-red-500'
-    default: return 'text-gray-400'
-  }
-})
-
-const statusText = computed(() => {
-  switch (wsStatus.value) {
-    case 'connected': return '已连接'
-    case 'connecting': return '连接中...'
-    case 'error': return '连接失败'
-    default: return '未连接'
-  }
-})
-
-// 心跳定时器
 let heartbeatInterval: number | null = null
-
-onMounted(() => {
-  // 检查是否已登录
-  if (checkAuthentication()) {
-    // 已登录，执行初始化（调用 API 创建对话，然后连接 WebSocket）
-    initAfterLogin()
-  }
-  
-  // 启动心跳
-  heartbeatInterval = window.setInterval(() => {
-    if (ws.value?.readyState === WebSocket.OPEN) {
-      sendPing()
-    }
-  }, 30000)
-})
-
-onUnmounted(() => {
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval)
-  }
-  disconnectWebSocket()
-})
+onMounted(() => { if (checkAuthentication()) initAfterLogin(); heartbeatInterval = window.setInterval(() => { if (ws.value?.readyState === WebSocket.OPEN) sendPing() }, 30000) })
+onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); disconnectWebSocket() })
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- 登录界面 -->
-    <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center">
-      <div class="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 w-full max-w-md">
+    <!-- 登录页面 -->
+    <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl border p-8 w-full max-w-md">
         <div class="text-center mb-8">
-          <div class="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock class="w-8 h-8 text-brand-600" />
-          </div>
-          <h1 class="text-2xl font-bold text-slate-900">沙箱测试环境</h1>
-          <p class="text-slate-500 mt-2">请输入密码以访问测试环境</p>
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><Lock class="w-8 h-8 text-blue-600" /></div>
+          <h1 class="text-2xl font-bold text-gray-800">沙箱测试环境</h1>
+          <p class="text-gray-500 mt-2">请输入密码访问</p>
         </div>
-        
         <form @submit.prevent="handleLogin" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-2">访问密码</label>
-            <div class="relative">
-              <input
-                v-model="passwordInput"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="请输入密码"
-                class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent pr-12"
-                :disabled="isLoggingIn"
-                autofocus
-              />
-              <button
-                type="button"
-                @click="showPassword = !showPassword"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <Eye v-if="!showPassword" class="w-5 h-5" />
-                <EyeOff v-else class="w-5 h-5" />
-              </button>
-            </div>
+          <div class="relative">
+            <input v-model="passwordInput" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12" :disabled="isLoggingIn" autofocus />
+            <button type="button" @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <component :is="showPassword ? EyeOff : Eye" class="w-5 h-5" />
+            </button>
           </div>
-          
-          <div v-if="loginError" class="flex items-center gap-2 text-red-500 text-sm bg-red-50 px-4 py-2 rounded-lg">
-            <XCircle class="w-4 h-4 flex-shrink-0" />
-            <span>{{ loginError }}</span>
-          </div>
-          
-          <button
-            type="submit"
-            :disabled="!passwordInput.trim() || isLoggingIn"
-            class="w-full px-4 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-300 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
-          >
+          <p v-if="loginError" class="text-red-500 text-sm">{{ loginError }}</p>
+          <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2" :disabled="isLoggingIn || !passwordInput">
             <Loader2 v-if="isLoggingIn" class="w-5 h-5 animate-spin" />
-            <Lock v-else class="w-5 h-5" />
-            {{ isLoggingIn ? '验证中...' : '进入测试环境' }}
+            <span>{{ isLoggingIn ? '验证中...' : '进入系统' }}</span>
           </button>
         </form>
-        
-        <div class="mt-6 pt-6 border-t border-slate-200">
-          <RouterLink to="/" class="flex items-center justify-center gap-2 text-slate-500 hover:text-brand-600 transition-colors">
-            <Home class="w-4 h-4" />
-            <span>返回主页</span>
-          </RouterLink>
-        </div>
       </div>
     </div>
 
-    <!-- 主界面（登录后显示） -->
-    <div v-else class="max-w-6xl mx-auto px-4 py-4">
-      <!-- 头部 -->
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Terminal class="w-6 h-6 text-brand-600" />
-          AI 对话测试
-        </h1>
-        <div class="flex items-center gap-3">
-          <!-- 连接状态 -->
-          <div class="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-slate-200 text-sm">
+    <!-- 主界面 -->
+    <div v-else class="flex flex-col h-screen">
+      <!-- 顶部导航 -->
+      <header class="bg-white border-b px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <RouterLink to="/" class="text-gray-500 hover:text-gray-700"><Home class="w-5 h-5" /></RouterLink>
+          <h1 class="text-lg font-semibold text-gray-800">AI 沙箱助手</h1>
+          <div class="flex items-center gap-2 text-sm">
             <component :is="statusIcon" :class="['w-4 h-4', statusColor]" />
-            <span class="text-slate-600">{{ statusText }}</span>
-          </div>
-          <RouterLink to="/" class="flex items-center gap-2 px-3 py-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-brand-600">
-            <Home class="w-5 h-5" />
-            <span class="hidden md:inline">返回主页</span>
-          </RouterLink>
-        </div>
-      </div>
-
-      <div class="grid lg:grid-cols-4 gap-4">
-        <!-- 左侧：配置 -->
-        <div class="space-y-4">
-          <!-- 连接配置 -->
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <Settings class="w-4 h-4" />
-              连接配置
-            </h2>
-            
-            <div class="space-y-3">
-              <div>
-                <label class="block text-xs font-medium text-slate-500 mb-1">服务地址</label>
-                <input v-model="config.orchestratorUrl" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="ws://localhost:8001" />
-              </div>
-              
-              <div>
-                <label class="block text-xs font-medium text-slate-500 mb-1">用户 ID</label>
-                <input v-model="config.userId" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              </div>
-              
-              <div>
-                <label class="block text-xs font-medium text-slate-500 mb-1">会话 ID</label>
-                <div class="flex gap-2">
-                  <input v-model="config.conversationId" type="text" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                  <button @click="generateConversationId" class="px-2 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm" title="生成新会话ID">
-                    <RefreshCw class="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              
-              <!-- 思考过程开关 -->
-              <div class="flex items-center justify-between">
-                <label class="text-xs font-medium text-slate-500">显示思考过程</label>
-                <button
-                  @click="config.includeThinking = !config.includeThinking"
-                  :class="[
-                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    config.includeThinking ? 'bg-brand-600' : 'bg-slate-200'
-                  ]"
-                >
-                  <span
-                    :class="[
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      config.includeThinking ? 'translate-x-6' : 'translate-x-1'
-                    ]"
-                  />
-                </button>
-              </div>
-              
-              <button
-                @click="reconnect"
-                class="w-full px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm flex items-center justify-center gap-2"
-              >
-                <Wifi class="w-4 h-4" />
-                重新连接
-              </button>
-            </div>
-          </div>
-
-          <!-- 操作按钮 -->
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h2 class="text-sm font-semibold text-slate-700 mb-3">操作</h2>
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                @click="getSandboxInfo"
-                :disabled="wsStatus !== 'connected'"
-                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-300 rounded-lg text-xs flex items-center justify-center gap-1"
-              >
-                <Monitor class="w-3 h-3" />
-                沙箱信息
-              </button>
-              <button
-                @click="getStats"
-                :disabled="wsStatus !== 'connected'"
-                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-300 rounded-lg text-xs flex items-center justify-center gap-1"
-              >
-                <BarChart3 class="w-3 h-3" />
-                统计信息
-              </button>
-              <button
-                @click="clearMemory"
-                :disabled="wsStatus !== 'connected'"
-                class="px-3 py-2 bg-orange-100 hover:bg-orange-200 disabled:bg-slate-50 disabled:text-slate-300 text-orange-700 rounded-lg text-xs flex items-center justify-center gap-1"
-              >
-                <Brain class="w-3 h-3" />
-                清空记忆
-              </button>
-              <button
-                @click="clearMessages"
-                class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs flex items-center justify-center gap-1"
-              >
-                <Eraser class="w-3 h-3" />
-                清空消息
-              </button>
-            </div>
-          </div>
-
-          <!-- 会话信息（登录后立即显示） -->
-          <div v-if="sessionInfo" class="bg-white rounded-xl border border-green-200 shadow-sm p-4">
-            <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-              <CheckCircle class="w-4 h-4 text-green-500" />
-              会话信息
-            </h2>
-            <div class="space-y-2 text-xs">
-              <div class="flex justify-between">
-                <span class="text-slate-500">用户 ID:</span>
-                <span class="font-mono text-slate-700 truncate max-w-[120px]" :title="sessionInfo.userId">{{ sessionInfo.userId }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-500">会话 ID:</span>
-                <span class="font-mono text-slate-700 truncate max-w-[120px]" :title="sessionInfo.conversationId">{{ sessionInfo.conversationId.substring(0, 16) }}...</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-500">连接 ID:</span>
-                <span class="font-mono text-slate-700 truncate max-w-[120px]" :title="sessionInfo.connectionId">{{ sessionInfo.connectionId.substring(0, 12) }}...</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-500">连接时间:</span>
-                <span class="text-slate-700">{{ sessionInfo.connectedAt }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 沙箱信息 -->
-          <div v-if="sandboxInfo?.has_sandbox" class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-              <Monitor class="w-4 h-4 text-green-500" />
-              沙箱环境
-            </h2>
-            <div class="space-y-2 text-xs">
-              <div class="flex justify-between">
-                <span class="text-slate-500">会话 ID:</span>
-                <span class="font-mono text-slate-700">{{ sandboxInfo.session_id?.substring(0, 12) }}...</span>
-              </div>
-              <div v-if="sandboxInfo.vnc_url" class="flex justify-between">
-                <span class="text-slate-500">VNC:</span>
-                <a :href="sandboxInfo.vnc_url" target="_blank" class="text-brand-600 hover:underline">打开</a>
-              </div>
-              <div v-if="sandboxInfo.vnc_password" class="flex justify-between">
-                <span class="text-slate-500">密码:</span>
-                <span class="font-mono text-slate-700">{{ sandboxInfo.vnc_password }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 连接统计 -->
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h2 class="text-sm font-semibold text-slate-700 mb-2">连接统计</h2>
-            <div class="grid grid-cols-3 gap-2 text-center">
-              <div class="bg-slate-50 rounded-lg p-2">
-                <div class="text-lg font-bold text-brand-600">{{ connectionStats.total_connections }}</div>
-                <div class="text-xs text-slate-500">连接</div>
-              </div>
-              <div class="bg-slate-50 rounded-lg p-2">
-                <div class="text-lg font-bold text-brand-600">{{ connectionStats.total_users }}</div>
-                <div class="text-xs text-slate-500">用户</div>
-              </div>
-              <div class="bg-slate-50 rounded-lg p-2">
-                <div class="text-lg font-bold text-brand-600">{{ connectionStats.total_conversations }}</div>
-                <div class="text-xs text-slate-500">会话</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 日志 -->
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <div class="flex items-center justify-between mb-2">
-              <h2 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                <AlertCircle class="w-4 h-4" />
-                日志
-              </h2>
-              <button @click="clearLogs" class="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
-                <Trash2 class="w-3 h-3" />
-              </button>
-            </div>
-            
-            <div class="h-48 overflow-y-auto font-mono text-xs space-y-1">
-              <div v-if="logs.length === 0" class="text-center text-slate-400 py-4">
-                暂无日志
-              </div>
-              
-              <div v-for="(log, idx) in logs" :key="idx" :class="[
-                'p-1.5 rounded',
-                log.level === 'error' ? 'bg-red-50 text-red-600' :
-                log.level === 'warn' ? 'bg-yellow-50 text-yellow-600' :
-                log.level === 'success' ? 'bg-green-50 text-green-600' :
-                'bg-slate-50 text-slate-500'
-              ]">
-                <span class="text-slate-400">[{{ log.time }}]</span>
-                {{ log.message }}
-              </div>
-            </div>
+            <span :class="statusColor">{{ statusText }}</span>
           </div>
         </div>
+        <div class="flex items-center gap-2">
+          <button @click="reconnect" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="重连"><RefreshCw class="w-5 h-5" /></button>
+          <button @click="clearMessages" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="清空"><Trash2 class="w-5 h-5" /></button>
+        </div>
+      </header>
 
-        <!-- 右侧：对话区域 -->
-        <div class="lg:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[calc(100vh-120px)]">
-          <div class="p-4 border-b border-slate-200 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <MessageSquare class="w-5 h-5" />
-              对话
-            </h2>
-            <div class="flex items-center gap-2">
-              <span v-if="config.conversationId" class="text-xs text-slate-400 font-mono">
-                {{ config.conversationId.substring(0, 20) }}...
-              </span>
-              <button @click="clearMessages" class="p-2 hover:bg-slate-100 rounded-lg text-slate-500" title="清空消息">
-                <Trash2 class="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          
+      <!-- 主内容区 -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- 聊天区域 -->
+        <div class="flex-1 flex flex-col">
           <!-- 消息列表 -->
-          <div ref="messagesContainer" @click="handleMessagesClick" class="flex-1 overflow-y-auto p-4 space-y-4">
-            <div v-if="messages.length === 0 && wsStatus === 'connecting'" class="text-center text-slate-400 py-8">
-              <Loader2 class="w-8 h-8 animate-spin mx-auto mb-2" />
-              正在连接服务器...
-            </div>
-            
-            <div v-else-if="messages.length === 0 && wsStatus === 'error'" class="text-center py-8">
-              <XCircle class="w-8 h-8 text-red-400 mx-auto mb-2" />
-              <p class="text-red-500 mb-2">连接失败</p>
-              <p class="text-sm text-slate-500">请确保后端服务已启动</p>
-              <code class="text-xs bg-slate-100 px-2 py-1 rounded mt-2 inline-block">python server/orchestrator_service.py</code>
-            </div>
-            
-            <div v-for="msg in messages" :key="msg.id" :class="[
-              'rounded-xl',
-              msg.type === 'user' ? 'ml-auto bg-brand-50 text-brand-800 border border-brand-200 p-3 max-w-fit' :
-              msg.type === 'analysis_node' ? (msg.collapsed ? 'bg-amber-50 text-amber-700 border border-amber-200 p-3 max-w-[80%]' : 'bg-amber-50 text-amber-800 border border-amber-300 p-3 max-w-[80%]') :
-              msg.type === 'thinking_chain' ? 'bg-purple-50 text-purple-800 border border-purple-200 p-3 max-w-[80%]' :
-              msg.type === 'assistant' ? 'bg-white border border-slate-200 shadow-sm overflow-hidden max-w-[80%]' :
-              msg.type === 'system' ? 'mx-auto bg-blue-50 text-blue-700 text-sm max-w-full p-3' :
-              'bg-red-50 text-red-800 p-3 max-w-[80%]'
-            ]">
+          <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4" @click="handleMessagesClick">
+            <div v-for="msg in messages" :key="msg.id" :class="['max-w-3xl', msg.type === 'user' ? 'ml-auto' : 'mr-auto']">
+              <!-- 用户消息 -->
+              <div v-if="msg.type === 'user'" class="bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3">{{ msg.content }}</div>
+              <!-- 助手消息 -->
+              <div v-else-if="msg.type === 'assistant'" class="bg-white border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm assistant-message" v-html="renderMarkdown(msg.content)"></div>
+              <!-- 系统消息 -->
+              <div v-else-if="msg.type === 'system'" class="text-center text-sm text-gray-500 py-2">{{ msg.content }}</div>
+              <!-- 错误消息 -->
+              <div v-else-if="msg.type === 'error'" class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3">{{ msg.content }}</div>
               <!-- 分析节点 -->
-              <div v-if="msg.type === 'analysis_node'" class="space-y-2">
-                <div class="flex items-center gap-2 text-amber-600 text-sm font-medium">
+              <div v-else-if="msg.type === 'analysis_node'" class="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
+                <div class="flex items-center gap-2 text-purple-700 text-sm font-medium mb-1">
                   <Loader2 v-if="!msg.collapsed" class="w-4 h-4 animate-spin" />
+                  <CheckCircle v-else class="w-4 h-4 text-green-500" />
+                  <span>{{
+                    msg.nodeType === 'analysis_complete' ? '✅ 分析完成' :
+                    msg.nodeType === 'planning' ? '📋 规划中' :
+                    msg.nodeType === 'routing' ? '🔀 路由决策' :
+                    msg.collapsed ? '✅ 分析完成' : '🔍 分析中'
+                  }}</span>
+                </div>
+                <p v-if="!msg.collapsed" class="text-purple-600 text-sm">{{ msg.content }}</p>
+              </div>
+              <!-- 思考链 -->
+              <div v-else-if="msg.type === 'thinking_chain'" class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <div class="flex items-center gap-2 text-amber-700 text-sm font-medium mb-1">
+                  <Loader2 v-if="isStreaming" class="w-4 h-4 animate-spin" />
                   <CheckCircle v-else class="w-4 h-4" />
-                  <span>{{ msg.collapsed ? '分析完成' : '分析中...' }}</span>
-                  <span v-if="msg.nodeType" class="text-xs text-amber-500">[{{ msg.nodeType }}]</span>
+                  <span>思考过程</span>
                 </div>
-                <div v-if="!msg.collapsed" class="whitespace-pre-wrap text-amber-700 text-sm">{{ msg.content }}</div>
+                <p class="text-amber-600 text-sm whitespace-pre-wrap">{{ msg.content }}</p>
               </div>
-              <!-- 思维链 -->
-              <div v-else-if="msg.type === 'thinking_chain'" class="space-y-2">
-                <div class="flex items-center gap-2 text-purple-600 text-sm font-medium">
-                  <Brain class="w-4 h-4" />
-                  <span>思维链</span>
+              <!-- 工具执行展示 -->
+              <div v-else-if="msg.type === 'tool_execution' && msg.toolData" class="bg-gradient-to-br from-slate-50 to-gray-50 border border-slate-200 rounded-xl px-4 py-3 w-full max-w-2xl">
+                <!-- 头部：工具信息和状态 -->
+                <div class="flex items-center gap-3 mb-3">
+                  <!-- 工具图标 -->
+                  <div :class="[
+                    'w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm',
+                    msg.toolData.status === 'running' ? 'bg-blue-100 ring-2 ring-blue-200' :
+                    msg.toolData.status === 'success' ? 'bg-green-100 ring-2 ring-green-200' : 'bg-red-100 ring-2 ring-red-200'
+                  ]">
+                    {{ getToolDisplayInfo(msg.toolData.tool).icon }}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span :class="['font-semibold text-sm', getToolDisplayInfo(msg.toolData.tool).color]">
+                        {{ getToolDisplayInfo(msg.toolData.tool).name }}
+                      </span>
+                      <span v-if="msg.toolData.stepId !== undefined" class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                        步骤 #{{ msg.toolData.stepId }}
+                      </span>
+                      <span :class="[
+                        'text-xs px-2 py-0.5 rounded-full font-medium',
+                        msg.toolData.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                        msg.toolData.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      ]">
+                        {{ msg.toolData.status === 'running' ? '执行中' : msg.toolData.status === 'success' ? '成功' : '失败' }}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-0.5">{{ msg.toolData.description }}</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span v-if="msg.toolData.executionTime" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                      {{ msg.toolData.executionTime }}ms
+                    </span>
+                    <Loader2 v-if="msg.toolData.status === 'running'" class="w-5 h-5 text-blue-500 animate-spin" />
+                    <CheckCircle v-else-if="msg.toolData.status === 'success'" class="w-5 h-5 text-green-500" />
+                    <XCircle v-else class="w-5 h-5 text-red-500" />
+                  </div>
                 </div>
-                <div class="whitespace-pre-wrap text-purple-700">{{ msg.content }}</div>
-              </div>
-              <!-- AI 回复 - 带淡蓝色题头条和 Markdown 渲染 -->
-              <div v-else-if="msg.type === 'assistant'" class="assistant-message">
-                <div class="bg-sky-100 px-4 py-2 border-b border-sky-200">
-                  <span class="text-sky-700 font-medium text-sm">AI 回复</span>
-                </div>
-                <div class="p-4">
-                  <div class="prose prose-slate prose-sm max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-code:text-pink-600 prose-code:bg-pink-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none" v-html="renderMarkdown(msg.content)"></div>
-                  <div class="text-xs mt-3 text-slate-400">
-                    {{ msg.timestamp.toLocaleTimeString() }}
+                
+                <!-- 操作详情区域 -->
+                <div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                  <!-- 调用参数 -->
+                  <div class="px-3 py-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                      <span class="font-medium">📋 调用参数</span>
+                    </div>
+                    <div class="text-xs font-mono bg-slate-50 rounded p-2 overflow-x-auto max-h-24">
+                      <pre class="whitespace-pre-wrap break-all">{{ formatToolArguments(msg.toolData.tool, msg.toolData.arguments) }}</pre>
+                    </div>
+                  </div>
+                  
+                  <!-- 执行状态 -->
+                  <div class="px-3 py-2">
+                    <div v-if="msg.toolData.status === 'running'" class="flex items-center gap-3">
+                      <div class="flex gap-1">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                        <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                        <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                      </div>
+                      <span class="text-sm text-blue-600 font-medium">正在执行操作...</span>
+                    </div>
+                    <div v-else>
+                      <div class="flex items-center gap-2 text-xs mb-2">
+                        <span :class="msg.toolData.status === 'success' ? 'text-green-600' : 'text-red-600'" class="font-medium">
+                          {{ msg.toolData.status === 'success' ? '✓ 执行成功' : '✗ 执行失败' }}
+                        </span>
+                      </div>
+                      <!-- 执行结果 -->
+                      <div v-if="msg.toolData.result" class="mt-2">
+                        <details class="group">
+                          <summary class="cursor-pointer text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                            <ChevronRight class="w-3 h-3 group-open:rotate-90 transition-transform" />
+                            <span>查看执行结果</span>
+                          </summary>
+                          <div class="mt-2 p-2 bg-slate-50 rounded text-xs font-mono overflow-x-auto max-h-40">
+                            <pre class="whitespace-pre-wrap break-all">{{ formatToolResult(msg.toolData.result) }}</pre>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <!-- 其他消息类型 -->
-              <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
-              <div v-if="msg.type !== 'assistant' && msg.type !== 'user'" class="text-xs mt-1 opacity-60">
-                {{ msg.timestamp.toLocaleTimeString() }}
+              <!-- 工具修复展示 -->
+              <div v-else-if="msg.type === 'tool_fix' && msg.toolFixData" class="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 mb-2">
+                  <!-- 状态图标 -->
+                  <div :class="[
+                    'w-8 h-8 rounded-lg flex items-center justify-center text-lg',
+                    msg.toolFixData.status === 'fixing' ? 'bg-orange-100' :
+                    msg.toolFixData.status === 'fixed' ? 'bg-green-100' : 'bg-red-100'
+                  ]">
+                    🔧
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-sm text-orange-700">
+                        工具修复
+                      </span>
+                      <span class="text-xs bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded">
+                        {{ getToolDisplayInfo(msg.toolFixData.tool).name }}
+                      </span>
+                      <span class="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                        尝试 #{{ msg.toolFixData.fixAttempt }}
+                      </span>
+                      <Loader2 v-if="msg.toolFixData.status === 'fixing'" class="w-4 h-4 text-orange-500 animate-spin" />
+                      <CheckCircle v-else-if="msg.toolFixData.status === 'fixed'" class="w-4 h-4 text-green-500" />
+                      <XCircle v-else class="w-4 h-4 text-red-500" />
+                    </div>
+                  </div>
+                </div>
+                <!-- 错误信息 -->
+                <div class="mt-2 p-2 bg-red-50 rounded-lg">
+                  <p class="text-xs text-red-600 font-medium mb-1">❌ 错误原因:</p>
+                  <p class="text-xs text-red-700">{{ msg.toolFixData.error }}</p>
+                </div>
+                <!-- 修复详情 -->
+                <div v-if="msg.toolFixData.status === 'fixed'" class="mt-2 pt-2 border-t border-orange-200">
+                  <div class="flex items-center gap-1 text-xs text-green-600 mb-2">
+                    <CheckCircle class="w-3 h-3" />
+                    <span>已修复</span>
+                  </div>
+                  <!-- 修复后的命令 -->
+                  <div v-if="msg.toolFixData.fixedCommand" class="p-2 bg-green-50 rounded-lg mb-2">
+                    <p class="text-xs text-green-700 font-medium mb-1">✓ 修复后命令:</p>
+                    <code class="text-xs text-green-800 break-all">{{ msg.toolFixData.fixedCommand }}</code>
+                  </div>
+                  <!-- 修复说明 -->
+                  <div v-if="msg.toolFixData.explanation" class="p-2 bg-blue-50 rounded-lg">
+                    <p class="text-xs text-blue-700 font-medium mb-1">💡 修复说明:</p>
+                    <p class="text-xs text-blue-600">{{ msg.toolFixData.explanation }}</p>
+                  </div>
+                </div>
+                <!-- 修复中状态 -->
+                <div v-else-if="msg.toolFixData.status === 'fixing'" class="mt-2 pt-2 border-t border-orange-200">
+                  <div class="flex items-center gap-2 text-xs text-orange-600">
+                    <div class="flex gap-1">
+                      <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                      <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                      <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                    </div>
+                    <span>AI 正在分析并修复...</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 文件变更展示 -->
+              <div v-else-if="msg.type === 'file_changes' && msg.fileChangesData" class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-amber-700 text-sm font-medium mb-3">
+                  <FileText class="w-4 h-4" />
+                  <span>文件变更</span>
+                  <span class="ml-auto text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">
+                    {{ msg.fileChangesData.totalChanges }} 个文件
+                  </span>
+                </div>
+                <div class="space-y-1.5 max-h-48 overflow-y-auto">
+                  <div v-for="(change, idx) in msg.fileChangesData.changes" :key="idx"
+                    :class="[
+                      'flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm',
+                      getFileChangeBgColor(change.changeType)
+                    ]">
+                    <span class="flex-shrink-0">{{ getFileChangeIcon(change.changeType) }}</span>
+                    <span :class="['text-xs px-1.5 py-0.5 rounded', getFileStatusColor(change.changeType)]">
+                      {{ getFileChangeLabel(change.changeType) }}
+                    </span>
+                    <span class="text-gray-700 truncate flex-1" :title="change.path">{{ change.path }}</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 待办事项展示 -->
+              <div v-else-if="msg.type === 'todo_list' && todoList" class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-blue-700 text-sm font-medium mb-3">
+                  <ListTodo class="w-4 h-4" />
+                  <span>{{ todoList.title || '待办事项' }}</span>
+                  <span class="ml-auto text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                    {{ todoStats.completed }}/{{ todoStats.total }}
+                  </span>
+                </div>
+                <div class="space-y-2">
+                  <div v-for="item in todoList.items" :key="item.id"
+                    :class="[
+                      'flex items-start gap-2 p-2 rounded-lg transition-colors',
+                      item.status === 'completed' ? 'bg-green-50' :
+                      item.status === 'in_progress' ? 'bg-blue-100' :
+                      item.status === 'failed' ? 'bg-red-50' : 'bg-white/60'
+                    ]">
+                    <component
+                      :is="getTodoStatusIcon(item.status)"
+                      :class="[
+                        'w-4 h-4 mt-0.5 flex-shrink-0',
+                        getTodoStatusColor(item.status),
+                        item.status === 'in_progress' ? 'animate-spin' : ''
+                      ]"
+                    />
+                    <span :class="[
+                      'text-sm flex-1',
+                      item.status === 'completed' ? 'text-green-700 line-through' :
+                      item.status === 'failed' ? 'text-red-700' : 'text-gray-700'
+                    ]">{{ item.content }}</span>
+                  </div>
+                </div>
+                <div v-if="todoStats.in_progress > 0" class="mt-3 pt-2 border-t border-blue-200">
+                  <div class="flex items-center gap-2 text-xs text-blue-600">
+                    <Loader2 class="w-3 h-3 animate-spin" />
+                    <span>正在执行中...</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 交互式提示展示 -->
+              <div v-else-if="msg.type === 'interactive_prompt' && msg.interactiveData" class="bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-cyan-700 text-sm font-medium mb-2">
+                  <span class="text-lg">🔔</span>
+                  <span>交互式提示</span>
+                  <span v-if="msg.interactiveData.stepId !== undefined" class="text-xs bg-cyan-100 text-cyan-600 px-2 py-0.5 rounded-full">
+                    步骤 #{{ msg.interactiveData.stepId }}
+                  </span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-cyan-100">
+                  <p class="text-sm text-gray-700 mb-2">{{ msg.interactiveData.promptText }}</p>
+                  <div v-if="msg.interactiveData.options && msg.interactiveData.options.length" class="mt-2">
+                    <p class="text-xs text-gray-500 mb-1">可选项:</p>
+                    <div class="flex flex-wrap gap-1">
+                      <span v-for="(opt, idx) in msg.interactiveData.options" :key="idx" class="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded">
+                        {{ opt }}
+                      </span>
+                    </div>
+                  </div>
+                  <div v-if="msg.interactiveData.command" class="mt-2 pt-2 border-t border-cyan-100">
+                    <p class="text-xs text-gray-500">命令:</p>
+                    <code class="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded block mt-1">{{ msg.interactiveData.command }}</code>
+                  </div>
+                </div>
+              </div>
+              <!-- 交互式响应展示 -->
+              <div v-else-if="msg.type === 'interactive_response' && msg.interactiveData" class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-green-700 text-sm font-medium mb-2">
+                  <CheckCircle class="w-4 h-4" />
+                  <span>{{ msg.interactiveData.autoResponded ? '自动响应' : '用户输入' }}</span>
+                  <span v-if="msg.interactiveData.stepId !== undefined" class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">
+                    步骤 #{{ msg.interactiveData.stepId }}
+                  </span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-green-100">
+                  <p class="text-sm text-gray-700 font-medium">
+                    {{ msg.interactiveData.response || msg.interactiveData.userInput }}
+                  </p>
+                  <p v-if="msg.interactiveData.reasoning" class="text-xs text-gray-500 mt-2 pt-2 border-t border-green-100">
+                    💡 {{ msg.interactiveData.reasoning }}
+                  </p>
+                </div>
+              </div>
+              <!-- 需要用户输入展示 -->
+              <div v-else-if="msg.type === 'user_input_required' && msg.interactiveData" class="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-300 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-yellow-700 text-sm font-medium mb-2">
+                  <span class="text-lg animate-pulse">⚠️</span>
+                  <span>需要您的输入</span>
+                  <span v-if="msg.interactiveData.stepId !== undefined" class="text-xs bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded-full">
+                    步骤 #{{ msg.interactiveData.stepId }}
+                  </span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-yellow-200">
+                  <p class="text-sm text-gray-700 font-medium mb-2">{{ msg.interactiveData.promptText }}</p>
+                  <div v-if="msg.interactiveData.options && msg.interactiveData.options.length" class="space-y-1">
+                    <div v-for="(opt, idx) in msg.interactiveData.options" :key="idx" class="flex items-start gap-2 p-2 bg-yellow-50 rounded-lg">
+                      <span class="text-sm font-medium text-yellow-700">{{ opt }}</span>
+                      <span v-if="msg.interactiveData.optionsExplanation && msg.interactiveData.optionsExplanation[idx]" class="text-xs text-gray-500">
+                        - {{ msg.interactiveData.optionsExplanation[idx].description }}
+                      </span>
+                    </div>
+                  </div>
+                  <p v-if="msg.interactiveData.defaultResponse" class="text-xs text-gray-500 mt-2">
+                    默认: {{ msg.interactiveData.defaultResponse }}
+                  </p>
+                </div>
+              </div>
+              <!-- 流程节点展示 -->
+              <div v-else-if="msg.type === 'flow_node' && msg.flowNodeData" class="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-indigo-700 text-sm font-medium">
+                  <span class="text-lg">{{
+                    msg.flowNodeData.node === 'planning' ? '📋' :
+                    msg.flowNodeData.node === 'execution' ? '⚡' :
+                    msg.flowNodeData.node === 'step_execution' ? '🔧' :
+                    msg.flowNodeData.node === 'replanning' ? '🔄' :
+                    msg.flowNodeData.node === 'summarizing' ? '📝' :
+                    msg.flowNodeData.node === 'analysis' ? '🔍' :
+                    msg.flowNodeData.node === 'sandbox_creation' ? '🖥️' :
+                    msg.flowNodeData.node === 'tool_execution' ? '🔧' :
+                    msg.flowNodeData.node === 'verification' ? '✅' : '📌'
+                  }}</span>
+                  <span>{{
+                    msg.flowNodeData.node === 'planning' ? '规划阶段' :
+                    msg.flowNodeData.node === 'execution' ? '执行阶段' :
+                    msg.flowNodeData.node === 'step_execution' ? '步骤执行' :
+                    msg.flowNodeData.node === 'replanning' ? '重新规划' :
+                    msg.flowNodeData.node === 'summarizing' ? '总结阶段' :
+                    msg.flowNodeData.node === 'analysis' ? '分析阶段' :
+                    msg.flowNodeData.node === 'sandbox_creation' ? '沙箱创建' :
+                    msg.flowNodeData.node === 'tool_execution' ? '工具执行' :
+                    msg.flowNodeData.node === 'verification' ? '结果验证' : msg.flowNodeData.node
+                  }}</span>
+                  <span :class="[
+                    'text-xs px-2 py-0.5 rounded-full',
+                    msg.flowNodeData.status === 'started' ? 'bg-blue-100 text-blue-600' :
+                    msg.flowNodeData.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                  ]">
+                    {{ msg.flowNodeData.status === 'started' ? '进行中' : msg.flowNodeData.status === 'completed' ? '已完成' : '失败' }}
+                  </span>
+                  <Loader2 v-if="msg.flowNodeData.status === 'started'" class="w-4 h-4 text-indigo-500 animate-spin ml-auto" />
+                  <CheckCircle v-else-if="msg.flowNodeData.status === 'completed'" class="w-4 h-4 text-green-500 ml-auto" />
+                  <XCircle v-else class="w-4 h-4 text-red-500 ml-auto" />
+                </div>
+                <p v-if="msg.flowNodeData.message" class="text-sm text-indigo-600 mt-2">{{ msg.flowNodeData.message }}</p>
+              </div>
+              <!-- 验证结果展示 -->
+              <div v-else-if="msg.type === 'verification' && msg.verificationData" class="bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-violet-700 text-sm font-medium mb-2">
+                  <span class="text-lg">🔍</span>
+                  <span>{{ msg.verificationData.type === 'start' ? '开始验证' : '验证结果' }}</span>
+                  <span v-if="msg.verificationData.type === 'result'" :class="[
+                    'text-xs px-2 py-0.5 rounded-full ml-auto',
+                    msg.verificationData.isValid ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                  ]">
+                    {{ msg.verificationData.isValid ? '✓ 通过' : '✗ 失败' }}
+                  </span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-violet-100">
+                  <p v-if="msg.verificationData.expected" class="text-sm text-gray-700">
+                    <span class="text-violet-600 font-medium">预期:</span> {{ msg.verificationData.expected }}
+                  </p>
+                  <p v-if="msg.verificationData.actualPreview" class="text-sm text-gray-700 mt-1">
+                    <span class="text-violet-600 font-medium">实际:</span> {{ msg.verificationData.actualPreview }}
+                  </p>
+                </div>
+              </div>
+              <!-- LLM 调用展示 -->
+              <div v-else-if="msg.type === 'llm_call' && msg.llmData" class="bg-gradient-to-br from-rose-50 to-pink-50 border border-rose-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-rose-700 text-sm font-medium mb-2">
+                  <span class="text-lg">🤖</span>
+                  <span>LLM 调用</span>
+                  <span :class="[
+                    'text-xs px-2 py-0.5 rounded-full ml-auto',
+                    msg.llmData.type === 'call' ? 'bg-rose-100 text-rose-600' : 'bg-green-100 text-green-600'
+                  ]">
+                    {{ msg.llmData.type === 'call' ? '调用中' : '已响应' }}
+                  </span>
+                  <Loader2 v-if="msg.llmData.type === 'call'" class="w-4 h-4 text-rose-500 animate-spin" />
+                  <CheckCircle v-else class="w-4 h-4 text-green-500" />
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-rose-100">
+                  <p v-if="msg.llmData.purpose" class="text-sm text-gray-700">
+                    <span class="text-rose-600 font-medium">目的:</span> {{ msg.llmData.purpose }}
+                  </p>
+                  <p v-if="msg.llmData.context" class="text-xs text-gray-500 mt-1">{{ msg.llmData.context }}</p>
+                  <p v-if="msg.llmData.responsePreview" class="text-sm text-gray-600 mt-2 pt-2 border-t border-rose-100">
+                    {{ msg.llmData.responsePreview }}...
+                  </p>
+                </div>
+              </div>
+              <!-- 变量事件展示 -->
+              <div v-else-if="msg.type === 'variable_event' && msg.variableData" class="bg-gradient-to-br from-teal-50 to-cyan-50 border border-teal-200 rounded-xl px-4 py-3 w-full max-w-lg">
+                <div class="flex items-center gap-2 text-teal-700 text-sm font-medium mb-2">
+                  <span class="text-lg">{{ msg.variableData.type === 'set' ? '📌' : '🔗' }}</span>
+                  <span>{{ msg.variableData.type === 'set' ? '变量设置' : '变量解析' }}</span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-teal-100">
+                  <div v-if="msg.variableData.type === 'set'">
+                    <p class="text-sm text-gray-700">
+                      <span class="text-teal-600 font-medium font-mono">{{ msg.variableData.name }}</span>
+                      <span class="text-gray-400 mx-2">=</span>
+                      <span class="text-gray-600 font-mono text-xs bg-gray-50 px-2 py-0.5 rounded">
+                        {{ typeof msg.variableData.value === 'object' ? JSON.stringify(msg.variableData.value).substring(0, 50) : msg.variableData.value }}
+                      </span>
+                    </p>
+                    <p class="text-xs text-gray-400 mt-1">类型: {{ msg.variableData.valueType }}</p>
+                  </div>
+                  <div v-else>
+                    <p v-if="msg.variableData.variablesUsed && msg.variableData.variablesUsed.length" class="text-sm text-gray-700 mb-2">
+                      使用变量:
+                      <span v-for="(v, idx) in msg.variableData.variablesUsed" :key="idx" class="text-teal-600 font-mono text-xs bg-teal-50 px-1.5 py-0.5 rounded mx-0.5">
+                        {{ v }}
+                      </span>
+                    </p>
+                    <details v-if="msg.variableData.resolvedArgs" class="group">
+                      <summary class="cursor-pointer text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                        <ChevronRight class="w-3 h-3 group-open:rotate-90 transition-transform" />
+                        <span>查看解析结果</span>
+                      </summary>
+                      <div class="mt-2 p-2 bg-gray-50 rounded text-xs font-mono overflow-x-auto max-h-32">
+                        <pre class="whitespace-pre-wrap break-all">{{ JSON.stringify(msg.variableData.resolvedArgs, null, 2) }}</pre>
+                      </div>
+                    </details>
+                  </div>
+                </div>
               </div>
             </div>
-            
-            <div v-if="isStreaming && !messages[messages.length - 1]?.thinking" class="flex items-center gap-2 text-slate-400">
+            <!-- 流式输出指示器 -->
+            <div v-if="(isStreaming || isProcessing) && !currentStreamContent.trim()" class="flex items-center gap-2 text-gray-500">
               <Loader2 class="w-4 h-4 animate-spin" />
-              <span>正在生成...</span>
+              <span class="text-sm">{{ isProcessing && !isStreaming ? '正在处理...' : 'AI 正在思考...' }}</span>
             </div>
           </div>
-          
-          <!-- 输入框 -->
-          <div class="p-4 border-t border-slate-200">
-            <div class="flex gap-2">
-              <input 
-                v-model="inputMessage" 
-                @keyup.enter="sendMessage"
-                :disabled="wsStatus !== 'connected' || isStreaming"
-                type="text" 
-                placeholder="输入消息，按 Enter 发送..." 
-                class="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 text-base"
-              />
-              <button 
-                @click="sendMessage" 
-                :disabled="wsStatus !== 'connected' || isStreaming || !inputMessage.trim()"
-                class="px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-gray-300 text-white rounded-xl flex items-center gap-2 transition-colors"
-              >
+
+          <!-- 输入区域 -->
+          <div class="border-t bg-white p-4">
+            <div class="max-w-3xl mx-auto flex gap-3">
+              <input v-model="inputMessage" @keyup.enter="sendMessage" type="text" placeholder="输入消息..." class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" :disabled="wsStatus !== 'connected' || isStreaming || isProcessing" />
+              <button @click="sendMessage" class="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" :disabled="wsStatus !== 'connected' || isStreaming || isProcessing || !inputMessage.trim()">
                 <Send class="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
+
+        <!-- 右侧面板 -->
+        <div class="w-80 border-l bg-white flex flex-col">
+          <!-- 标签页 -->
+          <div class="flex border-b">
+            <button @click="activeSideTab = 'todo'" :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeSideTab === 'todo' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">
+              <ListTodo class="w-4 h-4 mx-auto" />
+            </button>
+            <button @click="activeSideTab = 'files'" :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeSideTab === 'files' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">
+              <FolderTree class="w-4 h-4 mx-auto" />
+            </button>
+            <button @click="activeSideTab = 'tools'" :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeSideTab === 'tools' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">
+              <Wrench class="w-4 h-4 mx-auto" />
+            </button>
+          </div>
+
+          <!-- 面板内容 -->
+          <div class="flex-1 overflow-y-auto p-4">
+            <!-- 待办事项 -->
+            <div v-if="activeSideTab === 'todo'">
+              <h3 class="font-medium text-gray-800 mb-3">待办事项</h3>
+              <div v-if="todoList" class="space-y-2">
+                <div class="flex gap-2 text-xs text-gray-500 mb-3">
+                  <span class="bg-gray-100 px-2 py-1 rounded">总计: {{ todoStats.total }}</span>
+                  <span class="bg-green-100 text-green-700 px-2 py-1 rounded">完成: {{ todoStats.completed }}</span>
+                  <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded">进行: {{ todoStats.in_progress }}</span>
+                </div>
+                <div v-for="item in todoList.items" :key="item.id" class="flex items-start gap-2 p-2 bg-gray-50 rounded-lg">
+                  <component :is="getTodoStatusIcon(item.status)" :class="['w-4 h-4 mt-0.5 flex-shrink-0', getTodoStatusColor(item.status), item.status === 'in_progress' ? 'animate-spin' : '']" />
+                  <span class="text-sm text-gray-700">{{ item.content }}</span>
+                </div>
+              </div>
+              <p v-else class="text-gray-400 text-sm">暂无任务</p>
+            </div>
+
+            <!-- 文件树 -->
+            <div v-else-if="activeSideTab === 'files'">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-medium text-gray-800">文件树</h3>
+                <button
+                  v-if="fileTree.length && sandboxInfo?.session_id"
+                  @click="downloadAllFiles"
+                  :disabled="isDownloading"
+                  class="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="下载所有文件"
+                >
+                  <Loader2 v-if="isDownloading" class="w-3 h-3 animate-spin" />
+                  <Archive v-else class="w-3 h-3" />
+                  <span>全部下载</span>
+                </button>
+              </div>
+              <div v-if="fileTree.length" class="space-y-1">
+                <div
+                  v-for="node in flattenedFileTree"
+                  :key="node.path"
+                  class="flex items-center gap-1 py-1 px-2 hover:bg-gray-100 rounded group"
+                  :style="{ paddingLeft: `${node.depth * 12 + 8}px` }"
+                >
+                  <div
+                    class="flex items-center gap-1 flex-1 min-w-0 cursor-pointer"
+                    @click="node.type === 'directory' && toggleFolder(node.path)"
+                  >
+                    <component
+                      :is="node.type === 'directory' ? (expandedFolders.has(node.path) ? ChevronDown : ChevronRight) : File"
+                      class="w-4 h-4 text-gray-400 flex-shrink-0"
+                    />
+                    <component
+                      :is="node.type === 'directory' ? Folder : File"
+                      class="w-4 h-4 flex-shrink-0 text-gray-500"
+                    />
+                    <span class="text-sm text-gray-700 truncate">{{ node.name }}</span>
+                  </div>
+                  <!-- 文件/目录下载按钮 -->
+                  <button
+                    v-if="sandboxInfo?.session_id"
+                    @click.stop="node.type === 'file' ? downloadSingleFile(node) : downloadDirectory(node)"
+                    :disabled="downloadingFile === node.path"
+                    class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-opacity disabled:opacity-50"
+                    :title="node.type === 'file' ? '下载文件' : '下载目录为 ZIP'"
+                  >
+                    <Loader2 v-if="downloadingFile === node.path" class="w-3 h-3 animate-spin" />
+                    <Download v-if="node.type === 'file' && downloadingFile !== node.path" class="w-3 h-3" />
+                    <Archive v-if="node.type === 'directory' && downloadingFile !== node.path" class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <p v-if="!fileTree.length" class="text-gray-400 text-sm">暂无文件</p>
+            </div>
+
+            <!-- 工具调用 -->
+            <div v-else-if="activeSideTab === 'tools'">
+              <h3 class="font-medium text-gray-800 mb-3">工具调用</h3>
+              <div v-if="toolCalls.length" class="space-y-2">
+                <div v-for="tc in toolCalls" :key="tc.id" class="p-2 bg-gray-50 rounded-lg">
+                  <div class="flex items-center gap-2">
+                    <Loader2 v-if="tc.status === 'running'" class="w-4 h-4 text-blue-500 animate-spin" />
+                    <CheckCircle v-else-if="tc.status === 'success'" class="w-4 h-4 text-green-500" />
+                    <XCircle v-else class="w-4 h-4 text-red-500" />
+                    <span class="text-sm font-medium text-gray-700">{{ tc.tool }}</span>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1 truncate">{{ JSON.stringify(tc.arguments) }}</p>
+                </div>
+              </div>
+              <p v-else class="text-gray-400 text-sm">暂无工具调用</p>
+              </div>
+            </div>
+
+          <!-- 沙箱信息 -->
+          <div v-if="sandboxInfo?.has_sandbox" class="border-t p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-gray-700">沙箱环境</span>
+              <button v-if="sandboxInfo.vnc_url" @click="showVncEmbed = !showVncEmbed" class="text-xs text-blue-600 hover:text-blue-700">
+                {{ showVncEmbed ? '隐藏' : '显示' }} VNC
+              </button>
+            </div>
+            <div class="text-xs text-gray-500 space-y-1">
+              <p>会话: {{ sandboxInfo.session_id }}</p>
+              <p v-if="sandboxInfo.vnc_password">密码: {{ sandboxInfo.vnc_password }}</p>
+            </div>
+            <div v-if="showVncEmbed && sandboxInfo.vnc_url" class="mt-2">
+              <a :href="sandboxInfo.vnc_url" target="_blank" class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700">
+                <ExternalLink class="w-4 h-4" />
+                打开 VNC
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日志面板 -->
+      <div class="border-t bg-gray-900 text-gray-300 h-32 overflow-y-auto p-2 text-xs font-mono">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-gray-500">日志</span>
+          <button @click="clearLogs" class="text-gray-500 hover:text-gray-300">清空</button>
+        </div>
+        <div v-for="(log, idx) in logs" :key="idx" class="flex gap-2">
+          <span class="text-gray-500">{{ log.time }}</span>
+          <span :class="{ 'text-blue-400': log.level === 'info', 'text-yellow-400': log.level === 'warn', 'text-red-400': log.level === 'error', 'text-green-400': log.level === 'success' }">[{{ log.level }}]</span>
+          <span>{{ log.message }}</span>
+        </div>
       </div>
     </div>
+
+    <!-- 用户输入对话框 -->
+    <Teleport to="body">
+      <div v-if="userInputDialog.show" class="fixed inset-0 z-50 flex items-center justify-center">
+        <!-- 背景遮罩 -->
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="cancelUserInput"></div>
+        
+        <!-- 对话框内容 -->
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+          <!-- 头部 -->
+          <div class="bg-gradient-to-r from-yellow-400 to-amber-500 px-6 py-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <span class="text-2xl">⚠️</span>
+              </div>
+              <div>
+                <h3 class="text-white font-semibold text-lg">需要您的输入</h3>
+                <p v-if="userInputDialog.context.stepDescription" class="text-white/80 text-sm">
+                  {{ userInputDialog.context.stepDescription }}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 内容区域 -->
+          <div class="p-6">
+            <!-- 提示文本 -->
+            <p class="text-gray-700 font-medium mb-4">{{ userInputDialog.promptText }}</p>
+            
+            <!-- 命令上下文 -->
+            <div v-if="userInputDialog.context.command" class="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p class="text-xs text-gray-500 mb-1">执行命令:</p>
+              <code class="text-sm text-gray-700 font-mono">{{ userInputDialog.context.command }}</code>
+            </div>
+            
+            <!-- 选项列表 (select/confirm 类型) -->
+            <div v-if="userInputDialog.promptType !== 'input' && userInputDialog.options.length > 0" class="space-y-2 mb-4">
+              <div v-for="(opt, idx) in userInputDialog.options" :key="idx"
+                @click="userInputDialog.selectedOption = opt"
+                :class="[
+                  'p-3 rounded-lg border-2 cursor-pointer transition-all',
+                  userInputDialog.selectedOption === opt
+                    ? 'border-amber-500 bg-amber-50'
+                    : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
+                ]">
+                <div class="flex items-start gap-3">
+                  <div :class="[
+                    'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5',
+                    userInputDialog.selectedOption === opt
+                      ? 'border-amber-500 bg-amber-500'
+                      : 'border-gray-300'
+                  ]">
+                    <div v-if="userInputDialog.selectedOption === opt" class="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                  <div class="flex-1">
+                    <p class="font-medium text-gray-700">{{ opt }}</p>
+                    <p v-if="userInputDialog.optionsExplanation[idx]" class="text-sm text-gray-500 mt-0.5">
+                      {{ userInputDialog.optionsExplanation[idx].description }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 自定义输入 (input 类型) -->
+            <div v-if="userInputDialog.promptType === 'input'" class="mb-4">
+              <input
+                v-model="userInputDialog.customInput"
+                type="text"
+                :placeholder="userInputDialog.defaultResponse || '请输入...'"
+                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                @keyup.enter="submitUserInput"
+              />
+            </div>
+            
+            <!-- 默认值提示 -->
+            <p v-if="userInputDialog.defaultResponse" class="text-sm text-gray-500 mb-4">
+              <span class="text-gray-400">默认值:</span> {{ userInputDialog.defaultResponse }}
+            </p>
+          </div>
+          
+          <!-- 底部按钮 -->
+          <div class="px-6 py-4 bg-gray-50 flex gap-3 justify-end">
+            <button
+              @click="cancelUserInput"
+              class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              {{ userInputDialog.defaultResponse ? '使用默认值' : '取消' }}
+            </button>
+            <button
+              @click="submitUserInput"
+              :disabled="userInputDialog.promptType === 'input' ? !userInputDialog.customInput : !userInputDialog.selectedOption"
+              class="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              <Send class="w-4 h-4" />
+              <span>提交</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* Markdown 内容样式 */
-
-/* 代码块包装器 */
-.assistant-message :deep(.code-block-wrapper) {
-  @apply my-4 rounded-lg overflow-hidden border border-blue-100 shadow-sm;
-}
-
-/* 代码块题头条 - 浅蓝色 */
-.assistant-message :deep(.code-block-header) {
-  @apply bg-blue-50 px-4 py-2 flex items-center justify-between border-b border-blue-100;
-}
-
-.assistant-message :deep(.code-lang) {
-  @apply text-blue-700 text-xs font-bold;
-}
-
-/* 复制按钮 - 只有图标 */
-.assistant-message :deep(.copy-code-btn) {
-  @apply p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors;
-}
-
-.assistant-message :deep(.copy-code-btn .hidden) {
-  display: none;
-}
-
-.assistant-message :deep(.copy-code-btn .check-icon) {
-  @apply text-green-500;
-}
-
-/* 代码块内容 - 浅色背景带语法高亮 */
-.assistant-message :deep(.code-block-wrapper pre) {
-  @apply bg-[#f8faff] p-4 overflow-x-auto m-0 rounded-none;
-}
-
-.assistant-message :deep(.code-block-wrapper pre code) {
-  @apply bg-transparent p-0 text-sm leading-relaxed;
-  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
-  color: #334155;
-}
-
-/* 代码语法高亮颜色 */
-.assistant-message :deep(.code-block-wrapper pre code .keyword),
-.assistant-message :deep(.code-block-wrapper pre code) {
-  color: #334155;
-}
-
-/* 独立的 pre 标签（没有包装器的情况） */
-.assistant-message :deep(pre:not(.code-block-wrapper pre)) {
-  @apply bg-slate-800 text-slate-100 rounded-lg p-4 overflow-x-auto my-3;
-}
-
-.assistant-message :deep(pre:not(.code-block-wrapper pre) code) {
-  @apply bg-transparent text-slate-100 p-0;
-}
-
-/* 行内代码 */
-.assistant-message :deep(code:not(pre code)) {
-  @apply text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded text-sm;
-}
-
-.assistant-message :deep(h1),
-.assistant-message :deep(h2),
-.assistant-message :deep(h3) {
-  @apply font-bold text-slate-800 mt-4 mb-2;
-}
-
-.assistant-message :deep(h1) {
-  @apply text-xl;
-}
-
-.assistant-message :deep(h2) {
-  @apply text-lg;
-}
-
-.assistant-message :deep(h3) {
-  @apply text-base;
-}
-
-.assistant-message :deep(p) {
-  @apply my-2 leading-relaxed;
-}
-
-.assistant-message :deep(ul),
-.assistant-message :deep(ol) {
-  @apply my-2 pl-5;
-}
-
-.assistant-message :deep(li) {
-  @apply my-1;
-}
-
-.assistant-message :deep(blockquote) {
-  @apply border-l-4 border-slate-300 pl-4 my-3 text-slate-600 italic;
-}
-
-.assistant-message :deep(strong) {
-  @apply font-bold text-slate-900;
-}
-
-.assistant-message :deep(em) {
-  @apply italic;
-}
-
-.assistant-message :deep(a) {
-  @apply text-brand-600 hover:underline;
-}
-
-.assistant-message :deep(hr) {
-  @apply my-4 border-slate-200;
-}
-
-.assistant-message :deep(table) {
-  @apply w-full my-3 border-collapse;
-}
-
-.assistant-message :deep(th),
-.assistant-message :deep(td) {
-  @apply border border-slate-200 px-3 py-2 text-left;
-}
-
-.assistant-message :deep(th) {
-  @apply bg-slate-50 font-semibold;
-}
+.code-block-wrapper { margin: 1rem 0; border-radius: 0.5rem; overflow: hidden; border: 1px solid #e2e8f0; }
+.code-block-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+.code-lang { font-size: 0.75rem; color: #64748b; font-weight: 500; }
+.copy-code-btn { padding: 0.25rem 0.5rem; background: transparent; border: none; cursor: pointer; font-size: 0.875rem; }
+.copy-code-btn:hover { background: #e2e8f0; border-radius: 0.25rem; }
+pre.hljs { margin: 0; padding: 1rem; overflow-x: auto; background: #f8fafc !important; }
+pre.hljs code { font-family: 'Fira Code', 'Monaco', 'Consolas', monospace; font-size: 0.875rem; line-height: 1.5; }
+.assistant-message :deep(p) { margin: 0.5rem 0; }
+.assistant-message :deep(ul), .assistant-message :deep(ol) { margin: 0.5rem 0; padding-left: 1.5rem; }
+.assistant-message :deep(li) { margin: 0.25rem 0; }
+.assistant-message :deep(code:not(pre code)) { background: #f1f5f9; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875em; }
 </style>
