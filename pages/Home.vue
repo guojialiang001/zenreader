@@ -27,7 +27,7 @@ const tools = [
   { name: 'RGBA颜色工具', desc: '前端调色神器，支持多种颜色格式转换与渐变生成', route: '/color', icon: 'palette', tags: ['颜色', '调色', '前端'], features: ['RGBA调节', '格式转换', '渐变生成'], usageCount: '0k+' },
   { name: '脑图工具', desc: '类似XMind/GitMind的思维导图工具，支持多种主题和快捷键', route: '/mindmap', icon: 'brain', tags: ['脑图', '思维导图', '设计'], features: ['多彩主题', '快捷键操作', '导出JSON'], usageCount: '0k+' },
   { name: 'Token计算器', desc: '计算文本Token数量，支持GPT、Claude、LLaMA等模型', route: '/token', icon: 'calculator', tags: ['Token', 'AI', '计算'], features: ['多模型支持', '实时计算', '价格估算'], usageCount: '0k+' },
-  { name: '测试-沙箱', desc: '测试 Orchestrator 服务的 WebSocket 连接和沙箱功能', route: '/sandbox-test', icon: 'terminal', tags: ['测试', '沙箱', 'WebSocket', 'AI'], features: ['WebSocket连接', '沙箱管理', '实时日志'], usageCount: '0k+' },
+  { name: 'AI 沙箱工具', desc: '测试 Orchestrator 服务的 WebSocket 连接和沙箱功能', route: '/sandbox-test', icon: 'terminal', tags: ['测试', '沙箱', 'WebSocket', 'AI'], features: ['WebSocket连接', '沙箱管理', '实时日志'], usageCount: '0k+' },
 ]
 
 const getIcon = (icon: string) => {
@@ -174,14 +174,6 @@ const clearSearch = () => {
           </RouterLink>
         </div>
 
-        <!-- 底部装饰元素 -->
-        <div class="mt-16 flex justify-center">
-          <div class="flex gap-2">
-            <div class="w-2 h-2 rounded-full bg-slate-300"></div>
-            <div class="w-2 h-2 rounded-full bg-brand-500"></div>
-            <div class="w-2 h-2 rounded-full bg-slate-300"></div>
-          </div>
-        </div>
       </main>
     </div>
   </template>

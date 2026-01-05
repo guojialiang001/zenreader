@@ -23,7 +23,12 @@ renderer.code = function(code: string | { text: string; lang?: string }, lang?: 
   return `<div class="code-block-wrapper" data-code-id="${blockId}"><div class="code-block-header"><span class="code-lang">${displayLang}</span><button class="copy-code-btn" data-code-target="${blockId}" title="复制">📋</button></div><pre class="hljs"><code data-raw-code="${codeForCopy}">${highlighted}</code></pre></div>`
 }
 marked.setOptions({ breaks: true, gfm: true, renderer })
-const renderMarkdown = (content: string): string => content ? DOMPurify.sanitize(marked.parse(content) as string) : ''
+const renderMarkdown = (content: string): string => {
+  if (!content) return ''
+  // 先格式化路径（将 /home/sandbox/workspace 替换为 ~/workspace），再进行 markdown 渲染
+  const formattedContent = content.replace(/\/home\/sandbox\/workspace/g, '~/workspace')
+  return DOMPurify.sanitize(marked.parse(formattedContent) as string)
+}
 const copyCodeToClipboard = async (event: Event) => {
   const btn = (event.target as HTMLElement).closest('.copy-code-btn') as HTMLElement
   if (!btn) return
@@ -74,36 +79,45 @@ const config = reactive({ orchestratorUrl: 'wss://sandbox.toproject.cloud/endpoi
 // 类型
 interface TodoItem { id: string; content: string; status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped' }
 interface TodoList { id: string; title: string; items: TodoItem[]; total_items: number; completed_items: number }
-interface FileNode { name: string; path: string; type: 'file' | 'directory'; status?: string; children?: FileNode[] }
+interface FileNode { name: string; path: string; type: 'file' | 'directory'; children?: FileNode[] }
 interface FileChange { path: string; status: 'created' | 'modified' | 'deleted' | 'renamed' }
 interface PlanStep { id: string; description: string; status: 'pending' | 'in_progress' | 'completed' | 'failed'; tool?: string; error?: string }
 interface ExecutionPlan { id: string; title?: string; steps: PlanStep[]; total_steps: number; current_step: number; status: 'pending' | 'running' | 'completed' | 'failed' | 'revising' }
 interface ToolCall { id: string; tool: string; arguments: any; status: 'running' | 'success' | 'failed'; result?: any; timestamp: Date; stepId?: number; executionTime?: number }
 interface ToolExecutionMessage { id: string; type: 'tool_execution'; tool: string; status: 'running' | 'success' | 'failed'; arguments: any; result?: any; stepId?: number; executionTime?: number; timestamp: Date; description?: string }
 
-// 交互式输入相关类型
-interface InteractivePromptData {
-  stepId: number
-  tool: string
-  promptText: string
-  options: string[]
-  promptType: 'select' | 'confirm' | 'input' | 'unknown'
-  command: string
-  stdout?: string
+// 统一交互协议类型定义
+interface InteractionField {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'confirm' | 'number'
+  required: boolean
+  placeholder?: string
+  default_value?: any
+  options?: Array<{
+    value: string
+    label: string
+    description?: string
+  }>
+  validation?: {
+    min_length?: number
+    max_length?: number
+    min?: number
+    max?: number
+    pattern?: string
+  }
 }
 
-interface UserInputRequiredData {
-  stepId: number
-  tool: string
-  promptText: string
-  options: string[]
-  optionsExplanation?: Array<{ option: string; description: string }>
-  promptType: 'select' | 'confirm' | 'input' | 'unknown'
-  defaultResponse?: string
-  context: {
-    stepDescription: string
-    command: string
-  }
+interface UnifiedInteractionData {
+  interaction_id: string
+  interaction_type: 'clarification' | 'command' | 'confirmation' | 'input'
+  title: string
+  description?: string
+  fields: InteractionField[]
+  submit_button_text: string
+  cancel_button_text: string
+  allow_cancel?: boolean
+  context?: any
 }
 
 // 流程节点类型
@@ -285,27 +299,29 @@ const getToolDisplayInfo = (tool: string): { name: string; icon: string; color: 
 // 获取工具操作描述
 const getToolActionDescription = (tool: string, args: any): string => {
   if (!args) return '执行中...'
+  let description = ''
   switch (tool) {
     case 'file_manager':
-      if (args.action === 'read') return `读取文件: ${args.path || args.file_path || '未知'}`
-      if (args.action === 'write') return `写入文件: ${args.path || args.file_path || '未知'}`
-      if (args.action === 'create') return `创建文件: ${args.path || args.file_path || '未知'}`
-      if (args.action === 'delete') return `删除文件: ${args.path || args.file_path || '未知'}`
-      if (args.action === 'list') return `列出目录: ${args.path || args.directory || '/'}`
-      return `文件操作: ${args.action || '未知操作'}`
+      if (args.action === 'read') description = `读取文件: ${args.path || args.file_path || '未知'}`
+      else if (args.action === 'write') description = `写入文件: ${args.path || args.file_path || '未知'}`
+      else if (args.action === 'create') description = `创建文件: ${args.path || args.file_path || '未知'}`
+      else if (args.action === 'delete') description = `删除文件: ${args.path || args.file_path || '未知'}`
+      else if (args.action === 'list') description = `列出目录: ${args.path || args.directory || '/'}`
+      else description = `文件操作: ${args.action || '未知操作'}`
+      return formatPathForDisplay(description)
     case 'read_file':
-      return `读取文件: ${args.path || args.file_path || '未知'}`
+      return formatPathForDisplay(`读取文件: ${args.path || args.file_path || '未知'}`)
     case 'write_file':
-      return `写入文件: ${args.path || args.file_path || '未知'}`
+      return formatPathForDisplay(`写入文件: ${args.path || args.file_path || '未知'}`)
     case 'create_file':
-      return `创建文件: ${args.path || args.file_path || '未知'}`
+      return formatPathForDisplay(`创建文件: ${args.path || args.file_path || '未知'}`)
     case 'delete_file':
-      return `删除文件: ${args.path || args.file_path || '未知'}`
+      return formatPathForDisplay(`删除文件: ${args.path || args.file_path || '未知'}`)
     case 'list_files':
-      return `列出目录: ${args.path || args.directory || '/'}`
+      return formatPathForDisplay(`列出目录: ${args.path || args.directory || '/'}`)
     case 'shell':
     case 'execute_command':
-      return `执行命令: ${args.command || args.cmd || '未知命令'}`
+      return formatPathForDisplay(`执行命令: ${args.command || args.cmd || '未知命令'}`)
     case 'code_executor':
       return `执行 ${args.language || '代码'}: ${(args.code || '').substring(0, 50)}${(args.code || '').length > 50 ? '...' : ''}`
     case 'python':
@@ -332,8 +348,9 @@ const getToolActionDescription = (tool: string, args: any): string => {
 // 格式化工具参数显示
 const formatToolArguments = (tool: string, args: any): string => {
   if (!args) return '无参数'
-  
+
   try {
+    let result = ''
     // 根据工具类型格式化参数
     switch (tool) {
       case 'file_manager':
@@ -343,26 +360,27 @@ const formatToolArguments = (tool: string, args: any): string => {
       case 'delete_file':
         const filePath = args.path || args.file_path || '未知路径'
         const action = args.action || tool.replace('_', ' ')
-        let result = `操作: ${action}\n路径: ${filePath}`
+        result = `操作: ${action}\n路径: ${filePath}`
         if (args.content) {
           const contentPreview = args.content.length > 200
             ? args.content.substring(0, 200) + '...(省略)'
             : args.content
           result += `\n内容:\n${contentPreview}`
         }
-        return result
-      
+        return formatPathForDisplay(result)
+
       case 'list_files':
-        return `目录: ${args.path || args.directory || '/'}\n递归: ${args.recursive ? '是' : '否'}`
-      
+        result = `目录: ${args.path || args.directory || '/'}\n递归: ${args.recursive ? '是' : '否'}`
+        return formatPathForDisplay(result)
+
       case 'shell':
       case 'execute_command':
         const cmd = args.command || args.cmd || '未知命令'
-        let cmdResult = `命令: ${cmd}`
-        if (args.cwd) cmdResult += `\n工作目录: ${args.cwd}`
-        if (args.timeout) cmdResult += `\n超时: ${args.timeout}ms`
-        return cmdResult
-      
+        result = `命令: ${cmd}`
+        if (args.cwd) result += `\n工作目录: ${args.cwd}`
+        if (args.timeout) result += `\n超时: ${args.timeout}ms`
+        return formatPathForDisplay(result)
+
       case 'code_executor':
       case 'python':
       case 'javascript':
@@ -370,42 +388,43 @@ const formatToolArguments = (tool: string, args: any): string => {
         const code = args.code || ''
         const codePreview = code.length > 300 ? code.substring(0, 300) + '...(省略)' : code
         return `语言: ${lang}\n代码:\n${codePreview}`
-      
+
       case 'browser':
-        let browserResult = `操作: ${args.action || '未知'}`
-        if (args.url) browserResult += `\nURL: ${args.url}`
-        if (args.selector) browserResult += `\n选择器: ${args.selector}`
-        if (args.text) browserResult += `\n文本: ${args.text}`
-        return browserResult
-      
+        result = `操作: ${args.action || '未知'}`
+        if (args.url) result += `\nURL: ${args.url}`
+        if (args.selector) result += `\n选择器: ${args.selector}`
+        if (args.text) result += `\n文本: ${args.text}`
+        return result
+
       case 'search':
         return `关键词: ${args.query || args.keyword || '未知'}`
-      
+
       case 'api_call':
-        let apiResult = `方法: ${args.method || 'GET'}\nURL: ${args.url || '未知'}`
-        if (args.headers) apiResult += `\n请求头: ${JSON.stringify(args.headers, null, 2)}`
-        if (args.body) apiResult += `\n请求体: ${typeof args.body === 'object' ? JSON.stringify(args.body, null, 2) : args.body}`
-        return apiResult
-      
+        result = `方法: ${args.method || 'GET'}\nURL: ${args.url || '未知'}`
+        if (args.headers) result += `\n请求头: ${JSON.stringify(args.headers, null, 2)}`
+        if (args.body) result += `\n请求体: ${typeof args.body === 'object' ? JSON.stringify(args.body, null, 2) : args.body}`
+        return result
+
       default:
         // 默认格式化为 JSON
-        return JSON.stringify(args, null, 2)
+        return formatPathForDisplay(JSON.stringify(args, null, 2))
     }
   } catch (e) {
-    return JSON.stringify(args, null, 2)
+    return formatPathForDisplay(JSON.stringify(args, null, 2))
   }
 }
 
 // 格式化工具执行结果
 const formatToolResult = (result: any): string => {
   if (result === null || result === undefined) return '无返回结果'
-  
+
   try {
     if (typeof result === 'string') {
-      // 如果是字符串，限制长度
-      return result.length > 1000 ? result.substring(0, 1000) + '\n...(结果过长，已截断)' : result
+      // 如果是字符串，限制长度并格式化路径
+      const truncated = result.length > 1000 ? result.substring(0, 1000) + '\n...(结果过长，已截断)' : result
+      return formatPathForDisplay(truncated)
     }
-    
+
     if (typeof result === 'object') {
       // 处理常见的结果格式
       if (result.success !== undefined) {
@@ -417,17 +436,18 @@ const formatToolResult = (result: any): string => {
           const dataStr = JSON.stringify(result.data, null, 2)
           formatted += `\n数据:\n${dataStr.length > 500 ? dataStr.substring(0, 500) + '...' : dataStr}`
         }
-        return formatted
+        return formatPathForDisplay(formatted)
       }
-      
+
       // 默认 JSON 格式化
       const jsonStr = JSON.stringify(result, null, 2)
-      return jsonStr.length > 1000 ? jsonStr.substring(0, 1000) + '\n...(结果过长，已截断)' : jsonStr
+      const truncated = jsonStr.length > 1000 ? jsonStr.substring(0, 1000) + '\n...(结果过长，已截断)' : jsonStr
+      return formatPathForDisplay(truncated)
     }
-    
-    return String(result)
+
+    return formatPathForDisplay(String(result))
   } catch (e) {
-    return String(result)
+    return formatPathForDisplay(String(result))
   }
 }
 
@@ -489,6 +509,7 @@ interface Message {
     stepId?: number
     executionTime?: number
     description?: string
+    hasWarning?: boolean
   }
   fileChangesData?: {
     changes: Array<{ path: string; changeType: string; oldPath?: string }>
@@ -551,29 +572,15 @@ interface Message {
 // 消息
 const messages = ref<Message[]>([])
 
-// 交互式输入状态
-const userInputDialog = ref<{
+// 统一交互对话框状态
+const interactionDialog = ref<{
   show: boolean
-  stepId: number
-  promptText: string
-  options: string[]
-  optionsExplanation: Array<{ option: string; description: string }>
-  promptType: string
-  defaultResponse: string
-  context: { stepDescription: string; command: string }
-  selectedOption: string
-  customInput: string
+  data: UnifiedInteractionData | null
+  formValues: Record<string, any>
 }>({
   show: false,
-  stepId: 0,
-  promptText: '',
-  options: [],
-  optionsExplanation: [],
-  promptType: 'select',
-  defaultResponse: '',
-  context: { stepDescription: '', command: '' },
-  selectedOption: '',
-  customInput: ''
+  data: null,
+  formValues: {}
 })
 const inputMessage = ref('')
 const isStreaming = ref(false)
@@ -698,6 +705,12 @@ const logs = ref<Array<{ time: string; level: 'info' | 'warn' | 'error' | 'succe
 const addLog = (level: 'info' | 'warn' | 'error' | 'success', message: string) => { logs.value.unshift({ time: new Date().toLocaleTimeString(), level, message }); if (logs.value.length > 100) logs.value.pop() }
 const scrollToBottom = () => { nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight }) }
 
+// 路径格式化：将 /home/sandbox/workspace 替换为 ~/workspace（仅用于显示）
+const formatPathForDisplay = (text: string): string => {
+  if (!text || typeof text !== 'string') return text
+  return text.replace(/\/home\/sandbox\/workspace/g, '~/workspace')
+}
+
 // WebSocket
 const connectWebSocket = () => {
   if (ws.value?.readyState === WebSocket.OPEN) return
@@ -792,7 +805,7 @@ const handleWebSocketMessage = (data: any) => {
     case 'task_analysis':
       const ana = payload.analysis || payload
       taskAnalysis.value = { complexity: ana.complexity || 'simple', task_type: ana.task_type || 'chat', requires_sandbox: ana.requires_sandbox || false }
-      messages.value.push({ id: 'ta-' + Date.now(), type: 'system', content: `📊 ${getComplexityLabel(taskAnalysis.value.complexity)} | ${getTaskTypeLabel(taskAnalysis.value.task_type)}${taskAnalysis.value.requires_sandbox ? ' | 沙箱' : ''}`, timestamp: new Date() })
+      // 任务分析信息不再在问答区显示
       scrollToBottom()
       break
     case 'task_analysis_complete':
@@ -830,7 +843,9 @@ const handleWebSocketMessage = (data: any) => {
       scrollToBottom()
       break
     case 'plan_complete':
-      if (executionPlan.value) executionPlan.value.status = (payload.data?.success ?? payload.success) ? 'completed' : 'failed'
+      const planSuccess = payload.data?.success ?? payload.success
+      if (executionPlan.value) executionPlan.value.status = planSuccess ? 'completed' : 'failed'
+      // 只有真正失败时才显示失败消息，成功（包括有警告的成功）都显示完成
       messages.value.push({ id: 'pc-' + Date.now(), type: 'system', content: executionPlan.value?.status === 'completed' ? '✅ 计划完成' : '❌ 计划失败', timestamp: new Date() })
       scrollToBottom()
       break
@@ -897,11 +912,20 @@ const handleWebSocketMessage = (data: any) => {
       const resultData = payload.result || payload.data?.result || data.result
       const resultStepId = payload.step_id ?? payload.data?.step_id
       const resultExecTime = payload.execution_time ?? payload.data?.execution_time
+      const stderrIsWarning = payload.stderr_is_warning ?? payload.data?.stderr_is_warning ?? false
+      
+      // 判断最终状态：成功、成功但有警告、失败
+      let finalStatus: 'success' | 'success-with-warning' | 'failed'
+      if (resultSuccess !== false) {
+        finalStatus = stderrIsWarning ? 'success-with-warning' : 'success'
+      } else {
+        finalStatus = 'failed'
+      }
       
       // 更新工具调用列表中的状态
       const tc = toolCalls.value.find(t => t.tool === resultTool && t.status === 'running')
       if (tc) {
-        tc.status = resultSuccess !== false ? 'success' : 'failed'
+        tc.status = finalStatus === 'failed' ? 'failed' : 'success'
         tc.result = resultData
         tc.executionTime = resultExecTime
       }
@@ -913,14 +937,20 @@ const handleWebSocketMessage = (data: any) => {
         m.toolData?.status === 'running'
       )
       if (toolMsg && toolMsg.toolData) {
-        toolMsg.toolData.status = resultSuccess !== false ? 'success' : 'failed'
+        toolMsg.toolData.status = finalStatus === 'failed' ? 'failed' : 'success'
         toolMsg.toolData.result = resultData
         toolMsg.toolData.executionTime = resultExecTime
+        // 添加警告标志
+        if (stderrIsWarning) {
+          toolMsg.toolData.hasWarning = true
+        }
       }
       
       const resultToolInfo = getToolDisplayInfo(resultTool)
-      if (resultSuccess !== false) {
+      if (finalStatus === 'success') {
         addLog('success', `✅ ${resultToolInfo.name} 执行成功${resultExecTime ? ` (${resultExecTime}ms)` : ''}`)
+      } else if (finalStatus === 'success-with-warning') {
+        addLog('success', `✅ ${resultToolInfo.name} 执行成功${resultExecTime ? ` (${resultExecTime}ms)` : ''} ⚠️ 有警告`)
       } else {
         addLog('error', `❌ ${resultToolInfo.name} 执行失败`)
       }
@@ -1012,13 +1042,13 @@ const handleWebSocketMessage = (data: any) => {
       }
       break
     case 'file_tree_update':
-      // 文件树更新 - 只展示最新文件树，不展示变更状态
+      // 文件树更新 - 只展示最新文件树，不标记状态
       if (payload.file_tree) {
         const processFileNode = (n: any): FileNode => ({
           name: n.name || n.path?.split('/').pop() || '',
           path: n.path || '',
           type: n.type || (n.children ? 'directory' : 'file'),
-          // 不再保留 status 字段，文件树只展示最新结构
+          // 不保留 status 字段，文件树只展示最新结构，不标记变更状态
           children: n.children ? n.children.map(processFileNode) : undefined
         })
         fileTree.value = Array.isArray(payload.file_tree)
@@ -1027,6 +1057,7 @@ const handleWebSocketMessage = (data: any) => {
             ? [processFileNode(payload.file_tree.root)]
             : []
       }
+      // 不在日志中显示文件树更新，避免干扰
       break
     case 'file_changes_update':
       // 文件变更记录，只在聊天区域展示，不更新到文件树
@@ -1040,9 +1071,9 @@ const handleWebSocketMessage = (data: any) => {
           timestamp: new Date(),
           fileChangesData: {
             changes: changes.map((c: any) => ({
-              path: c.path,
+              path: formatPathForDisplay(c.path),
               changeType: c.change_type || c.status || 'modified',
-              oldPath: c.old_path
+              oldPath: c.old_path ? formatPathForDisplay(c.old_path) : undefined
             })),
             totalChanges: payload.total_changes || changes.length
           }
@@ -1071,107 +1102,136 @@ const handleWebSocketMessage = (data: any) => {
       scrollToBottom()
       break
     
-    // ========== 交互式命令事件 ==========
-    case 'interactive_prompt':
-      // 交互式提示 - 命令需要用户输入
-      const promptData = payload.data || payload
-      messages.value.push({
-        id: 'interactive-prompt-' + Date.now(),
-        type: 'interactive_prompt',
-        content: '',
-        timestamp: new Date(),
-        interactiveData: {
-          type: 'prompt',
-          stepId: promptData.step_id,
-          tool: promptData.tool,
-          promptText: promptData.prompt_text || promptData.prompt,
-          options: promptData.options || [],
-          promptType: promptData.prompt_type || 'unknown',
-          command: promptData.command
+    // ========== 统一交互协议事件 ==========
+    case 'user_interaction_required':
+      // 统一交互事件 - 处理所有类型的用户交互
+      const interactionData = payload.data || payload
+      
+      // 初始化表单默认值
+      const defaultValues: Record<string, any> = {}
+      interactionData.fields?.forEach((field: InteractionField) => {
+        if (field.default_value !== undefined) {
+          defaultValues[field.id] = field.default_value
         }
       })
-      addLog('info', `🔔 交互式提示: ${promptData.prompt_text || promptData.prompt}`)
-      scrollToBottom()
-      break
-    
-    case 'interactive_response':
-      // 交互式响应 - AI 自动响应了交互式提示
-      const respData = payload.data || payload
-      messages.value.push({
-        id: 'interactive-response-' + Date.now(),
-        type: 'interactive_response',
-        content: '',
-        timestamp: new Date(),
-        interactiveData: {
-          type: 'response',
-          stepId: respData.step_id,
-          response: respData.response,
-          reasoning: respData.reasoning,
-          autoResponded: true
-        }
-      })
-      addLog('success', `✅ 自动响应: ${respData.response}`)
-      scrollToBottom()
-      break
-    
-    case 'user_input_required':
-      // 需要用户输入 - 显示输入对话框
-      const inputReqData = payload.data || payload
-      userInputDialog.value = {
+      
+      // 显示交互对话框
+      interactionDialog.value = {
         show: true,
-        stepId: inputReqData.step_id,
-        promptText: inputReqData.prompt_text || inputReqData.prompt,
-        options: inputReqData.options || [],
-        optionsExplanation: inputReqData.options_explanation || [],
-        promptType: inputReqData.prompt_type || 'select',
-        defaultResponse: inputReqData.default_response || '',
-        context: {
-          stepDescription: inputReqData.context?.step_description || '',
-          command: inputReqData.context?.command || ''
-        },
-        selectedOption: inputReqData.default_response || '',
-        customInput: ''
+        data: interactionData,
+        formValues: defaultValues
       }
-      // 在聊天区域也显示提示
+      
+      // 在聊天区域显示交互提示
+      const interactionTypeLabels: Record<string, string> = {
+        'clarification': '💬 需求澄清',
+        'command': '⚙️ 命令配置',
+        'confirmation': '⚠️ 确认操作',
+        'input': '📝 参数输入'
+      }
       messages.value.push({
-        id: 'user-input-required-' + Date.now(),
+        id: 'interaction-' + Date.now(),
         type: 'user_input_required',
         content: '',
         timestamp: new Date(),
         interactiveData: {
           type: 'user_input_required',
-          stepId: inputReqData.step_id,
-          tool: inputReqData.tool,
-          promptText: inputReqData.prompt_text || inputReqData.prompt,
-          options: inputReqData.options || [],
-          optionsExplanation: inputReqData.options_explanation || [],
-          promptType: inputReqData.prompt_type || 'select',
-          defaultResponse: inputReqData.default_response
+          stepId: interactionData.context?.step_id || 0,
+          promptText: interactionData.title,
+          options: [],
+          promptType: interactionData.interaction_type
         }
       })
-      addLog('warn', `⚠️ 需要用户输入: ${inputReqData.prompt_text || inputReqData.prompt}`)
+      addLog('warn', `${interactionTypeLabels[interactionData.interaction_type] || '⚠️ 需要用户输入'}: ${interactionData.title}`)
       scrollToBottom()
       break
     
+    case 'user_interaction_response':
+      // 用户交互响应已接收（后端确认）
+      const responseData = payload.data || payload
+      if (!responseData.cancelled) {
+        messages.value.push({
+          id: 'interaction-response-' + Date.now(),
+          type: 'interactive_response',
+          content: '',
+          timestamp: new Date(),
+          interactiveData: {
+            type: 'user_input_received',
+            stepId: responseData.context?.step_id || 0,
+            userInput: JSON.stringify(responseData.values),
+            autoResponded: false
+          }
+        })
+        addLog('success', `✅ 用户输入已提交`)
+      } else {
+        addLog('info', `❌ 用户取消了操作`)
+      }
+      scrollToBottom()
+      break
+
     case 'user_input_received':
-      // 用户输入已接收
-      const inputRecvData = payload.data || payload
-      // 关闭对话框
-      userInputDialog.value.show = false
-      // 在聊天区域显示用户的输入
+      // 后端确认收到用户输入（关闭对话框）
+      interactionDialog.value.show = false
+      interactionDialog.value.data = null
+      interactionDialog.value.formValues = {}
+      addLog('success', '✅ 后端已接收用户输入，继续执行')
+      scrollToBottom()
+      break
+
+    // 兼容旧事件（向后兼容）
+    case 'interactive_prompt':
+    case 'user_input_required':
+      // 旧的交互式命令事件，转换为统一格式
+      const oldData = payload.data || payload
+      const convertedData: UnifiedInteractionData = {
+        interaction_id: `legacy-${Date.now()}`,
+        interaction_type: 'command',
+        title: oldData.prompt_text || oldData.prompt || '需要您的选择',
+        description: oldData.context?.step_description || oldData.context?.command,
+        fields: (oldData.options || []).map((opt: string, idx: number) => ({
+          id: `option_${idx}`,
+          label: opt,
+          type: 'radio' as const,
+          required: true,
+          default_value: oldData.default_response === opt ? opt : undefined,
+          options: oldData.options?.map((o: string) => ({
+            value: o,
+            label: o,
+            description: oldData.options_explanation?.find((e: any) => e.option === o)?.description
+          }))
+        })).slice(0, 1) || [{
+          id: 'input',
+          label: oldData.prompt_text || '请输入',
+          type: 'text' as const,
+          required: true,
+          default_value: oldData.default_response
+        }],
+        submit_button_text: '确认',
+        cancel_button_text: '取消',
+        allow_cancel: true,
+        context: oldData.context
+      }
+      
+      interactionDialog.value = {
+        show: true,
+        data: convertedData,
+        formValues: { [convertedData.fields[0].id]: convertedData.fields[0].default_value }
+      }
+      
       messages.value.push({
-        id: 'user-input-received-' + Date.now(),
-        type: 'interactive_response',
+        id: 'legacy-interaction-' + Date.now(),
+        type: 'user_input_required',
         content: '',
         timestamp: new Date(),
         interactiveData: {
-          type: 'user_input_received',
-          stepId: inputRecvData.step_id,
-          userInput: inputRecvData.user_input,
-          autoResponded: false
+          type: 'user_input_required',
+          stepId: oldData.step_id || 0,
+          promptText: oldData.prompt_text || oldData.prompt,
+          options: oldData.options || [],
+          promptType: oldData.prompt_type || 'select'
         }
       })
-      addLog('success', `✅ 用户输入已提交: ${inputRecvData.user_input}`)
+      addLog('warn', `⚠️ 需要用户输入: ${oldData.prompt_text || oldData.prompt}`)
       scrollToBottom()
       break
     
@@ -1276,8 +1336,9 @@ const handleWebSocketMessage = (data: any) => {
     // ========== LLM 事件 ==========
     case 'llm_call':
       const llmCallData = payload.data || payload
+      const llmCallId = 'llm-call-' + Date.now()
       messages.value.push({
-        id: 'llm-call-' + Date.now(),
+        id: llmCallId,
         type: 'llm_call',
         content: '',
         timestamp: new Date(),
@@ -1291,15 +1352,29 @@ const handleWebSocketMessage = (data: any) => {
       scrollToBottom()
       break
     
-    case 'llm_response':
-      const llmRespData = payload.data || payload
+    case 'llm_call_complete':
+      const llmCompleteData = payload.data || payload
       // 更新最近的 llm_call 消息
       const llmCallMsg = [...messages.value].reverse().find(m =>
         m.type === 'llm_call' && m.llmData?.type === 'call'
       )
       if (llmCallMsg && llmCallMsg.llmData) {
         llmCallMsg.llmData.type = 'response'
-        llmCallMsg.llmData.responsePreview = llmRespData.response_preview || llmRespData.response?.substring(0, 100)
+        llmCallMsg.llmData.responsePreview = llmCompleteData.message || `${llmCompleteData.purpose || 'LLM'} 完成`
+      }
+      addLog('success', `✅ LLM 调用完成`)
+      scrollToBottom()
+      break
+    
+    case 'llm_response':
+      // 兼容旧事件名
+      const llmRespData = payload.data || payload
+      const llmRespMsg = [...messages.value].reverse().find(m =>
+        m.type === 'llm_call' && m.llmData?.type === 'call'
+      )
+      if (llmRespMsg && llmRespMsg.llmData) {
+        llmRespMsg.llmData.type = 'response'
+        llmRespMsg.llmData.responsePreview = llmRespData.response_preview || llmRespData.response?.substring(0, 100)
       }
       addLog('success', `✅ LLM 响应完成`)
       scrollToBottom()
@@ -1316,22 +1391,45 @@ const handleWebSocketMessage = (data: any) => {
       const isInteractivePrompt = detectInteractivePrompt(varValueStr)
       
       if (isInteractivePrompt) {
-        // 解析交互式提示并显示用户输入对话框
+        // 解析交互式提示并转换为统一交互格式
         const parsedPrompt = parseInteractivePrompt(varValueStr)
-        userInputDialog.value = {
-          show: true,
-          stepId: varSetData.step_id || 0,
-          promptText: parsedPrompt.promptText || '请选择一个选项',
-          options: parsedPrompt.options,
-          optionsExplanation: [],
-          promptType: parsedPrompt.options.length > 0 ? 'select' : 'input',
-          defaultResponse: parsedPrompt.defaultOption || '',
+        const convertedInteraction: UnifiedInteractionData = {
+          interaction_id: `var-interactive-${Date.now()}`,
+          interaction_type: 'command',
+          title: parsedPrompt.promptText || '请选择一个选项',
+          description: varName,
+          fields: parsedPrompt.options.length > 0 ? [{
+            id: 'selection',
+            label: '请选择',
+            type: 'radio' as const,
+            required: true,
+            default_value: parsedPrompt.defaultOption,
+            options: parsedPrompt.options.map(opt => ({
+              value: opt,
+              label: opt
+            }))
+          }] : [{
+            id: 'input',
+            label: '请输入',
+            type: 'text' as const,
+            required: true,
+            default_value: parsedPrompt.defaultOption,
+            placeholder: '请输入...'
+          }],
+          submit_button_text: '提交',
+          cancel_button_text: parsedPrompt.defaultOption ? '使用默认值' : '取消',
+          allow_cancel: true,
           context: {
-            stepDescription: varName,
-            command: parsedPrompt.command || ''
-          },
-          selectedOption: parsedPrompt.defaultOption || '',
-          customInput: ''
+            step_id: varSetData.step_id || 0,
+            command: parsedPrompt.command || '',
+            variable_name: varName
+          }
+        }
+        
+        interactionDialog.value = {
+          show: true,
+          data: convertedInteraction,
+          formValues: { [convertedInteraction.fields[0].id]: convertedInteraction.fields[0].default_value }
         }
         // 在聊天区域也显示提示
         messages.value.push({
@@ -1449,6 +1547,57 @@ const cancelUserInput = () => {
   }
 }
 
+// 提交统一交互对话框
+const submitInteraction = () => {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN || !interactionDialog.value.data) return
+
+  const interactionData = interactionDialog.value.data
+  const formValues = interactionDialog.value.formValues
+
+  // 发送用户交互响应
+  ws.value.send(JSON.stringify({
+    type: 'user_interaction_response',
+    payload: {
+      interaction_id: interactionData.interaction_id,
+      values: formValues,
+      cancelled: false
+    },
+    request_id: 'req-' + Date.now()
+  }))
+
+  // 关闭对话框
+  interactionDialog.value.show = false
+  interactionDialog.value.data = null
+  interactionDialog.value.formValues = {}
+
+  addLog('success', '已提交用户响应')
+}
+
+// 取消统一交互对话框
+const cancelInteraction = () => {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN || !interactionDialog.value.data) return
+
+  const interactionData = interactionDialog.value.data
+
+  // 发送取消响应
+  ws.value.send(JSON.stringify({
+    type: 'user_interaction_response',
+    payload: {
+      interaction_id: interactionData.interaction_id,
+      values: {},
+      cancelled: true
+    },
+    request_id: 'req-' + Date.now()
+  }))
+
+  // 关闭对话框
+  interactionDialog.value.show = false
+  interactionDialog.value.data = null
+  interactionDialog.value.formValues = {}
+
+  addLog('info', '已取消用户交互')
+}
+
 const sendPing = () => { if (ws.value?.readyState === WebSocket.OPEN) ws.value.send(JSON.stringify({ type: 'ping' })) }
 const clearMessages = () => { messages.value = []; currentStreamContent.value = ''; currentThinkingContent.value = ''; isInThinkTag.value = false; isAnalyzing.value = false; isProcessing.value = false; currentAssistantMsgId.value = ''; currentThinkingChainMsgId.value = ''; currentAnalysisMsgId.value = ''; executionPlan.value = null; toolCalls.value = []; todoList.value = null; fileTree.value = []; fileChanges.value = []; addLog('info', '已清空') }
 const clearLogs = () => { logs.value = [] }
@@ -1522,20 +1671,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
               <div v-else-if="msg.type === 'system'" class="text-center text-sm text-gray-500 py-2">{{ msg.content }}</div>
               <!-- 错误消息 -->
               <div v-else-if="msg.type === 'error'" class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3">{{ msg.content }}</div>
-              <!-- 分析节点 -->
-              <div v-else-if="msg.type === 'analysis_node'" class="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
-                <div class="flex items-center gap-2 text-purple-700 text-sm font-medium mb-1">
-                  <Loader2 v-if="!msg.collapsed" class="w-4 h-4 animate-spin" />
-                  <CheckCircle v-else class="w-4 h-4 text-green-500" />
-                  <span>{{
-                    msg.nodeType === 'analysis_complete' ? '✅ 分析完成' :
-                    msg.nodeType === 'planning' ? '📋 规划中' :
-                    msg.nodeType === 'routing' ? '🔀 路由决策' :
-                    msg.collapsed ? '✅ 分析完成' : '🔍 分析中'
-                  }}</span>
-                </div>
-                <p v-if="!msg.collapsed" class="text-purple-600 text-sm">{{ msg.content }}</p>
-              </div>
+              <!-- 分析节点 - 已移除显示 -->
               <!-- 思考链 -->
               <div v-else-if="msg.type === 'thinking_chain'" class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <div class="flex items-center gap-2 text-amber-700 text-sm font-medium mb-1">
@@ -1553,7 +1689,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                   <div :class="[
                     'w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm',
                     msg.toolData.status === 'running' ? 'bg-blue-100 ring-2 ring-blue-200' :
-                    msg.toolData.status === 'success' ? 'bg-green-100 ring-2 ring-green-200' : 'bg-red-100 ring-2 ring-red-200'
+                    msg.toolData.status === 'success' ? (msg.toolData.hasWarning ? 'bg-yellow-100 ring-2 ring-yellow-200' : 'bg-green-100 ring-2 ring-green-200') : 'bg-red-100 ring-2 ring-red-200'
                   ]">
                     {{ getToolDisplayInfo(msg.toolData.tool).icon }}
                   </div>
@@ -1568,9 +1704,13 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                       <span :class="[
                         'text-xs px-2 py-0.5 rounded-full font-medium',
                         msg.toolData.status === 'running' ? 'bg-blue-100 text-blue-700' :
-                        msg.toolData.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        msg.toolData.status === 'success' ? (msg.toolData.hasWarning ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700') : 'bg-red-100 text-red-700'
                       ]">
                         {{ msg.toolData.status === 'running' ? '执行中' : msg.toolData.status === 'success' ? '成功' : '失败' }}
+                      </span>
+                      <!-- 警告标志 -->
+                      <span v-if="msg.toolData.status === 'success' && msg.toolData.hasWarning" class="text-xs bg-yellow-50 text-yellow-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        ⚠️ 有警告
                       </span>
                     </div>
                     <p class="text-sm text-gray-600 mt-0.5">{{ msg.toolData.description }}</p>
@@ -1580,7 +1720,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                       {{ msg.toolData.executionTime }}ms
                     </span>
                     <Loader2 v-if="msg.toolData.status === 'running'" class="w-5 h-5 text-blue-500 animate-spin" />
-                    <CheckCircle v-else-if="msg.toolData.status === 'success'" class="w-5 h-5 text-green-500" />
+                    <CheckCircle v-else-if="msg.toolData.status === 'success'" :class="msg.toolData.hasWarning ? 'w-5 h-5 text-yellow-500' : 'w-5 h-5 text-green-500'" />
                     <XCircle v-else class="w-5 h-5 text-red-500" />
                   </div>
                 </div>
@@ -1609,9 +1749,19 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                     </div>
                     <div v-else>
                       <div class="flex items-center gap-2 text-xs mb-2">
-                        <span :class="msg.toolData.status === 'success' ? 'text-green-600' : 'text-red-600'" class="font-medium">
-                          {{ msg.toolData.status === 'success' ? '✓ 执行成功' : '✗ 执行失败' }}
+                        <span :class="msg.toolData.status === 'success' ? (msg.toolData.hasWarning ? 'text-yellow-600' : 'text-green-600') : 'text-red-600'" class="font-medium">
+                          {{ msg.toolData.status === 'success' ? (msg.toolData.hasWarning ? '✓ 执行成功（有警告）' : '✓ 执行成功') : '✗ 执行失败' }}
                         </span>
+                      </div>
+                      <!-- 警告提示 -->
+                      <div v-if="msg.toolData.hasWarning && msg.toolData.result" class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div class="flex items-start gap-2">
+                          <span class="text-yellow-600 text-sm">⚠️</span>
+                          <div class="flex-1">
+                            <p class="text-xs text-yellow-700 font-medium mb-1">执行成功但有警告信息</p>
+                            <p class="text-xs text-yellow-600">命令已成功执行，但产生了一些警告信息。这通常不影响功能，但建议查看详情。</p>
+                          </div>
+                        </div>
                       </div>
                       <!-- 执行结果 -->
                       <div v-if="msg.toolData.result" class="mt-2">
@@ -2012,20 +2162,26 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                 <div
                   v-for="node in flattenedFileTree"
                   :key="node.path"
-                  class="flex items-center gap-1 py-1 px-2 hover:bg-gray-100 rounded group"
+                  class="flex items-center gap-1 py-1 px-2 hover:bg-gray-100 rounded group relative"
                   :style="{ paddingLeft: `${node.depth * 12 + 8}px` }"
                 >
                   <div
                     class="flex items-center gap-1 flex-1 min-w-0 cursor-pointer"
                     @click="node.type === 'directory' && toggleFolder(node.path)"
                   >
+                    <!-- 目录：显示展开/收起箭头 -->
                     <component
-                      :is="node.type === 'directory' ? (expandedFolders.has(node.path) ? ChevronDown : ChevronRight) : File"
+                      v-if="node.type === 'directory'"
+                      :is="expandedFolders.has(node.path) ? ChevronDown : ChevronRight"
                       class="w-4 h-4 text-gray-400 flex-shrink-0"
                     />
+                    <!-- 文件/文件夹图标 -->
                     <component
                       :is="node.type === 'directory' ? Folder : File"
-                      class="w-4 h-4 flex-shrink-0 text-gray-500"
+                      :class="[
+                        'w-4 h-4 flex-shrink-0',
+                        node.type === 'directory' ? 'text-yellow-500' : 'text-gray-500'
+                      ]"
                     />
                     <span class="text-sm text-gray-700 truncate">{{ node.name }}</span>
                   </div>
@@ -2034,12 +2190,16 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                     v-if="sandboxInfo?.session_id"
                     @click.stop="node.type === 'file' ? downloadSingleFile(node) : downloadDirectory(node)"
                     :disabled="downloadingFile === node.path"
-                    class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-opacity disabled:opacity-50"
+                    class="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all disabled:opacity-50"
                     :title="node.type === 'file' ? '下载文件' : '下载目录为 ZIP'"
                   >
-                    <Loader2 v-if="downloadingFile === node.path" class="w-3 h-3 animate-spin" />
-                    <Download v-if="node.type === 'file' && downloadingFile !== node.path" class="w-3 h-3" />
-                    <Archive v-if="node.type === 'directory' && downloadingFile !== node.path" class="w-3 h-3" />
+                    <template v-if="downloadingFile === node.path">
+                      <Loader2 class="w-4 h-4 animate-spin" />
+                    </template>
+                    <template v-else>
+                      <Download v-if="node.type === 'file'" class="w-4 h-4" />
+                      <Archive v-else class="w-4 h-4" />
+                    </template>
                   </button>
                 </div>
               </div>
@@ -2100,101 +2260,171 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
       </div>
     </div>
 
-    <!-- 用户输入对话框 -->
+    <!-- 统一交互对话框 -->
     <Teleport to="body">
-      <div v-if="userInputDialog.show" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div v-if="interactionDialog.show && interactionDialog.data" class="fixed inset-0 z-50 flex items-center justify-center">
         <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="cancelUserInput"></div>
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="interactionDialog.data.allow_cancel && cancelInteraction()"></div>
         
         <!-- 对话框内容 -->
         <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
           <!-- 头部 -->
-          <div class="bg-gradient-to-r from-yellow-400 to-amber-500 px-6 py-4">
+          <div :class="[
+            'px-6 py-4',
+            interactionDialog.data.interaction_type === 'clarification' ? 'bg-gradient-to-r from-blue-400 to-cyan-500' :
+            interactionDialog.data.interaction_type === 'command' ? 'bg-gradient-to-r from-yellow-400 to-amber-500' :
+            interactionDialog.data.interaction_type === 'confirmation' ? 'bg-gradient-to-r from-orange-400 to-red-500' :
+            'bg-gradient-to-r from-purple-400 to-pink-500'
+          ]">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <span class="text-2xl">⚠️</span>
+                <span class="text-2xl">{{
+                  interactionDialog.data.interaction_type === 'clarification' ? '💬' :
+                  interactionDialog.data.interaction_type === 'command' ? '⚙️' :
+                  interactionDialog.data.interaction_type === 'confirmation' ? '⚠️' : '📝'
+                }}</span>
               </div>
               <div>
-                <h3 class="text-white font-semibold text-lg">需要您的输入</h3>
-                <p v-if="userInputDialog.context.stepDescription" class="text-white/80 text-sm">
-                  {{ userInputDialog.context.stepDescription }}
+                <h3 class="text-white font-semibold text-lg">{{ interactionDialog.data.title }}</h3>
+                <p v-if="interactionDialog.data.description" class="text-white/80 text-sm">
+                  {{ interactionDialog.data.description }}
                 </p>
               </div>
             </div>
           </div>
           
           <!-- 内容区域 -->
-          <div class="p-6">
-            <!-- 提示文本 -->
-            <p class="text-gray-700 font-medium mb-4">{{ userInputDialog.promptText }}</p>
-            
-            <!-- 命令上下文 -->
-            <div v-if="userInputDialog.context.command" class="mb-4 p-3 bg-gray-50 rounded-lg">
-              <p class="text-xs text-gray-500 mb-1">执行命令:</p>
-              <code class="text-sm text-gray-700 font-mono">{{ userInputDialog.context.command }}</code>
-            </div>
-            
-            <!-- 选项列表 (select/confirm 类型) -->
-            <div v-if="userInputDialog.promptType !== 'input' && userInputDialog.options.length > 0" class="space-y-2 mb-4">
-              <div v-for="(opt, idx) in userInputDialog.options" :key="idx"
-                @click="userInputDialog.selectedOption = opt"
-                :class="[
-                  'p-3 rounded-lg border-2 cursor-pointer transition-all',
-                  userInputDialog.selectedOption === opt
-                    ? 'border-amber-500 bg-amber-50'
-                    : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
-                ]">
-                <div class="flex items-start gap-3">
-                  <div :class="[
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5',
-                    userInputDialog.selectedOption === opt
-                      ? 'border-amber-500 bg-amber-500'
-                      : 'border-gray-300'
-                  ]">
-                    <div v-if="userInputDialog.selectedOption === opt" class="w-2 h-2 bg-white rounded-full"></div>
-                  </div>
-                  <div class="flex-1">
-                    <p class="font-medium text-gray-700">{{ opt }}</p>
-                    <p v-if="userInputDialog.optionsExplanation[idx]" class="text-sm text-gray-500 mt-0.5">
-                      {{ userInputDialog.optionsExplanation[idx].description }}
-                    </p>
+          <div class="p-6 space-y-4">
+            <!-- 动态渲染表单字段 -->
+            <div v-for="field in interactionDialog.data.fields" :key="field.id" class="space-y-2">
+              <label class="block text-sm font-medium text-gray-700">
+                {{ field.label }}
+                <span v-if="field.required" class="text-red-500">*</span>
+              </label>
+              
+              <!-- 文本输入 -->
+              <input
+                v-if="field.type === 'text'"
+                v-model="interactionDialog.formValues[field.id]"
+                type="text"
+                :placeholder="field.placeholder"
+                :required="field.required"
+                class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              
+              <!-- 多行文本 -->
+              <textarea
+                v-else-if="field.type === 'textarea'"
+                v-model="interactionDialog.formValues[field.id]"
+                :placeholder="field.placeholder"
+                :required="field.required"
+                rows="3"
+                class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              ></textarea>
+              
+              <!-- 数字输入 -->
+              <input
+                v-else-if="field.type === 'number'"
+                v-model.number="interactionDialog.formValues[field.id]"
+                type="number"
+                :placeholder="field.placeholder"
+                :required="field.required"
+                :min="field.validation?.min"
+                :max="field.validation?.max"
+                class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              
+              <!-- 下拉选择 -->
+              <select
+                v-else-if="field.type === 'select'"
+                v-model="interactionDialog.formValues[field.id]"
+                :required="field.required"
+                class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">请选择...</option>
+                <option v-for="opt in field.options" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              
+              <!-- 单选按钮 -->
+              <div v-else-if="field.type === 'radio'" class="space-y-2">
+                <div
+                  v-for="opt in field.options"
+                  :key="opt.value"
+                  @click="interactionDialog.formValues[field.id] = opt.value"
+                  :class="[
+                    'p-3 rounded-lg border-2 cursor-pointer transition-all',
+                    interactionDialog.formValues[field.id] === opt.value
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                  ]"
+                >
+                  <div class="flex items-start gap-3">
+                    <div :class="[
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5',
+                      interactionDialog.formValues[field.id] === opt.value
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-300'
+                    ]">
+                      <div v-if="interactionDialog.formValues[field.id] === opt.value" class="w-2 h-2 bg-white rounded-full"></div>
+                    </div>
+                    <div class="flex-1">
+                      <p class="font-medium text-gray-700">{{ opt.label }}</p>
+                      <p v-if="opt.description" class="text-sm text-gray-500 mt-0.5">{{ opt.description }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
+              
+              <!-- 复选框 -->
+              <div v-else-if="field.type === 'checkbox'" class="space-y-2">
+                <label
+                  v-for="opt in field.options"
+                  :key="opt.value"
+                  class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    :value="opt.value"
+                    v-model="interactionDialog.formValues[field.id]"
+                    class="mt-1"
+                  />
+                  <div class="flex-1">
+                    <p class="font-medium text-gray-700">{{ opt.label }}</p>
+                    <p v-if="opt.description" class="text-sm text-gray-500 mt-0.5">{{ opt.description }}</p>
+                  </div>
+                </label>
+              </div>
+              
+              <!-- 确认按钮 -->
+              <div v-else-if="field.type === 'confirm'" class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  v-model="interactionDialog.formValues[field.id]"
+                  :required="field.required"
+                  class="w-4 h-4"
+                />
+                <span class="text-sm text-gray-700">{{ field.label }}</span>
+              </div>
             </div>
-            
-            <!-- 自定义输入 (input 类型) -->
-            <div v-if="userInputDialog.promptType === 'input'" class="mb-4">
-              <input
-                v-model="userInputDialog.customInput"
-                type="text"
-                :placeholder="userInputDialog.defaultResponse || '请输入...'"
-                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                @keyup.enter="submitUserInput"
-              />
-            </div>
-            
-            <!-- 默认值提示 -->
-            <p v-if="userInputDialog.defaultResponse" class="text-sm text-gray-500 mb-4">
-              <span class="text-gray-400">默认值:</span> {{ userInputDialog.defaultResponse }}
-            </p>
           </div>
           
           <!-- 底部按钮 -->
           <div class="px-6 py-4 bg-gray-50 flex gap-3 justify-end">
             <button
-              @click="cancelUserInput"
+              v-if="interactionDialog.data.allow_cancel"
+              @click="cancelInteraction"
               class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              {{ userInputDialog.defaultResponse ? '使用默认值' : '取消' }}
+              {{ interactionDialog.data.cancel_button_text }}
             </button>
             <button
-              @click="submitUserInput"
-              :disabled="userInputDialog.promptType === 'input' ? !userInputDialog.customInput : !userInputDialog.selectedOption"
-              class="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              @click="submitInteraction"
+              class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <Send class="w-4 h-4" />
-              <span>提交</span>
+              <span>{{ interactionDialog.data.submit_button_text }}</span>
             </button>
           </div>
         </div>
