@@ -12,7 +12,7 @@ import ImageToBase64 from './pages/ImageToBase64.vue'
 // import Action3DTool from './pages/3DActionTool.vue'
 import SshTerminal from './pages/SshTerminal.vue'
 import MultiModelChat from './pages/MultiModelChat.vue'
-// import MultiModalQA from './pages/MultiModalQA.vue'
+import MultiModalQA from './pages/MultiModalQA.vue'
 import CodeEditor from './pages/CodeEditor.vue'
 import ColorTool from './pages/ColorTool.vue'
 import MarkdownEditor from './pages/MarkdownEditor.vue'
@@ -37,7 +37,7 @@ const routes = [
   // { path: '/3d-action', name: '3d-action', component: Action3DTool },
   { path: '/ssh', name: 'ssh', component: SshTerminal },
   { path: '/chat', name: 'chat', component: MultiModelChat },
-  // { path: '/multimodal', name: 'multimodal', component: MultiModalQA },
+  { path: '/multimodal', name: 'multimodal', component: MultiModalQA },
   { path: '/editor', name: 'editor', component: CodeEditor },
   { path: '/color', name: 'color', component: ColorTool },
   { path: '/markdown', name: 'markdown', component: MarkdownEditor },

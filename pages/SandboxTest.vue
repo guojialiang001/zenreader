@@ -1020,9 +1020,9 @@ const handleWebSocketMessage = (data: any) => {
       scrollToBottom()
       break
     case 'todo_list_update':
-      todoList.value = { id: payload.todo_list?.id || 'main', title: payload.todo_list?.title || '任务', items: (payload.todo_list?.items || []).map((i: any) => ({ id: i.id, content: i.content || i.description || i.title, status: i.status || 'pending' })), total_items: payload.todo_list?.total_items || 0, completed_items: payload.todo_list?.completed_items || 0 }
+      todoList.value = { id: payload.todo_list?.id || 'main', title: payload.todo_list?.title || '待办事项', items: (payload.todo_list?.items || []).map((i: any) => ({ id: i.id, content: i.content || i.description || i.title, status: i.status || 'pending' })), total_items: payload.todo_list?.total_items || 0, completed_items: payload.todo_list?.completed_items || 0 }
       updateTodoStats()
-      // 在消息区域展示任务列表（只添加一次，后续更新会自动反映）
+      // 在消息区域展示待办事项列表（只添加一次，后续更新会自动反映）
       if (!messages.value.find(m => m.type === 'todo_list')) {
         messages.value.push({ id: 'todo-' + Date.now(), type: 'todo_list' as any, content: '', timestamp: new Date() })
       }
@@ -1051,11 +1051,37 @@ const handleWebSocketMessage = (data: any) => {
           // 不保留 status 字段，文件树只展示最新结构，不标记变更状态
           children: n.children ? n.children.map(processFileNode) : undefined
         })
-        fileTree.value = Array.isArray(payload.file_tree)
-          ? payload.file_tree.map(processFileNode)
-          : payload.file_tree.root
-            ? [processFileNode(payload.file_tree.root)]
-            : []
+        
+        // 处理文件树，递归查找 workspace 文件夹并只展示其内容
+        const findWorkspaceContents = (nodes: FileNode[]): FileNode[] => {
+          for (const node of nodes) {
+            // 如果当前节点是 workspace 目录，返回其子节点
+            if (node.type === 'directory' && node.name === 'workspace') {
+              return node.children || []
+            }
+            // 如果当前节点是目录，递归查找
+            if (node.type === 'directory' && node.children) {
+              const found = findWorkspaceContents(node.children)
+              if (found.length > 0 || node.children.some(c => c.name === 'workspace')) {
+                return found
+              }
+            }
+          }
+          // 如果没找到 workspace，返回原始节点
+          return nodes
+        }
+        
+        let processedTree: FileNode[]
+        if (Array.isArray(payload.file_tree)) {
+          processedTree = payload.file_tree.map(processFileNode)
+        } else if (payload.file_tree.root) {
+          processedTree = [processFileNode(payload.file_tree.root)]
+        } else {
+          processedTree = []
+        }
+        
+        // 应用 workspace 解包逻辑，只展示 workspace 目录下的内容
+        fileTree.value = findWorkspaceContents(processedTree)
       }
       // 不在日志中显示文件树更新，避免干扰
       break
@@ -1509,42 +1535,6 @@ const sendMessage = () => {
   ws.value.send(JSON.stringify({ type: 'chat', payload: { message: msg, conversation_id: config.conversationId || undefined, include_thinking: config.includeThinking }, request_id: 'req-' + Date.now() }))
   inputMessage.value = ''
   addLog('info', '已发送')
-}
-
-// 发送用户输入响应
-const sendUserInput = (input: string) => {
-  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
-  ws.value.send(JSON.stringify({
-    type: 'user_input',
-    payload: {
-      step_id: userInputDialog.value.stepId,
-      user_input: input,
-      conversation_id: config.conversationId
-    },
-    request_id: 'req-' + Date.now()
-  }))
-  userInputDialog.value.show = false
-  addLog('info', `用户输入已发送: ${input}`)
-}
-
-// 提交用户输入对话框
-const submitUserInput = () => {
-  const input = userInputDialog.value.promptType === 'input'
-    ? userInputDialog.value.customInput
-    : userInputDialog.value.selectedOption
-  if (input) {
-    sendUserInput(input)
-  }
-}
-
-// 取消用户输入（使用默认值）
-const cancelUserInput = () => {
-  if (userInputDialog.value.defaultResponse) {
-    sendUserInput(userInputDialog.value.defaultResponse)
-  } else {
-    userInputDialog.value.show = false
-    addLog('warn', '用户取消输入')
-  }
 }
 
 // 提交统一交互对话框
@@ -2139,7 +2129,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                   <span class="text-sm text-gray-700">{{ item.content }}</span>
                 </div>
               </div>
-              <p v-else class="text-gray-400 text-sm">暂无任务</p>
+              <p v-else class="text-gray-400 text-sm">暂无待办事项</p>
             </div>
 
             <!-- 文件树 -->
@@ -2163,18 +2153,19 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                   v-for="node in flattenedFileTree"
                   :key="node.path"
                   class="flex items-center gap-1 py-1 px-2 hover:bg-gray-100 rounded group relative"
-                  :style="{ paddingLeft: `${node.depth * 12 + 8}px` }"
+                  :style="{ paddingLeft: `${node.depth * 16 + 8}px` }"
                 >
                   <div
-                    class="flex items-center gap-1 flex-1 min-w-0 cursor-pointer"
+                    class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer"
                     @click="node.type === 'directory' && toggleFolder(node.path)"
                   >
-                    <!-- 目录：显示展开/收起箭头 -->
+                    <!-- 目录：显示展开/收起箭头，文件：占位符保持对齐 -->
                     <component
                       v-if="node.type === 'directory'"
                       :is="expandedFolders.has(node.path) ? ChevronDown : ChevronRight"
                       class="w-4 h-4 text-gray-400 flex-shrink-0"
                     />
+                    <span v-else class="w-4 h-4 flex-shrink-0"></span>
                     <!-- 文件/文件夹图标 -->
                     <component
                       :is="node.type === 'directory' ? Folder : File"
@@ -2217,7 +2208,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                     <XCircle v-else class="w-4 h-4 text-red-500" />
                     <span class="text-sm font-medium text-gray-700">{{ tc.tool }}</span>
                   </div>
-                  <p class="text-xs text-gray-500 mt-1 truncate">{{ JSON.stringify(tc.arguments) }}</p>
+                  <p class="text-xs text-gray-500 mt-1 truncate">{{ formatPathForDisplay(JSON.stringify(tc.arguments)) }}</p>
                 </div>
               </div>
               <p v-else class="text-gray-400 text-sm">暂无工具调用</p>
