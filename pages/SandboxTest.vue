@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Home, Send, Trash2, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle, XCircle, Lock, Eye, EyeOff, Monitor, Clock, SkipForward, ChevronRight, ChevronDown, File, Folder, ExternalLink, ListTodo, FolderTree, Wrench, FileText, Download, Archive } from 'lucide-vue-next'
+import { Home, Send, Trash2, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle, XCircle, Lock, Eye, EyeOff, Monitor, Clock, SkipForward, ChevronRight, ChevronDown, File, Folder, ExternalLink, ListTodo, FolderTree, Wrench, FileText, Download, Archive, Tv, Maximize2, Minimize2 } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
@@ -131,6 +131,13 @@ interface FlowNodeData {
 // 状态
 const sandboxInfo = ref<{ has_sandbox: boolean; session_id?: string; vnc_url?: string; vnc_password?: string } | null>(null)
 const showVncEmbed = ref(false)
+
+// VNC 相关状态
+const vncContainer = ref<HTMLDivElement | null>(null)
+const vncFullscreenContainer = ref<HTMLDivElement | null>(null)
+const vncRfb = ref<any>(null)
+const vncStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
+const vncFullscreen = ref(false)
 const todoList = ref<TodoList | null>(null)
 const todoStats = ref({ total: 0, completed: 0, in_progress: 0, failed: 0, pending: 0 })
 const updateTodoStats = () => { if (!todoList.value) return; const items = todoList.value.items; todoStats.value = { total: items.length, completed: items.filter(i => i.status === 'completed').length, in_progress: items.filter(i => i.status === 'in_progress').length, failed: items.filter(i => i.status === 'failed').length, pending: items.filter(i => i.status === 'pending').length } }
@@ -270,7 +277,7 @@ const flattenedFileTree = computed((): FlatFileNode[] => {
 })
 const executionPlan = ref<ExecutionPlan | null>(null)
 const toolCalls = ref<ToolCall[]>([])
-const activeSideTab = ref<'todo' | 'files' | 'tools'>('todo')
+const activeSideTab = ref<'todo' | 'files' | 'tools' | 'vnc'>('todo')
 
 // 标签
 const getComplexityLabel = (c: string) => ({ simple: '🟢 简单', moderate: '🟡 中等', complex: '🔴 复杂' }[c] || c)
@@ -727,6 +734,142 @@ const connectWebSocket = () => {
 const disconnectWebSocket = () => { if (ws.value) { ws.value.close(); ws.value = null; wsStatus.value = 'disconnected'; sessionInfo.value = null } }
 const reconnect = async () => { disconnectWebSocket(); await initAfterLogin() }
 
+// VNC 连接管理 - 从本地加载 noVNC
+const loadNoVncScript = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    // 检查是否已加载
+    if ((window as any).RFB) {
+      resolve((window as any).RFB)
+      return
+    }
+
+    // 使用 ES module 从本地加载 noVNC
+    const script = document.createElement('script')
+    script.type = 'module'
+    script.textContent = `
+      try {
+        const { default: RFB } = await import('/novnc/rfb.js');
+        window.RFB = RFB;
+        window.dispatchEvent(new CustomEvent('novnc-loaded', { detail: { success: true } }));
+      } catch (e) {
+        console.error('noVNC 加载失败:', e);
+        window.dispatchEvent(new CustomEvent('novnc-loaded', { detail: { success: false, error: e.message } }));
+      }
+    `
+
+    const handleLoad = (e: any) => {
+      window.removeEventListener('novnc-loaded', handleLoad)
+      if (e.detail?.success && (window as any).RFB) {
+        resolve((window as any).RFB)
+      } else {
+        reject(new Error(e.detail?.error || 'noVNC 加载失败'))
+      }
+    }
+
+    window.addEventListener('novnc-loaded', handleLoad as EventListener)
+
+    setTimeout(() => {
+      window.removeEventListener('novnc-loaded', handleLoad as EventListener)
+      if (!(window as any).RFB) {
+        reject(new Error('noVNC 加载超时'))
+      }
+    }, 15000)
+
+    document.head.appendChild(script)
+  })
+}
+
+const connectVnc = async () => {
+  if (!sandboxInfo.value?.vnc_url) {
+    addLog('error', 'VNC 连接失败: 缺少 URL')
+    return
+  }
+
+  // 选择正确的容器
+  const container = vncFullscreen.value ? vncFullscreenContainer.value : vncContainer.value
+  if (!container) {
+    addLog('error', 'VNC 连接失败: 容器未就绪')
+    return
+  }
+
+  // 断开现有连接
+  disconnectVnc()
+
+  vncStatus.value = 'connecting'
+  addLog('info', '正在加载 VNC 客户端...')
+
+  try {
+    // 动态加载 noVNC
+    const RFB = await loadNoVncScript()
+
+    addLog('info', '正在连接 VNC...')
+
+    const rfb = new RFB(container, sandboxInfo.value.vnc_url, {
+      credentials: { password: sandboxInfo.value.vnc_password || '' }
+    })
+
+    rfb.scaleViewport = true
+    rfb.resizeSession = false
+    rfb.clipViewport = true
+
+    rfb.addEventListener('connect', () => {
+      vncStatus.value = 'connected'
+      addLog('success', 'VNC 已连接')
+    })
+
+    rfb.addEventListener('disconnect', (e: any) => {
+      vncStatus.value = 'disconnected'
+      vncRfb.value = null
+      if (e.detail?.clean) {
+        addLog('info', 'VNC 已断开')
+      } else {
+        addLog('warn', 'VNC 连接断开')
+      }
+    })
+
+    rfb.addEventListener('securityfailure', (e: any) => {
+      vncStatus.value = 'error'
+      addLog('error', `VNC 认证失败: ${e.detail?.reason || '未知原因'}`)
+    })
+
+    vncRfb.value = rfb
+  } catch (e) {
+    vncStatus.value = 'error'
+    addLog('error', `VNC 连接错误: ${e instanceof Error ? e.message : '未知错误'}`)
+  }
+}
+
+const disconnectVnc = () => {
+  if (vncRfb.value) {
+    try {
+      vncRfb.value.disconnect()
+    } catch (e) {
+      // 忽略断开时的错误
+    }
+    vncRfb.value = null
+  }
+  vncStatus.value = 'disconnected'
+}
+
+const toggleVncFullscreen = () => {
+  const wasConnected = vncStatus.value === 'connected'
+
+  // 断开当前连接
+  if (wasConnected) {
+    disconnectVnc()
+  }
+
+  // 切换全屏状态
+  vncFullscreen.value = !vncFullscreen.value
+
+  // 如果之前是连接状态，在新容器中重新连接
+  if (wasConnected && sandboxInfo.value?.vnc_url) {
+    nextTick(() => {
+      connectVnc()
+    })
+  }
+}
+
 // 消息处理
 const handleWebSocketMessage = (data: any) => {
   const msgType = data.type, payload = data.payload || {}
@@ -834,6 +977,29 @@ const handleWebSocketMessage = (data: any) => {
       sandboxInfo.value = { has_sandbox: true, session_id: payload.session_id, vnc_url: payload.vnc_url, vnc_password: payload.vnc_password }
       messages.value.push({ id: 'sb-' + Date.now(), type: 'system', content: '🖥️ 沙箱就绪', timestamp: new Date() })
       addLog('success', '沙箱就绪')
+      // 记录 VNC 访问链接到日志
+      if (payload.vnc_url) {
+        addLog('info', `VNC 链接: ${payload.vnc_url}`)
+        // 判断是否支持 noVNC（WebSocket 连接）
+        const isWebSocket = payload.vnc_url.startsWith('wss://') || payload.vnc_url.startsWith('ws://')
+        addLog('info', `noVNC 支持: ${isWebSocket ? '✓ 是 (WebSocket)' : '✗ 否'}`)
+        // 判断是否支持 iframe（需要 HTTP/HTTPS 的 noVNC 客户端页面）
+        const isHttpUrl = payload.vnc_url.startsWith('http://') || payload.vnc_url.startsWith('https://')
+        addLog('info', `iframe 支持: ${isHttpUrl ? '✓ 是 (HTTP页面)' : '✗ 否 (WebSocket需用noVNC库)'}`)
+      }
+      if (payload.session_id) {
+        addLog('info', `会话 ID: ${payload.session_id}`)
+      }
+      if (payload.vnc_password) {
+        addLog('info', `VNC 密码: ${payload.vnc_password}`)
+      }
+      // 自动切换到 VNC 标签页并连接
+      if (payload.vnc_url) {
+        activeSideTab.value = 'vnc'
+        nextTick(() => {
+          connectVnc()
+        })
+      }
       scrollToBottom()
       break
     case 'plan_start':
@@ -1599,7 +1765,7 @@ const statusText = computed(() => ({ connected: '已连接', connecting: '连接
 
 let heartbeatInterval: number | null = null
 onMounted(() => { if (checkAuthentication()) initAfterLogin(); heartbeatInterval = window.setInterval(() => { if (ws.value?.readyState === WebSocket.OPEN) sendPing() }, 30000) })
-onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); disconnectWebSocket() })
+onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); disconnectWebSocket(); disconnectVnc() })
 </script>
 
 <template>
@@ -2111,6 +2277,11 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
             <button @click="activeSideTab = 'tools'" :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeSideTab === 'tools' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">
               <Wrench class="w-4 h-4 mx-auto" />
             </button>
+            <button @click="activeSideTab = 'vnc'" :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors relative', activeSideTab === 'vnc' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">
+              <Tv class="w-4 h-4 mx-auto" />
+              <span v-if="vncStatus === 'connected'" class="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+              <span v-else-if="vncStatus === 'connecting'" class="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
+            </button>
           </div>
 
           <!-- 面板内容 -->
@@ -2176,21 +2347,16 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                     />
                     <span class="text-sm text-gray-700 truncate">{{ node.name }}</span>
                   </div>
-                  <!-- 文件/目录下载按钮 -->
+                  <!-- 文件下载按钮（仅文件显示，文件夹不显示下载按钮） -->
                   <button
-                    v-if="sandboxInfo?.session_id"
-                    @click.stop="node.type === 'file' ? downloadSingleFile(node) : downloadDirectory(node)"
+                    v-if="sandboxInfo?.session_id && node.type === 'file'"
+                    @click.stop="downloadSingleFile(node)"
                     :disabled="downloadingFile === node.path"
                     class="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all disabled:opacity-50"
-                    :title="node.type === 'file' ? '下载文件' : '下载目录为 ZIP'"
+                    title="下载文件"
                   >
-                    <template v-if="downloadingFile === node.path">
-                      <Loader2 class="w-4 h-4 animate-spin" />
-                    </template>
-                    <template v-else>
-                      <Download v-if="node.type === 'file'" class="w-4 h-4" />
-                      <Archive v-else class="w-4 h-4" />
-                    </template>
+                    <Loader2 v-if="downloadingFile === node.path" class="w-4 h-4 animate-spin" />
+                    <Download v-else class="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -2212,7 +2378,127 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                 </div>
               </div>
               <p v-else class="text-gray-400 text-sm">暂无工具调用</p>
+            </div>
+
+            <!-- VNC 远程桌面 -->
+            <div v-else-if="activeSideTab === 'vnc'" class="h-full flex flex-col -m-4">
+              <!-- VNC 头部控制栏 -->
+              <div class="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
+                <div class="flex items-center gap-2">
+                  <Tv class="w-4 h-4 text-gray-600" />
+                  <span class="text-sm font-medium text-gray-700">远程桌面</span>
+                  <span :class="[
+                    'text-xs px-2 py-0.5 rounded-full',
+                    vncStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                    vncStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
+                    vncStatus === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                  ]">
+                    {{ vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button
+                    v-if="sandboxInfo?.vnc_url && vncStatus !== 'connected'"
+                    @click="connectVnc"
+                    :disabled="vncStatus === 'connecting'"
+                    class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50"
+                    title="连接 VNC"
+                  >
+                    <RefreshCw :class="['w-4 h-4', vncStatus === 'connecting' ? 'animate-spin' : '']" />
+                  </button>
+                  <button
+                    v-if="vncStatus === 'connected'"
+                    @click="disconnectVnc"
+                    class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                    title="断开连接"
+                  >
+                    <XCircle class="w-4 h-4" />
+                  </button>
+                  <button
+                    @click="toggleVncFullscreen"
+                    class="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    title="全屏"
+                  >
+                    <component :is="vncFullscreen ? Minimize2 : Maximize2" class="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              <!-- VNC 显示区域 -->
+              <div class="flex-1 bg-black relative overflow-hidden">
+                <!-- VNC 容器 -->
+                <div
+                  ref="vncContainer"
+                  class="w-full h-full"
+                  :class="{ 'cursor-pointer': vncStatus === 'connected' }"
+                ></div>
+
+                <!-- 未连接状态 -->
+                <div
+                  v-if="vncStatus === 'disconnected' && !sandboxInfo?.vnc_url"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-gray-400"
+                >
+                  <Monitor class="w-12 h-12 mb-2 opacity-50" />
+                  <p class="text-sm">等待沙箱启动...</p>
+                  <p class="text-xs mt-1">沙箱就绪后将自动连接</p>
+                </div>
+
+                <!-- 连接中状态 -->
+                <div
+                  v-else-if="vncStatus === 'connecting'"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-black/50"
+                >
+                  <Loader2 class="w-8 h-8 animate-spin mb-2" />
+                  <p class="text-sm">正在连接...</p>
+                </div>
+
+                <!-- 错误状态 -->
+                <div
+                  v-else-if="vncStatus === 'error'"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-red-400"
+                >
+                  <XCircle class="w-12 h-12 mb-2 opacity-50" />
+                  <p class="text-sm">连接失败</p>
+                  <button
+                    @click="connectVnc"
+                    class="mt-2 px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                  >
+                    重试
+                  </button>
+                </div>
+
+                <!-- 未连接但有 URL -->
+                <div
+                  v-else-if="vncStatus === 'disconnected' && sandboxInfo?.vnc_url"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-gray-400"
+                >
+                  <Monitor class="w-12 h-12 mb-2 opacity-50" />
+                  <p class="text-sm">VNC 已断开</p>
+                  <button
+                    @click="connectVnc"
+                    class="mt-2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    重新连接
+                  </button>
+                </div>
+              </div>
+
+              <!-- VNC 信息 -->
+              <div v-if="sandboxInfo?.has_sandbox" class="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500">
+                <div class="flex items-center justify-between">
+                  <span>会话: {{ sandboxInfo.session_id?.substring(0, 8) }}...</span>
+                  <a
+                    v-if="sandboxInfo.vnc_url"
+                    :href="sandboxInfo.vnc_url"
+                    target="_blank"
+                    class="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                  >
+                    <ExternalLink class="w-3 h-3" />
+                    新窗口
+                  </a>
+                </div>
+              </div>
+            </div>
             </div>
 
           <!-- 沙箱信息 -->
@@ -2416,6 +2702,103 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
             >
               <Send class="w-4 h-4" />
               <span>{{ interactionDialog.data.submit_button_text }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- VNC 全屏覆盖层 -->
+    <Teleport to="body">
+      <div v-if="vncFullscreen" class="fixed inset-0 z-50 bg-black flex flex-col">
+        <!-- 全屏头部 -->
+        <div class="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-700">
+          <div class="flex items-center gap-3">
+            <Tv class="w-5 h-5 text-gray-400" />
+            <span class="text-sm font-medium text-gray-200">远程桌面</span>
+            <span :class="[
+              'text-xs px-2 py-0.5 rounded-full',
+              vncStatus === 'connected' ? 'bg-green-900 text-green-300' :
+              vncStatus === 'connecting' ? 'bg-yellow-900 text-yellow-300' :
+              vncStatus === 'error' ? 'bg-red-900 text-red-300' : 'bg-gray-700 text-gray-400'
+            ]">
+              {{ vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接' }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="sandboxInfo?.vnc_url && vncStatus !== 'connected'"
+              @click="connectVnc"
+              :disabled="vncStatus === 'connecting'"
+              class="p-2 text-blue-400 hover:bg-gray-800 rounded-lg disabled:opacity-50"
+              title="连接 VNC"
+            >
+              <RefreshCw :class="['w-5 h-5', vncStatus === 'connecting' ? 'animate-spin' : '']" />
+            </button>
+            <button
+              v-if="vncStatus === 'connected'"
+              @click="disconnectVnc"
+              class="p-2 text-red-400 hover:bg-gray-800 rounded-lg"
+              title="断开连接"
+            >
+              <XCircle class="w-5 h-5" />
+            </button>
+            <button
+              @click="toggleVncFullscreen"
+              class="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"
+              title="退出全屏"
+            >
+              <Minimize2 class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- 全屏 VNC 显示区域 -->
+        <div class="flex-1 relative overflow-hidden">
+          <!-- VNC 容器 -->
+          <div
+            ref="vncFullscreenContainer"
+            class="w-full h-full"
+            :class="{ 'cursor-pointer': vncStatus === 'connected' }"
+          ></div>
+
+          <!-- 未连接状态 -->
+          <div
+            v-if="vncStatus === 'disconnected'"
+            class="absolute inset-0 flex flex-col items-center justify-center text-gray-500"
+          >
+            <Monitor class="w-16 h-16 mb-3 opacity-50" />
+            <p class="text-lg">{{ sandboxInfo?.vnc_url ? 'VNC 已断开' : '等待沙箱启动...' }}</p>
+            <button
+              v-if="sandboxInfo?.vnc_url"
+              @click="connectVnc"
+              class="mt-3 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              重新连接
+            </button>
+          </div>
+
+          <!-- 连接中状态 -->
+          <div
+            v-else-if="vncStatus === 'connecting'"
+            class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-black/50"
+          >
+            <Loader2 class="w-12 h-12 animate-spin mb-3" />
+            <p class="text-lg">正在连接...</p>
+          </div>
+
+          <!-- 错误状态 -->
+          <div
+            v-else-if="vncStatus === 'error'"
+            class="absolute inset-0 flex flex-col items-center justify-center text-red-500"
+          >
+            <XCircle class="w-16 h-16 mb-3 opacity-50" />
+            <p class="text-lg">连接失败</p>
+            <button
+              @click="connectVnc"
+              class="mt-3 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              重试
             </button>
           </div>
         </div>
