@@ -3,87 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZenReader - Markdown Viewer</title>
+    <title>工具集</title>
+    <!-- 同步加载Tailwind CSS，防止闪烁 -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
-      // 等待DOM加载完成后再配置Tailwind
-      document.addEventListener('DOMContentLoaded', function() {
-        const script = document.createElement('script');
-        script.src = "https://cdn.tailwindcss.com?plugins=typography";
-        script.onload = function() {
-          tailwind.config = {
-            theme: {
-              extend: {
-                colors: {
-                  brand: {
-                    50: '#f0f9ff',
-                    100: '#e0f2fe',
-                    500: '#0ea5e9',
-                    600: '#0284c7',
-                    900: '#0c4a6e',
-                  }
-                },
-                typography: (theme) => ({
-                  DEFAULT: {
-                    css: {
-                      maxWidth: 'none',
-                      color: theme('colors.slate.700'),
-                      a: {
-                        color: theme('colors.brand.600'),
-                        '&:hover': {
-                          color: theme('colors.brand.500'),
-                        },
-                      },
-                      code: {
-                        color: theme('colors.pink.600'),
-                        backgroundColor: theme('colors.slate.100'),
-                        padding: '2px 4px',
-                        borderRadius: '4px',
-                        fontWeight: '500',
-                      },
-                      'code::before': {
-                        content: '""',
-                      },
-                      'code::after': {
-                        content: '""',
-                      },
-                      pre: {
-                        backgroundColor: theme('colors.slate.50'),
-                        border: '1px solid ' + theme('colors.slate.200'),
-                        borderRadius: '0.5rem',
-                        padding: '0',
-                        marginTop: '0',
-                        marginBottom: '1rem',
-                        overflow: 'hidden',
-                      },
-                      'pre code': {
-                        backgroundColor: 'transparent',
-                        padding: '1rem',
-                        display: 'block',
-                        overflowX: 'auto',
-                        fontSize: '0.875rem',
-                        lineHeight: '1.7',
-                        color: theme('colors.slate.800'),
-                      },
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#f0f9ff',
+                100: '#e0f2fe',
+                500: '#0ea5e9',
+                600: '#0284c7',
+                900: '#0c4a6e',
+              }
+            },
+            typography: (theme) => ({
+              DEFAULT: {
+                css: {
+                  maxWidth: 'none',
+                  color: theme('colors.slate.700'),
+                  a: {
+                    color: theme('colors.brand.600'),
+                    '&:hover': {
+                      color: theme('colors.brand.500'),
                     },
                   },
-                }),
-                // 添加更灵活的响应式工具类
-                height: {
-                  'screen-safe': '100svh',
-                  'screen-dynamic': '100dvh',
-                },
-                width: {
-                  'screen-safe': '100svw',
-                  'screen-dynamic': '100dvw',
+                  code: {
+                    color: theme('colors.pink.600'),
+                    backgroundColor: theme('colors.slate.100'),
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    fontWeight: '500',
+                  },
+                  'code::before': {
+                    content: '""',
+                  },
+                  'code::after': {
+                    content: '""',
+                  },
+                  pre: {
+                    backgroundColor: theme('colors.slate.50'),
+                    border: '1px solid ' + theme('colors.slate.200'),
+                    borderRadius: '0.5rem',
+                    padding: '0',
+                    marginTop: '0',
+                    marginBottom: '1rem',
+                    overflow: 'hidden',
+                  },
+                  'pre code': {
+                    backgroundColor: 'transparent',
+                    padding: '1rem',
+                    display: 'block',
+                    overflowX: 'auto',
+                    fontSize: '0.875rem',
+                    lineHeight: '1.7',
+                    color: theme('colors.slate.800'),
+                  },
                 },
               },
+            }),
+            height: {
+              'screen-safe': '100svh',
+              'screen-dynamic': '100dvh',
             },
-          }
-        };
-        document.head.appendChild(script);
-      });
+            width: {
+              'screen-safe': '100svw',
+              'screen-dynamic': '100dvw',
+            },
+          },
+        },
+      }
     </script>
-
+
+<!-- 预加载字体以减少FOIT -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 防止Vue挂载前的内容闪烁 -->
+<style>
+  #app { opacity: 0; animation: fadeIn 0.15s ease-in forwards; animation-delay: 0.05s; }
+  @keyframes fadeIn { to { opacity: 1; } }
+</style>
   <script type="importmap">
 {
   "imports": {
@@ -94,8 +95,8 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-C_NG52dr.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CJY1drfl.css">
+  <script type="module" crossorigin src="/assets/index-C_naU7g_.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Nq10NROD.css">
 </head>
   <body class="bg-gray-50 text-slate-800 min-h-[100vh] overflow-x-hidden">
     <div id="app" class="h-full"></div>
