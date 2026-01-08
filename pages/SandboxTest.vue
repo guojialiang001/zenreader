@@ -129,7 +129,7 @@ interface FlowNodeData {
 }
 
 // 状态
-const sandboxInfo = ref<{ has_sandbox: boolean; session_id?: string; vnc_url?: string; vnc_password?: string } | null>(null)
+const sandboxInfo = ref<{ has_sandbox: boolean; session_id?: string; vnc_url?: string; vnc_password?: string; iframe_url?: string } | null>(null)
 const showVncEmbed = ref(false)
 
 // VNC 相关状态
@@ -138,6 +138,8 @@ const vncFullscreenContainer = ref<HTMLDivElement | null>(null)
 const vncRfb = ref<any>(null)
 const vncStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
 const vncFullscreen = ref(false)
+const vncMode = ref<'iframe' | 'novnc'>('iframe') // VNC 显示模式
+const iframeStatus = ref<'disconnected' | 'loading' | 'connected' | 'error'>('disconnected') // iframe 状态
 const todoList = ref<TodoList | null>(null)
 const todoStats = ref({ total: 0, completed: 0, in_progress: 0, failed: 0, pending: 0 })
 const updateTodoStats = () => { if (!todoList.value) return; const items = todoList.value.items; todoStats.value = { total: items.length, completed: items.filter(i => i.status === 'completed').length, in_progress: items.filter(i => i.status === 'in_progress').length, failed: items.filter(i => i.status === 'failed').length, pending: items.filter(i => i.status === 'pending').length } }
@@ -734,49 +736,16 @@ const connectWebSocket = () => {
 const disconnectWebSocket = () => { if (ws.value) { ws.value.close(); ws.value = null; wsStatus.value = 'disconnected'; sessionInfo.value = null } }
 const reconnect = async () => { disconnectWebSocket(); await initAfterLogin() }
 
-// VNC 连接管理 - 从本地加载 noVNC
-const loadNoVncScript = (): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    // 检查是否已加载
-    if ((window as any).RFB) {
-      resolve((window as any).RFB)
-      return
-    }
+// VNC 连接管理 - noVNC 作为可选备用方案
+const loadNoVncScript = async (): Promise<any> => {
+  // 检查是否已加载
+  if ((window as any).RFB) {
+    return (window as any).RFB
+  }
 
-    // 使用 ES module 从本地加载 noVNC
-    const script = document.createElement('script')
-    script.type = 'module'
-    script.textContent = `
-      try {
-        const { default: RFB } = await import('/novnc/rfb.js');
-        window.RFB = RFB;
-        window.dispatchEvent(new CustomEvent('novnc-loaded', { detail: { success: true } }));
-      } catch (e) {
-        console.error('noVNC 加载失败:', e);
-        window.dispatchEvent(new CustomEvent('novnc-loaded', { detail: { success: false, error: e.message } }));
-      }
-    `
-
-    const handleLoad = (e: any) => {
-      window.removeEventListener('novnc-loaded', handleLoad)
-      if (e.detail?.success && (window as any).RFB) {
-        resolve((window as any).RFB)
-      } else {
-        reject(new Error(e.detail?.error || 'noVNC 加载失败'))
-      }
-    }
-
-    window.addEventListener('novnc-loaded', handleLoad as EventListener)
-
-    setTimeout(() => {
-      window.removeEventListener('novnc-loaded', handleLoad as EventListener)
-      if (!(window as any).RFB) {
-        reject(new Error('noVNC 加载超时'))
-      }
-    }, 15000)
-
-    document.head.appendChild(script)
-  })
+  // noVNC npm 包有兼容性问题，暂时禁用直接导入
+  // 如果需要 noVNC 支持，请使用 iframe_url 方案
+  throw new Error('noVNC 库暂不可用，请使用 iframe 模式查看远程桌面')
 }
 
 const connectVnc = async () => {
@@ -974,18 +943,19 @@ const handleWebSocketMessage = (data: any) => {
       scrollToBottom()
       break
     case 'sandbox_ready':
-      sandboxInfo.value = { has_sandbox: true, session_id: payload.session_id, vnc_url: payload.vnc_url, vnc_password: payload.vnc_password }
+      // 拼接 iframe_url 和 token
+      const iframeUrlWithToken = payload.iframe_url && chatToken.value
+        ? `${payload.iframe_url}?token=${encodeURIComponent(chatToken.value)}`
+        : payload.iframe_url
+      sandboxInfo.value = { has_sandbox: true, session_id: payload.session_id, vnc_url: payload.vnc_url, vnc_password: payload.vnc_password, iframe_url: iframeUrlWithToken }
       messages.value.push({ id: 'sb-' + Date.now(), type: 'system', content: '🖥️ 沙箱就绪', timestamp: new Date() })
       addLog('success', '沙箱就绪')
       // 记录 VNC 访问链接到日志
       if (payload.vnc_url) {
         addLog('info', `VNC 链接: ${payload.vnc_url}`)
-        // 判断是否支持 noVNC（WebSocket 连接）
-        const isWebSocket = payload.vnc_url.startsWith('wss://') || payload.vnc_url.startsWith('ws://')
-        addLog('info', `noVNC 支持: ${isWebSocket ? '✓ 是 (WebSocket)' : '✗ 否'}`)
-        // 判断是否支持 iframe（需要 HTTP/HTTPS 的 noVNC 客户端页面）
-        const isHttpUrl = payload.vnc_url.startsWith('http://') || payload.vnc_url.startsWith('https://')
-        addLog('info', `iframe 支持: ${isHttpUrl ? '✓ 是 (HTTP页面)' : '✗ 否 (WebSocket需用noVNC库)'}`)
+      }
+      if (iframeUrlWithToken) {
+        addLog('info', `iframe 链接: ${iframeUrlWithToken}`)
       }
       if (payload.session_id) {
         addLog('info', `会话 ID: ${payload.session_id}`)
@@ -2387,13 +2357,44 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                 <div class="flex items-center gap-2">
                   <Tv class="w-4 h-4 text-gray-600" />
                   <span class="text-sm font-medium text-gray-700">远程桌面</span>
+                  <!-- 模式切换按钮（带状态指示） -->
+                  <div class="flex items-center bg-gray-200 rounded-lg p-0.5 text-xs">
+                    <button
+                      @click="vncMode = 'iframe'"
+                      :class="['px-2 py-1 rounded transition-colors flex items-center gap-1', vncMode === 'iframe' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                    >
+                      <span :class="[
+                        'w-1.5 h-1.5 rounded-full',
+                        iframeStatus === 'connected' ? 'bg-green-500' :
+                        iframeStatus === 'loading' ? 'bg-yellow-500 animate-pulse' :
+                        iframeStatus === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                      ]"></span>
+                      iframe
+                    </button>
+                    <button
+                      @click="vncMode = 'novnc'"
+                      :class="['px-2 py-1 rounded transition-colors flex items-center gap-1', vncMode === 'novnc' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                    >
+                      <span :class="[
+                        'w-1.5 h-1.5 rounded-full',
+                        vncStatus === 'connected' ? 'bg-green-500' :
+                        vncStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                        vncStatus === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                      ]"></span>
+                      noVNC
+                    </button>
+                  </div>
+                  <!-- 当前模式状态 -->
                   <span :class="[
                     'text-xs px-2 py-0.5 rounded-full',
-                    vncStatus === 'connected' ? 'bg-green-100 text-green-700' :
-                    vncStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
-                    vncStatus === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                    (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'connected' ? 'bg-green-100 text-green-700' :
+                    (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'connecting' || (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'loading' ? 'bg-yellow-100 text-yellow-700' :
+                    (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                   ]">
-                    {{ vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接' }}
+                    {{ vncMode === 'iframe'
+                      ? (iframeStatus === 'connected' ? '已连接' : iframeStatus === 'loading' ? '加载中' : iframeStatus === 'error' ? '错误' : '未连接')
+                      : (vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接')
+                    }}
                   </span>
                 </div>
                 <div class="flex items-center gap-1">
@@ -2426,35 +2427,66 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
 
               <!-- VNC 显示区域 -->
               <div class="flex-1 bg-black relative overflow-hidden">
-                <!-- VNC 容器 -->
+                <!-- iframe 模式 -->
+                <iframe
+                  v-if="vncMode === 'iframe' && sandboxInfo?.iframe_url"
+                  :src="sandboxInfo.iframe_url"
+                  class="w-full h-full border-0"
+                  allow="clipboard-read; clipboard-write"
+                  @loadstart="iframeStatus = 'loading'; addLog('info', '[iframe] 开始加载...')"
+                  @load="iframeStatus = 'connected'; addLog('success', '[iframe] 加载完成，已连接')"
+                  @error="iframeStatus = 'error'; addLog('error', '[iframe] 加载失败')"
+                ></iframe>
+
+                <!-- iframe 加载中遮罩 -->
                 <div
+                  v-if="vncMode === 'iframe' && sandboxInfo?.iframe_url && iframeStatus === 'loading'"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-black/50"
+                >
+                  <Loader2 class="w-8 h-8 animate-spin mb-2" />
+                  <p class="text-sm">iframe 加载中...</p>
+                </div>
+
+                <!-- noVNC 容器模式 -->
+                <div
+                  v-else-if="vncMode === 'novnc'"
                   ref="vncContainer"
                   class="w-full h-full"
                   :class="{ 'cursor-pointer': vncStatus === 'connected' }"
                 ></div>
 
-                <!-- 未连接状态 -->
+                <!-- iframe 模式但无 URL -->
                 <div
-                  v-if="vncStatus === 'disconnected' && !sandboxInfo?.vnc_url"
+                  v-else-if="vncMode === 'iframe' && !sandboxInfo?.iframe_url"
                   class="absolute inset-0 flex flex-col items-center justify-center text-gray-400"
                 >
                   <Monitor class="w-12 h-12 mb-2 opacity-50" />
                   <p class="text-sm">等待沙箱启动...</p>
-                  <p class="text-xs mt-1">沙箱就绪后将自动连接</p>
+                  <p class="text-xs mt-1">沙箱就绪后将显示桌面</p>
                 </div>
 
-                <!-- 连接中状态 -->
+                <!-- noVNC 未连接状态 -->
                 <div
-                  v-else-if="vncStatus === 'connecting'"
+                  v-if="vncMode === 'novnc' && vncStatus === 'disconnected' && !sandboxInfo?.vnc_url"
+                  class="absolute inset-0 flex flex-col items-center justify-center text-gray-400"
+                >
+                  <Monitor class="w-12 h-12 mb-2 opacity-50" />
+                  <p class="text-sm">等待沙箱启动...</p>
+                  <p class="text-xs mt-1">沙箱就绪后可连接 VNC</p>
+                </div>
+
+                <!-- noVNC 连接中状态 -->
+                <div
+                  v-else-if="vncMode === 'novnc' && vncStatus === 'connecting'"
                   class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-black/50"
                 >
                   <Loader2 class="w-8 h-8 animate-spin mb-2" />
                   <p class="text-sm">正在连接...</p>
                 </div>
 
-                <!-- 错误状态 -->
+                <!-- noVNC 错误状态 -->
                 <div
-                  v-else-if="vncStatus === 'error'"
+                  v-else-if="vncMode === 'novnc' && vncStatus === 'error'"
                   class="absolute inset-0 flex flex-col items-center justify-center text-red-400"
                 >
                   <XCircle class="w-12 h-12 mb-2 opacity-50" />
@@ -2467,9 +2499,9 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                   </button>
                 </div>
 
-                <!-- 未连接但有 URL -->
+                <!-- noVNC 未连接但有 URL -->
                 <div
-                  v-else-if="vncStatus === 'disconnected' && sandboxInfo?.vnc_url"
+                  v-else-if="vncMode === 'novnc' && vncStatus === 'disconnected' && sandboxInfo?.vnc_url"
                   class="absolute inset-0 flex flex-col items-center justify-center text-gray-400"
                 >
                   <Monitor class="w-12 h-12 mb-2 opacity-50" />
@@ -2478,7 +2510,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
                     @click="connectVnc"
                     class="mt-2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
-                    重新连接
+                    连接 VNC
                   </button>
                 </div>
               </div>
@@ -2487,15 +2519,26 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
               <div v-if="sandboxInfo?.has_sandbox" class="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500">
                 <div class="flex items-center justify-between">
                   <span>会话: {{ sandboxInfo.session_id?.substring(0, 8) }}...</span>
-                  <a
-                    v-if="sandboxInfo.vnc_url"
-                    :href="sandboxInfo.vnc_url"
-                    target="_blank"
-                    class="flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                  >
-                    <ExternalLink class="w-3 h-3" />
-                    新窗口
-                  </a>
+                  <div class="flex items-center gap-3">
+                    <a
+                      v-if="sandboxInfo.iframe_url"
+                      :href="sandboxInfo.iframe_url"
+                      target="_blank"
+                      class="flex items-center gap-1 text-green-600 hover:text-green-700"
+                    >
+                      <Monitor class="w-3 h-3" />
+                      桌面
+                    </a>
+                    <a
+                      v-if="sandboxInfo.vnc_url"
+                      :href="sandboxInfo.vnc_url"
+                      target="_blank"
+                      class="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                    >
+                      <ExternalLink class="w-3 h-3" />
+                      VNC
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2755,8 +2798,17 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
 
         <!-- 全屏 VNC 显示区域 -->
         <div class="flex-1 relative overflow-hidden">
-          <!-- VNC 容器 -->
+          <!-- iframe 模式 (优先使用) -->
+          <iframe
+            v-if="sandboxInfo?.iframe_url"
+            :src="sandboxInfo.iframe_url"
+            class="w-full h-full border-0"
+            allow="clipboard-read; clipboard-write"
+          ></iframe>
+
+          <!-- noVNC 容器 (备用) -->
           <div
+            v-else
             ref="vncFullscreenContainer"
             class="w-full h-full"
             :class="{ 'cursor-pointer': vncStatus === 'connected' }"
@@ -2764,7 +2816,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
 
           <!-- 未连接状态 -->
           <div
-            v-if="vncStatus === 'disconnected'"
+            v-if="!sandboxInfo?.iframe_url && vncStatus === 'disconnected'"
             class="absolute inset-0 flex flex-col items-center justify-center text-gray-500"
           >
             <Monitor class="w-16 h-16 mb-3 opacity-50" />
@@ -2780,7 +2832,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
 
           <!-- 连接中状态 -->
           <div
-            v-else-if="vncStatus === 'connecting'"
+            v-else-if="!sandboxInfo?.iframe_url && vncStatus === 'connecting'"
             class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-black/50"
           >
             <Loader2 class="w-12 h-12 animate-spin mb-3" />
@@ -2789,7 +2841,7 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
 
           <!-- 错误状态 -->
           <div
-            v-else-if="vncStatus === 'error'"
+            v-else-if="!sandboxInfo?.iframe_url && vncStatus === 'error'"
             class="absolute inset-0 flex flex-col items-center justify-center text-red-500"
           >
             <XCircle class="w-16 h-16 mb-3 opacity-50" />
