@@ -1041,6 +1041,38 @@ const handleWebSocketMessage = (data: any) => {
       })
       addLog('info', `🔧 调用工具: ${toolInfo.name} - ${toolDescription}`)
       scrollToBottom()
+
+      // 处理VNC连接 - 当tool_call携带vnc信息时自动连接
+      if (payload.vnc && payload.vnc_wait_id) {
+        const vncInfo = payload.vnc
+        const vncWaitId = payload.vnc_wait_id
+        addLog('info', `📺 VNC连接请求: ${vncInfo.app} (display:${vncInfo.display})`)
+
+        // 构建VNC WebSocket URL
+        const sessionId = sandboxInfo.value?.session_id || ''
+        const vncWsUrl = `wss://sandbox.toproject.cloud/endpoint/websockify?session=${sessionId}:${vncInfo.app}`
+
+        // 切换到VNC标签并使用iframe模式连接
+        activeSideTab.value = 'vnc'
+
+        // 更新sandboxInfo以触发iframe连接
+        if (sandboxInfo.value) {
+          const iframeVncUrl = `https://sandbox.toproject.cloud/endpoint/vnc/?session=${sessionId}:${vncInfo.app}&token=${encodeURIComponent(chatToken.value || '')}`
+          sandboxInfo.value.iframe_url = iframeVncUrl
+          iframeStatus.value = 'loading'
+
+          // 发送vnc_connected通知后端（iframe模式下立即发送）
+          setTimeout(() => {
+            if (ws.value?.readyState === WebSocket.OPEN) {
+              ws.value.send(JSON.stringify({
+                type: 'vnc_connected',
+                payload: { vnc_wait_id: vncWaitId }
+              }))
+              addLog('success', `📺 VNC已连接，通知后端执行命令`)
+            }
+          }, 1000)
+        }
+      }
       break
     case 'tool_result':
       const resultTool = payload.tool || payload.data?.tool || data.tool
