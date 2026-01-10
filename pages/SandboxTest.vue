@@ -138,8 +138,18 @@ const vncFullscreenContainer = ref<HTMLDivElement | null>(null)
 const vncRfb = ref<any>(null)
 const vncStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
 const vncFullscreen = ref(false)
+const vncCleanMode = ref(true) // 全屏纯净模式（隐藏顶部和底部控制栏）- 默认开启，避免与iframe内部工具栏重叠
 const vncMode = ref<'iframe' | 'novnc'>('iframe') // VNC 显示模式
 const iframeStatus = ref<'disconnected' | 'loading' | 'connected' | 'error'>('disconnected') // iframe 状态
+
+// 全屏模式下的iframe URL（添加hideToolbar参数隐藏iframe内部工具栏）
+const fullscreenIframeUrl = computed(() => {
+  if (!sandboxInfo.value?.iframe_url) return ''
+  const url = new URL(sandboxInfo.value.iframe_url)
+  url.searchParams.set('hideToolbar', '1')
+  url.searchParams.set('fullscreen', '1')
+  return url.toString()
+})
 const todoList = ref<TodoList | null>(null)
 const todoStats = ref({ total: 0, completed: 0, in_progress: 0, failed: 0, pending: 0 })
 const updateTodoStats = () => { if (!todoList.value) return; const items = todoList.value.items; todoStats.value = { total: items.length, completed: items.filter(i => i.status === 'completed').length, in_progress: items.filter(i => i.status === 'in_progress').length, failed: items.filter(i => i.status === 'failed').length, pending: items.filter(i => i.status === 'pending').length } }
@@ -983,6 +993,12 @@ const handleWebSocketMessage = (data: any) => {
       if (executionPlan.value) executionPlan.value.status = planSuccess ? 'completed' : 'failed'
       // 只有真正失败时才显示失败消息，成功（包括有警告的成功）都显示完成
       messages.value.push({ id: 'pc-' + Date.now(), type: 'system', content: executionPlan.value?.status === 'completed' ? '✅ 计划完成' : '❌ 计划失败', timestamp: new Date() })
+      
+      // VNC连接管理：执行计划完成后，记录日志提示用户可以关闭VNC
+      // 不自动关闭，让用户可以查看执行结果
+      if (sandboxInfo.value?.iframe_url || vncStatus.value === 'connected') {
+        addLog('info', '📺 执行计划已完成，VNC连接保持中。如需关闭，请手动断开或开始新任务时自动重置。')
+      }
       scrollToBottom()
       break
     case 'plan_revision':
@@ -1044,65 +1060,89 @@ const handleWebSocketMessage = (data: any) => {
 
       // 处理VNC连接 - 当tool_call携带vnc信息时自动连接
       // 根据 vnc-iframe-url-spec.md 规范，使用 vnc.iframeURL 字段
+      // 优化：VNC连接保持策略 - 如果已连接则复用，不重复拉起
       if (payload.vnc) {
         const vncInfo = payload.vnc
         const vncWaitId = payload.vnc_wait_id
         
-        addLog('info', `📺 VNC连接请求: ${vncInfo.app || 'unknown'} (display:${vncInfo.display || 1})`)
+        // 检查VNC是否已经连接（iframe模式或noVNC模式）
+        const isVncAlreadyConnected = (
+          (vncMode.value === 'iframe' && iframeStatus.value === 'connected' && sandboxInfo.value?.iframe_url) ||
+          (vncMode.value === 'novnc' && vncStatus.value === 'connected')
+        )
         
-        // 记录VNC详细信息到日志
-        if (vncInfo.sandbox_session_id) {
-          addLog('info', `📺 沙箱会话: ${vncInfo.sandbox_session_id}`)
-        }
-        if (vncInfo.iframeURL) {
-          addLog('info', `📺 iframe URL: ${vncInfo.iframeURL}`)
-        }
-
-        // 切换到VNC标签
-        activeSideTab.value = 'vnc'
-
-        // 使用后端返回的 iframeURL（根据规范）
-        if (vncInfo.iframeURL) {
-          // 更新sandboxInfo以触发iframe连接
-          if (!sandboxInfo.value) {
-            sandboxInfo.value = {
-              has_sandbox: true,
-              session_id: vncInfo.sandbox_session_id
+        if (isVncAlreadyConnected) {
+          // VNC已连接，跳过重复连接，只记录日志
+          addLog('info', `📺 VNC已连接，复用现有连接 (app: ${vncInfo.app || 'unknown'})`)
+          
+          // 如果有 vnc_wait_id，直接通知后端VNC已就绪
+          if (vncWaitId) {
+            if (ws.value?.readyState === WebSocket.OPEN) {
+              ws.value.send(JSON.stringify({
+                type: 'vnc_connected',
+                payload: { vnc_wait_id: vncWaitId }
+              }))
+              addLog('success', `📺 VNC已就绪，通知后端继续执行`)
             }
           }
-          sandboxInfo.value.iframe_url = vncInfo.iframeURL
-          iframeStatus.value = 'loading'
-          addLog('success', `📺 VNC iframe 已设置`)
-
-          // 如果有 vnc_wait_id，发送 vnc_connected 通知后端
-          if (vncWaitId) {
-            setTimeout(() => {
-              if (ws.value?.readyState === WebSocket.OPEN) {
-                ws.value.send(JSON.stringify({
-                  type: 'vnc_connected',
-                  payload: { vnc_wait_id: vncWaitId }
-                }))
-                addLog('success', `📺 VNC已连接，通知后端执行命令`)
-              }
-            }, 1000)
-          }
         } else {
-          // 兼容旧格式：如果没有 iframeURL，尝试手动构建
-          const sessionId = vncInfo.sandbox_session_id || sandboxInfo.value?.session_id || ''
-          if (sessionId && vncInfo.app) {
-            const fallbackUrl = `https://vnc.toproject.cloud/vnc/view/${sessionId}?app=${vncInfo.app}&display=${vncInfo.display || 1}`
-            addLog('warn', `📺 使用备用URL格式: ${fallbackUrl}`)
-            
+          // VNC未连接，执行连接逻辑
+          addLog('info', `📺 VNC连接请求: ${vncInfo.app || 'unknown'} (display:${vncInfo.display || 1})`)
+          
+          // 记录VNC详细信息到日志
+          if (vncInfo.sandbox_session_id) {
+            addLog('info', `📺 沙箱会话: ${vncInfo.sandbox_session_id}`)
+          }
+          if (vncInfo.iframeURL) {
+            addLog('info', `📺 iframe URL: ${vncInfo.iframeURL}`)
+          }
+
+          // 切换到VNC标签
+          activeSideTab.value = 'vnc'
+
+          // 使用后端返回的 iframeURL（根据规范）
+          if (vncInfo.iframeURL) {
+            // 更新sandboxInfo以触发iframe连接
             if (!sandboxInfo.value) {
               sandboxInfo.value = {
                 has_sandbox: true,
-                session_id: sessionId
+                session_id: vncInfo.sandbox_session_id
               }
             }
-            sandboxInfo.value.iframe_url = fallbackUrl
+            sandboxInfo.value.iframe_url = vncInfo.iframeURL
             iframeStatus.value = 'loading'
+            addLog('success', `📺 VNC iframe 已设置`)
+
+            // 如果有 vnc_wait_id，发送 vnc_connected 通知后端
+            if (vncWaitId) {
+              setTimeout(() => {
+                if (ws.value?.readyState === WebSocket.OPEN) {
+                  ws.value.send(JSON.stringify({
+                    type: 'vnc_connected',
+                    payload: { vnc_wait_id: vncWaitId }
+                  }))
+                  addLog('success', `📺 VNC已连接，通知后端执行命令`)
+                }
+              }, 1000)
+            }
           } else {
-            addLog('warn', `📺 VNC信息不完整，无法连接`)
+            // 兼容旧格式：如果没有 iframeURL，尝试手动构建
+            const sessionId = vncInfo.sandbox_session_id || sandboxInfo.value?.session_id || ''
+            if (sessionId && vncInfo.app) {
+              const fallbackUrl = `https://vnc.toproject.cloud/vnc/view/${sessionId}?app=${vncInfo.app}&display=${vncInfo.display || 1}`
+              addLog('warn', `📺 使用备用URL格式: ${fallbackUrl}`)
+              
+              if (!sandboxInfo.value) {
+                sandboxInfo.value = {
+                  has_sandbox: true,
+                  session_id: sessionId
+                }
+              }
+              sandboxInfo.value.iframe_url = fallbackUrl
+              iframeStatus.value = 'loading'
+            } else {
+              addLog('warn', `📺 VNC信息不完整，无法连接`)
+            }
           }
         }
       }
@@ -2819,18 +2859,24 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
     <!-- VNC 全屏覆盖层 -->
     <Teleport to="body">
       <div v-if="vncFullscreen" class="fixed inset-0 z-50 bg-black flex flex-col">
-        <!-- 全屏头部 -->
-        <div class="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-700">
+        <!-- 全屏头部 - 纯净模式下隐藏 -->
+        <div
+          v-show="!vncCleanMode"
+          class="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-700 flex-shrink-0"
+        >
           <div class="flex items-center gap-3">
             <Tv class="w-5 h-5 text-gray-400" />
-            <span class="text-sm font-medium text-gray-200">远程桌面</span>
+            <span class="text-base font-medium text-gray-200">远程桌面</span>
             <span :class="[
-              'text-xs px-2 py-0.5 rounded-full',
-              vncStatus === 'connected' ? 'bg-green-900 text-green-300' :
-              vncStatus === 'connecting' ? 'bg-yellow-900 text-yellow-300' :
-              vncStatus === 'error' ? 'bg-red-900 text-red-300' : 'bg-gray-700 text-gray-400'
+              'text-sm px-3 py-1 rounded-full',
+              (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'connected' ? 'bg-green-900 text-green-300' :
+              (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'connecting' || (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'loading' ? 'bg-yellow-900 text-yellow-300' :
+              (vncMode === 'iframe' ? iframeStatus : vncStatus) === 'error' ? 'bg-red-900 text-red-300' : 'bg-gray-700 text-gray-400'
             ]">
-              {{ vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接' }}
+              {{ vncMode === 'iframe'
+                ? (iframeStatus === 'connected' ? '已连接' : iframeStatus === 'loading' ? '加载中' : iframeStatus === 'error' ? '错误' : '未连接')
+                : (vncStatus === 'connected' ? '已连接' : vncStatus === 'connecting' ? '连接中' : vncStatus === 'error' ? '错误' : '未连接')
+              }}
             </span>
           </div>
           <div class="flex items-center gap-2">
@@ -2851,6 +2897,14 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
             >
               <XCircle class="w-5 h-5" />
             </button>
+            <!-- 纯净模式切换按钮 -->
+            <button
+              @click="vncCleanMode = !vncCleanMode"
+              :class="['p-2 rounded-lg', vncCleanMode ? 'text-green-400 bg-green-900/30' : 'text-gray-400 hover:bg-gray-800']"
+              title="纯净模式（隐藏控制栏）"
+            >
+              <Eye class="w-5 h-5" />
+            </button>
             <button
               @click="toggleVncFullscreen"
               class="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"
@@ -2862,11 +2916,11 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
         </div>
 
         <!-- 全屏 VNC 显示区域 -->
-        <div class="flex-1 relative overflow-hidden">
-          <!-- iframe 模式 (优先使用) -->
+        <div class="flex-1 relative overflow-hidden min-h-0">
+          <!-- iframe 模式 (优先使用) - 全屏时使用带hideToolbar参数的URL -->
           <iframe
             v-if="sandboxInfo?.iframe_url"
-            :src="sandboxInfo.iframe_url"
+            :src="fullscreenIframeUrl"
             class="w-full h-full border-0"
             allow="clipboard-read; clipboard-write"
           ></iframe>
@@ -2917,6 +2971,58 @@ onUnmounted(() => { if (heartbeatInterval) clearInterval(heartbeatInterval); dis
             >
               重试
             </button>
+          </div>
+
+          <!-- 纯净模式下的悬浮控制按钮 -->
+          <div
+            v-if="vncCleanMode"
+            class="absolute top-4 right-4 flex items-center gap-2 opacity-30 hover:opacity-100 transition-opacity"
+          >
+            <button
+              @click="vncCleanMode = false"
+              class="p-2 bg-gray-900/80 text-gray-300 hover:bg-gray-800 rounded-lg backdrop-blur-sm"
+              title="显示控制栏"
+            >
+              <EyeOff class="w-5 h-5" />
+            </button>
+            <button
+              @click="toggleVncFullscreen"
+              class="p-2 bg-gray-900/80 text-gray-300 hover:bg-gray-800 rounded-lg backdrop-blur-sm"
+              title="退出全屏"
+            >
+              <Minimize2 class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- 全屏底部信息栏 - 纯净模式下隐藏 -->
+        <div
+          v-if="sandboxInfo?.has_sandbox && !vncCleanMode"
+          class="flex items-center justify-between px-6 py-2 bg-gray-900 border-t border-gray-700 flex-shrink-0"
+        >
+          <div class="flex items-center gap-4 text-sm text-gray-400">
+            <span>会话: {{ sandboxInfo.session_id?.substring(0, 12) }}...</span>
+            <span v-if="sandboxInfo.vnc_password">密码: {{ sandboxInfo.vnc_password }}</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <a
+              v-if="sandboxInfo.iframe_url"
+              :href="sandboxInfo.iframe_url"
+              target="_blank"
+              class="flex items-center gap-1 text-sm text-green-400 hover:text-green-300"
+            >
+              <Monitor class="w-4 h-4" />
+              新窗口打开
+            </a>
+            <a
+              v-if="sandboxInfo.vnc_url"
+              :href="sandboxInfo.vnc_url"
+              target="_blank"
+              class="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
+            >
+              <ExternalLink class="w-4 h-4" />
+              VNC 链接
+            </a>
           </div>
         </div>
       </div>
