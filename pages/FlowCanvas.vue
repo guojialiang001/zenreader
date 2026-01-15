@@ -44,6 +44,14 @@
         >
           <Hand class="w-4 h-4" />
         </button>
+        <!-- 插入文字按钮 -->
+        <button
+          @click="insertTextNode"
+          :class="toolbarBtnClass"
+          title="插入文字"
+        >
+          <MessageSquare class="w-4 h-4" />
+        </button>
         <span class="w-px h-6 bg-slate-200 mx-2"></span>
 
         <!-- 撤销/重做 -->
@@ -77,19 +85,62 @@
         </button>
         <span class="w-px h-6 bg-slate-200 mx-2"></span>
 
-        <!-- 导出 -->
-        <button @click="exportPNG" :class="toolbarBtnClass" title="导出PNG">
-          <ImageIcon class="w-4 h-4" />
-        </button>
-        <button @click="exportHTML" :class="toolbarBtnClass" title="导出HTML">
-          <Code class="w-4 h-4" />
-        </button>
-        <button @click="exportJSON" :class="toolbarBtnClass" title="导出JSON">
-          <FileJson class="w-4 h-4" />
-        </button>
-        <button @click="importJSON" :class="toolbarBtnClass" title="导入JSON">
-          <Upload class="w-4 h-4" />
-        </button>
+        <!-- 导出下拉菜单 -->
+        <div class="relative">
+          <button
+            @click="showExportMenu = !showExportMenu"
+            :class="toolbarBtnClass"
+            title="导出"
+          >
+            <Download class="w-4 h-4" />
+          </button>
+
+          <!-- 下拉菜单 -->
+          <div
+            v-if="showExportMenu"
+            class="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50 min-w-40"
+            @click="showExportMenu = false"
+          >
+            <button @click="exportPNG" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <ImageIcon class="w-4 h-4" /> 导出 PNG
+            </button>
+            <button @click="exportHTML" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <Code class="w-4 h-4" /> 导出 HTML
+            </button>
+            <button @click="exportJSON" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <FileJson class="w-4 h-4" /> 导出 JSON
+            </button>
+            <button @click="exportMermaid" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <GitBranch class="w-4 h-4" /> 导出 Mermaid
+            </button>
+          </div>
+        </div>
+
+        <!-- 导入下拉菜单 -->
+        <div class="relative">
+          <button
+            @click="showImportMenu = !showImportMenu"
+            :class="toolbarBtnClass"
+            title="导入"
+          >
+            <Upload class="w-4 h-4" />
+          </button>
+
+          <!-- 下拉菜单 -->
+          <div
+            v-if="showImportMenu"
+            class="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50 min-w-40"
+            @click="showImportMenu = false"
+          >
+            <button @click="importJSON" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <FileJson class="w-4 h-4" /> 导入 JSON
+            </button>
+            <button @click="importMermaid" class="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center gap-2 transition-colors">
+              <GitBranch class="w-4 h-4" /> 导入 Mermaid
+            </button>
+          </div>
+        </div>
+
         <span class="w-px h-6 bg-slate-200 mx-2"></span>
 
         <!-- 清空 -->
@@ -356,6 +407,23 @@
                   stroke-width="1"
                   stroke-linejoin="round"
                 />
+                <!-- 连接线标签 -->
+                <text
+                  v-if="conn.label"
+                  :x="getConnectionLabelPosition(conn).x"
+                  :y="getConnectionLabelPosition(conn).y"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  :fill="selectedConnection?.id === conn.id ? '#3b82f6' : (conn.labelColor || '#000000')"
+                  :font-size="conn.labelFontSize || 14"
+                  :font-weight="conn.labelFontWeight || 'normal'"
+                  font-family="system-ui, sans-serif"
+                  class="pointer-events-auto select-none"
+                  :style="{ cursor: isDraggingLabel && draggingLabelConn?.id === conn.id ? 'grabbing' : 'grab' }"
+                  @mousedown.stop="startLabelDrag($event, conn)"
+                >
+                  {{ conn.label }}
+                </text>
                 <!-- 折线控制点 -->
                 <g v-if="getBendControlPoint(conn) && (selectedConnection?.id === conn.id)">
                   <circle
@@ -511,6 +579,71 @@
 
           <template v-else-if="selectedConnection">
             <div class="space-y-4">
+              <!-- 连接线标签 -->
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">标签文字</label>
+                <input
+                  type="text"
+                  v-model="selectedConnectionProps.label"
+                  @change="updateSelectedConnection"
+                  class="propInput w-full"
+                  placeholder="如：是、否、条件等"
+                />
+                <p class="text-xs text-slate-400 mt-1">用于判断分支的条件说明</p>
+              </div>
+
+              <!-- 标签字体设置 -->
+              <div v-if="selectedConnectionProps.label" class="space-y-3 p-3 bg-slate-50 rounded-lg">
+                <p class="text-xs font-medium text-slate-600">标签样式</p>
+
+                <!-- 标签字体大小 -->
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">字体大小 ({{ selectedConnectionProps.labelFontSize }}px)</label>
+                  <input
+                    type="range"
+                    v-model.number="selectedConnectionProps.labelFontSize"
+                    min="10"
+                    max="24"
+                    @change="updateSelectedConnection"
+                    class="w-full"
+                  />
+                </div>
+
+                <!-- 标签字体粗细 -->
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">字体粗细</label>
+                  <select
+                    v-model="selectedConnectionProps.labelFontWeight"
+                    @change="updateSelectedConnection"
+                    class="propInput w-full"
+                  >
+                    <option value="normal">正常</option>
+                    <option value="500">中等</option>
+                    <option value="600">半粗</option>
+                    <option value="bold">粗体</option>
+                  </select>
+                </div>
+
+                <!-- 标签颜色 -->
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">文字颜色</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      v-model="selectedConnectionProps.labelColor"
+                      @change="updateSelectedConnection"
+                      class="w-8 h-8 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      v-model="selectedConnectionProps.labelColor"
+                      @change="updateSelectedConnection"
+                      class="propInput flex-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <!-- 线条颜色 -->
               <div>
                 <label class="text-xs text-slate-500 mb-1 block">线条颜色</label>
@@ -611,6 +744,7 @@
 
     <!-- 隐藏的文件输入 -->
     <input type="file" ref="fileInput" @change="handleFileImport" accept=".json" class="hidden" />
+    <input type="file" ref="mermaidFileInput" @change="handleMermaidImport" accept=".mmd,.mermaid,.txt" class="hidden" />
 
     <!-- 新建流程图弹窗 -->
     <div
@@ -716,7 +850,7 @@ import {
   Copy, Clipboard, CopyPlus, ArrowUpToLine, ArrowDownToLine,
   AlignLeft, AlignRight, AlignCenterHorizontal,
   AlignStartVertical, AlignEndVertical, AlignCenterVertical,
-  Hand, FolderOpen, Plus
+  Hand, FolderOpen, Plus, Download
 } from 'lucide-vue-next'
 
 // ==================== 类型定义 ====================
@@ -740,7 +874,7 @@ interface Node {
 interface Connection {
   id: string
   fromNode: string
-  fromAnchor: string
+  fromAnchor: string  // 保留用于兼容，但可以是 'top', 'right', 'bottom', 'left' 或 'custom'
   toNode: string
   toAnchor: string
   color: string
@@ -749,6 +883,17 @@ interface Connection {
   lineType: string
   // 折线控制点偏移（相对于自动计算的中点）
   bendOffset?: { x: number; y: number }
+  // 连接线标签（用于判断分支等）
+  label?: string
+  // 标签位置偏移（相对于连接线中点）
+  labelOffset?: { x: number; y: number }
+  // 标签字体样式
+  labelFontSize?: number
+  labelFontWeight?: string
+  labelColor?: string
+  // 自定义锚点位置（相对于节点左上角的偏移，0-1 之间的比例）
+  fromAnchorOffset?: { x: number; y: number }
+  toAnchorOffset?: { x: number; y: number }
 }
 
 interface Anchor {
@@ -822,6 +967,12 @@ const showNewFileDialog = ref(!initialData.currentFile && initialData.files.leng
 const newFileName = ref('')
 const newFileNameInput = ref<HTMLInputElement | null>(null)
 
+// 导入菜单状态
+const showImportMenu = ref(false)
+
+// 导出菜单状态
+const showExportMenu = ref(false)
+
 // 确认弹窗状态
 const showConfirmDialog = ref(false)
 const confirmDialogConfig = ref({
@@ -890,6 +1041,7 @@ const canvasContainer = ref<HTMLElement | null>(null)
 const canvasWrapper = ref<HTMLElement | null>(null)
 const canvasContent = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const mermaidFileInput = ref<HTMLInputElement | null>(null)
 const textEditor = ref<HTMLTextAreaElement[] | null>(null)
 const miniMapRef = ref<HTMLElement | null>(null)
 
@@ -1212,6 +1364,11 @@ const isDraggingBend = ref(false)
 const draggingConnection = ref<Connection | null>(null)
 const bendDragStart = reactive({ x: 0, y: 0 })
 
+// 拖动连接线标签
+const isDraggingLabel = ref(false)
+const draggingLabelConn = ref<Connection | null>(null)
+const labelDragStart = reactive({ x: 0, y: 0 })
+
 const editingNode = ref<Node | null>(null)
 const editingText = ref('')
 
@@ -1392,6 +1549,40 @@ const togglePanMode = () => {
   isPanMode.value = !isPanMode.value
 }
 
+// 插入文字节点
+const insertTextNode = () => {
+  // 在画布中心位置创建文字节点
+  const viewportCenterX = (canvasWrapper.value?.clientWidth || 800) / 2 / zoom.value
+  const viewportCenterY = (canvasWrapper.value?.clientHeight || 600) / 2 / zoom.value
+
+  const newNode: Node = {
+    id: generateId(),
+    type: 'rectangle',
+    x: snapValue(viewportCenterX - panOffset.x - 60),
+    y: snapValue(viewportCenterY - panOffset.y - 20),
+    width: 120,
+    height: 40,
+    text: '双击编辑文字',
+    fill: 'transparent',
+    stroke: 'transparent',
+    strokeWidth: 0,
+    textColor: '#000000',
+    borderRadius: 0,
+    zIndex: nodes.value.length,
+    fontSize: 14
+  }
+
+  nodes.value.push(newNode)
+  saveHistory()
+  selectedNodes.value = [newNode.id]
+
+  // 自动进入编辑模式
+  nextTick(() => {
+    startEditingText(newNode)
+  })
+}
+
+
 const selectedNodeProps = reactive({
   x: 0, y: 0, width: 0, height: 0,
   fill: '#ffffff', stroke: '#000000', strokeWidth: 2,
@@ -1401,7 +1592,11 @@ const selectedNodeProps = reactive({
 const selectedConnectionProps = reactive({
   color: '#000000',
   dashed: false,
-  arrow: 'end' as 'none' | 'start' | 'end' | 'both'
+  arrow: 'end' as 'none' | 'start' | 'end' | 'both',
+  label: '',
+  labelFontSize: 14,
+  labelFontWeight: 'normal',
+  labelColor: '#000000'
 })
 
 const tempConnectionPath = computed(() => {
@@ -1440,7 +1635,11 @@ watch(selectedConnection, (conn) => {
     Object.assign(selectedConnectionProps, {
       color: conn.color,
       dashed: conn.dashed,
-      arrow: conn.arrow
+      arrow: conn.arrow,
+      label: conn.label || '',
+      labelFontSize: conn.labelFontSize || 14,
+      labelFontWeight: conn.labelFontWeight || 'normal',
+      labelColor: conn.labelColor || '#000000'
     })
   }
 })
@@ -1609,13 +1808,118 @@ const getAnchorStyle = (anchor: Anchor) => {
   }
 }
 
-const getAnchorPosition = (node: Node, position: string) => {
+const getAnchorPosition = (node: Node, position: string, customOffset?: { x: number; y: number }) => {
+  // 如果有自定义偏移，使用自定义位置
+  if (customOffset) {
+    return {
+      x: node.x + node.width * customOffset.x,
+      y: node.y + node.height * customOffset.y
+    }
+  }
+
+  // 否则使用固定锚点位置
   switch (position) {
     case 'top': return { x: node.x + node.width / 2, y: node.y }
     case 'right': return { x: node.x + node.width, y: node.y + node.height / 2 }
     case 'bottom': return { x: node.x + node.width / 2, y: node.y + node.height }
     case 'left': return { x: node.x, y: node.y + node.height / 2 }
     default: return { x: node.x, y: node.y }
+  }
+}
+
+// 计算点到节点边缘的最近交点
+const getNearestEdgePoint = (node: Node, point: { x: number; y: number }): { position: string; offset: { x: number; y: number } } => {
+  const centerX = node.x + node.width / 2
+  const centerY = node.y + node.height / 2
+
+  // 计算从节点中心到目标点的向量
+  const dx = point.x - centerX
+  const dy = point.y - centerY
+
+  // 计算与四条边的交点
+  const edges = []
+
+  // 上边
+  if (dy < 0) {
+    const t = (node.y - centerY) / dy
+    const x = centerX + dx * t
+    if (x >= node.x && x <= node.x + node.width) {
+      edges.push({
+        position: 'top',
+        x: x,
+        y: node.y,
+        distance: Math.abs(point.y - node.y)
+      })
+    }
+  }
+
+  // 下边
+  if (dy > 0) {
+    const t = (node.y + node.height - centerY) / dy
+    const x = centerX + dx * t
+    if (x >= node.x && x <= node.x + node.width) {
+      edges.push({
+        position: 'bottom',
+        x: x,
+        y: node.y + node.height,
+        distance: Math.abs(point.y - (node.y + node.height))
+      })
+    }
+  }
+
+  // 左边
+  if (dx < 0) {
+    const t = (node.x - centerX) / dx
+    const y = centerY + dy * t
+    if (y >= node.y && y <= node.y + node.height) {
+      edges.push({
+        position: 'left',
+        x: node.x,
+        y: y,
+        distance: Math.abs(point.x - node.x)
+      })
+    }
+  }
+
+  // 右边
+  if (dx > 0) {
+    const t = (node.x + node.width - centerX) / dx
+    const y = centerY + dy * t
+    if (y >= node.y && y <= node.y + node.height) {
+      edges.push({
+        position: 'right',
+        x: node.x + node.width,
+        y: y,
+        distance: Math.abs(point.x - (node.x + node.width))
+      })
+    }
+  }
+
+  // 找到最近的边
+  if (edges.length === 0) {
+    // 如果没有交点（点在节点内部），返回最近的固定锚点
+    const distances = [
+      { position: 'top', distance: Math.abs(point.y - node.y) },
+      { position: 'bottom', distance: Math.abs(point.y - (node.y + node.height)) },
+      { position: 'left', distance: Math.abs(point.x - node.x) },
+      { position: 'right', distance: Math.abs(point.x - (node.x + node.width)) }
+    ]
+    const nearest = distances.sort((a, b) => a.distance - b.distance)[0]
+    return {
+      position: nearest.position,
+      offset: { x: 0.5, y: 0.5 }
+    }
+  }
+
+  const nearest = edges.sort((a, b) => a.distance - b.distance)[0]
+
+  // 计算相对偏移（0-1 之间）
+  const offsetX = (nearest.x - node.x) / node.width
+  const offsetY = (nearest.y - node.y) / node.height
+
+  return {
+    position: nearest.position,
+    offset: { x: offsetX, y: offsetY }
   }
 }
 
@@ -1651,8 +1955,8 @@ const getConnectionPath = (conn: Connection) => {
   const toNode = nodes.value.find(n => n.id === conn.toNode)
   if (!fromNode || !toNode) return ''
 
-  const start = getAnchorPosition(fromNode, conn.fromAnchor)
-  const end = getAnchorPosition(toNode, conn.toAnchor)
+  const start = getAnchorPosition(fromNode, conn.fromAnchor, conn.fromAnchorOffset)
+  const end = getAnchorPosition(toNode, conn.toAnchor, conn.toAnchorOffset)
 
   if (conn.lineType === 'straight') {
     return `M${start.x},${start.y} L${end.x},${end.y}`
@@ -1694,8 +1998,8 @@ const getBendControlPoint = (conn: Connection) => {
   const toNode = nodes.value.find(n => n.id === conn.toNode)
   if (!fromNode || !toNode || conn.lineType !== 'orthogonal') return null
 
-  const start = getAnchorPosition(fromNode, conn.fromAnchor)
-  const end = getAnchorPosition(toNode, conn.toAnchor)
+  const start = getAnchorPosition(fromNode, conn.fromAnchor, conn.fromAnchorOffset)
+  const end = getAnchorPosition(toNode, conn.toAnchor, conn.toAnchorOffset)
   const offset = conn.bendOffset || { x: 0, y: 0 }
 
   const isStartHorizontal = conn.fromAnchor === 'left' || conn.fromAnchor === 'right'
@@ -1720,8 +2024,8 @@ const getArrowPoints = (conn: Connection) => {
   const toNode = nodes.value.find(n => n.id === conn.toNode)
   if (!fromNode || !toNode) return ''
 
-  const start = getAnchorPosition(fromNode, conn.fromAnchor)
-  const end = getAnchorPosition(toNode, conn.toAnchor)
+  const start = getAnchorPosition(fromNode, conn.fromAnchor, conn.fromAnchorOffset)
+  const end = getAnchorPosition(toNode, conn.toAnchor, conn.toAnchorOffset)
   const size = 12
 
   // 根据连接线类型和锚点计算箭头方向
@@ -1776,6 +2080,66 @@ const startBendDrag = (e: MouseEvent, conn: Connection) => {
   const pos = getMousePosition(e)
   bendDragStart.x = pos.x
   bendDragStart.y = pos.y
+}
+
+// ==================== 连接线标签相关 ====================
+// 计算连接线中点位置
+const getConnectionMidPoint = (conn: Connection) => {
+  const fromNode = nodes.value.find(n => n.id === conn.fromNode)
+  const toNode = nodes.value.find(n => n.id === conn.toNode)
+  if (!fromNode || !toNode) return { x: 0, y: 0 }
+
+  const start = getAnchorPosition(fromNode, conn.fromAnchor, conn.fromAnchorOffset)
+  const end = getAnchorPosition(toNode, conn.toAnchor, conn.toAnchorOffset)
+
+  // 根据连接线类型计算中点
+  if (conn.lineType === 'straight') {
+    return {
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2
+    }
+  } else if (conn.lineType === 'orthogonal') {
+    // 折线：使用中间转折点作为标签位置
+    const offset = conn.bendOffset || { x: 0, y: 0 }
+    const isStartH = conn.fromAnchor === 'left' || conn.fromAnchor === 'right'
+    const isEndH = conn.toAnchor === 'left' || conn.toAnchor === 'right'
+
+    if (isStartH && isEndH) {
+      const midX = (start.x + end.x) / 2 + offset.x
+      return { x: midX, y: (start.y + end.y) / 2 }
+    } else if (!isStartH && !isEndH) {
+      const midY = (start.y + end.y) / 2 + offset.y
+      return { x: (start.x + end.x) / 2, y: midY }
+    } else {
+      return { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+    }
+  } else {
+    // 曲线：使用起点和终点的中点
+    return {
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2 - 30 // 曲线标签稍微向上偏移
+    }
+  }
+}
+
+// 获取标签位置（包含用户拖动的偏移）
+const getConnectionLabelPosition = (conn: Connection) => {
+  const midPoint = getConnectionMidPoint(conn)
+  const offset = conn.labelOffset || { x: 0, y: 0 }
+  return {
+    x: midPoint.x + offset.x,
+    y: midPoint.y + offset.y
+  }
+}
+
+// 开始拖动标签
+const startLabelDrag = (e: MouseEvent, conn: Connection) => {
+  e.stopPropagation()
+  isDraggingLabel.value = true
+  draggingLabelConn.value = conn
+  const pos = getMousePosition(e)
+  labelDragStart.x = pos.x
+  labelDragStart.y = pos.y
 }
 
 // ==================== 拖放形状 ====================
@@ -1941,6 +2305,23 @@ const onCanvasMouseMove = (e: MouseEvent) => {
     return
   }
 
+  if (isDraggingLabel.value && draggingLabelConn.value) {
+    const pos = getMousePosition(e)
+    const conn = draggingLabelConn.value
+
+    if (!conn.labelOffset) {
+      conn.labelOffset = { x: 0, y: 0 }
+    }
+
+    // 更新标签偏移量
+    conn.labelOffset.x += pos.x - labelDragStart.x
+    conn.labelOffset.y += pos.y - labelDragStart.y
+
+    labelDragStart.x = pos.x
+    labelDragStart.y = pos.y
+    return
+  }
+
   if (isDrawingConnection.value) {
     const pos = getMousePosition(e)
     connectionEnd.x = pos.x
@@ -1949,38 +2330,57 @@ const onCanvasMouseMove = (e: MouseEvent) => {
 }
 
 const onCanvasMouseUp = (e: MouseEvent) => {
-  if (isDragging.value || isResizing.value || isDraggingBend.value) {
+  if (isDragging.value || isResizing.value || isDraggingBend.value || isDraggingLabel.value) {
     saveHistory()
   }
 
   if (isDrawingConnection.value && connectionStart.value) {
-    // 查找目标锚点
+    // 查找目标节点和最近的边缘点
     const pos = getMousePosition(e)
     let targetNode: Node | null = null
-    let targetAnchor: Anchor | null = null
+    let targetEdgePoint: { position: string; offset: { x: number; y: number } } | null = null
 
+    // 检查鼠标是否在某个节点上
     for (const node of nodes.value) {
       if (node.id === connectionStart.value.node.id) continue
-      const anchors = getNodeAnchors(node)
-      for (const anchor of anchors) {
-        const anchorPos = getAnchorPosition(node, anchor.position)
-        const dist = Math.sqrt((pos.x - anchorPos.x) ** 2 + (pos.y - anchorPos.y) ** 2)
-        if (dist < 20) {
-          targetNode = node
-          targetAnchor = anchor
-          break
-        }
+
+      // 检查鼠标是否在节点范围内（扩大一点范围）
+      const margin = 30
+      if (pos.x >= node.x - margin && pos.x <= node.x + node.width + margin &&
+          pos.y >= node.y - margin && pos.y <= node.y + node.height + margin) {
+        targetNode = node
+        // 计算鼠标位置到节点边缘的最近点
+        targetEdgePoint = getNearestEdgePoint(node, pos)
+        break
       }
-      if (targetNode) break
     }
 
-    if (targetNode && targetAnchor) {
+    if (targetNode && targetEdgePoint) {
+      // 起始节点使用中心点（不使用自定义偏移）
+      const startNode = connectionStart.value.node
+      const startCenterX = startNode.x + startNode.width / 2
+      const startCenterY = startNode.y + startNode.height / 2
+      const targetCenterX = targetNode.x + targetNode.width / 2
+      const targetCenterY = targetNode.y + targetNode.height / 2
+      const dx = targetCenterX - startCenterX
+      const dy = targetCenterY - startCenterY
+
+      // 根据方向确定起始锚点（中心点的哪个方向）
+      let startAnchor: string
+      if (Math.abs(dx) > Math.abs(dy)) {
+        startAnchor = dx > 0 ? 'right' : 'left'
+      } else {
+        startAnchor = dy > 0 ? 'bottom' : 'top'
+      }
+
       const newConn: Connection = {
         id: generateId(),
         fromNode: connectionStart.value.node.id,
-        fromAnchor: connectionStart.value.anchor.position,
+        fromAnchor: startAnchor,
+        // 起始点不使用自定义偏移，使用固定中心点
         toNode: targetNode.id,
-        toAnchor: targetAnchor.position,
+        toAnchor: targetEdgePoint.position,
+        toAnchorOffset: targetEdgePoint.offset,  // 终点使用自定义偏移
         color: '#000000',
         dashed: false,
         arrow: 'end',
@@ -1998,8 +2398,10 @@ const onCanvasMouseUp = (e: MouseEvent) => {
   isSelecting.value = false
   isDrawingConnection.value = false
   isDraggingBend.value = false
+  isDraggingLabel.value = false
   connectionStart.value = null
   draggingConnection.value = null
+  draggingLabelConn.value = null
   resizeHandle.value = null
 }
 
@@ -2395,23 +2797,39 @@ const exportPNG = async () => {
         shapeSvg.appendChild(path)
         nodeEl.appendChild(shapeSvg)
 
-        // 文字 - 使用 SVG 确保居中
+        // 文字 - 使用 foreignObject 支持换行
         if (node.text) {
+          const textContainer = document.createElementNS(svgNS, 'foreignObject')
+          textContainer.setAttribute('x', String(strokePadding))
+          textContainer.setAttribute('y', String(strokePadding))
+          textContainer.setAttribute('width', String(node.width))
+          textContainer.setAttribute('height', String(node.height))
+
+          const textDiv = document.createElement('div')
+          textDiv.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8px;
+            box-sizing: border-box;
+            color: ${node.textColor || '#000000'};
+            font-size: ${node.fontSize || 14}px;
+            font-family: system-ui, -apple-system, sans-serif;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            line-height: 1.4;
+          `
+          textDiv.textContent = node.text
+
+          textContainer.appendChild(textDiv)
           const textSvg = document.createElementNS(svgNS, 'svg')
           textSvg.setAttribute('width', String(node.width + strokePadding * 2))
           textSvg.setAttribute('height', String(node.height + strokePadding * 2))
           textSvg.style.cssText = 'position: absolute; inset: 0;'
-
-          const text = document.createElementNS(svgNS, 'text')
-          text.setAttribute('x', String(node.width / 2 + strokePadding))
-          text.setAttribute('y', String(node.height / 2 + strokePadding))
-          text.setAttribute('text-anchor', 'middle')
-          text.setAttribute('dominant-baseline', 'central')
-          text.setAttribute('fill', node.textColor || '#000000')
-          text.setAttribute('font-size', String(node.fontSize || 14))
-          text.setAttribute('font-family', 'system-ui, -apple-system, sans-serif')
-          text.textContent = node.text
-          textSvg.appendChild(text)
+          textSvg.appendChild(textContainer)
           nodeEl.appendChild(textSvg)
         }
 
@@ -2442,23 +2860,40 @@ const exportPNG = async () => {
         `
         nodeEl.appendChild(shapeDiv)
 
-        // 文字 - 使用 SVG 确保居中
+        // 文字 - 使用 foreignObject 支持换行
         if (node.text) {
           const textSvg = document.createElementNS(svgNS, 'svg')
           textSvg.setAttribute('width', String(node.width))
           textSvg.setAttribute('height', String(node.height))
           textSvg.style.cssText = 'position: absolute; inset: 0;'
 
-          const text = document.createElementNS(svgNS, 'text')
-          text.setAttribute('x', String(node.width / 2))
-          text.setAttribute('y', String(node.height / 2))
-          text.setAttribute('text-anchor', 'middle')
-          text.setAttribute('dominant-baseline', 'central')
-          text.setAttribute('fill', node.textColor || '#000000')
-          text.setAttribute('font-size', String(node.fontSize || 14))
-          text.setAttribute('font-family', 'system-ui, -apple-system, sans-serif')
-          text.textContent = node.text
-          textSvg.appendChild(text)
+          const foreignObject = document.createElementNS(svgNS, 'foreignObject')
+          foreignObject.setAttribute('x', '0')
+          foreignObject.setAttribute('y', '0')
+          foreignObject.setAttribute('width', String(node.width))
+          foreignObject.setAttribute('height', String(node.height))
+
+          const textDiv = document.createElement('div')
+          textDiv.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8px;
+            box-sizing: border-box;
+            color: ${node.textColor || '#000000'};
+            font-size: ${node.fontSize || 14}px;
+            font-family: system-ui, -apple-system, sans-serif;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            line-height: 1.4;
+          `
+          textDiv.textContent = node.text
+
+          foreignObject.appendChild(textDiv)
+          textSvg.appendChild(foreignObject)
           nodeEl.appendChild(textSvg)
         }
 
@@ -2478,9 +2913,19 @@ const exportPNG = async () => {
       if (!fromNode || !toNode) return
 
       // 重新计算路径（带偏移）
-      const getAnchor = (node: Node, pos: string) => {
+      const getAnchor = (node: Node, pos: string, customOffset?: { x: number; y: number }) => {
         const x = node.x - minX + padding
         const y = node.y - minY + padding
+
+        // 如果有自定义偏移，使用自定义位置
+        if (customOffset) {
+          return {
+            x: x + node.width * customOffset.x,
+            y: y + node.height * customOffset.y
+          }
+        }
+
+        // 否则使用固定锚点位置
         switch (pos) {
           case 'top': return { x: x + node.width / 2, y: y }
           case 'right': return { x: x + node.width, y: y + node.height / 2 }
@@ -2490,8 +2935,8 @@ const exportPNG = async () => {
         }
       }
 
-      const start = getAnchor(fromNode, conn.fromAnchor)
-      const end = getAnchor(toNode, conn.toAnchor)
+      const start = getAnchor(fromNode, conn.fromAnchor, conn.fromAnchorOffset)
+      const end = getAnchor(toNode, conn.toAnchor, conn.toAnchorOffset)
       const offset = conn.bendOffset || { x: 0, y: 0 }
 
       let pathD = ''
@@ -2606,6 +3051,247 @@ const exportJSON = () => {
   link.click()
   URL.revokeObjectURL(link.href)
 }
+
+const exportMermaid = () => {
+  if (nodes.value.length === 0) {
+    alert('画布上没有内容可导出')
+    return
+  }
+
+  // 提示用户 Mermaid 的限制
+  const userConfirm = confirm(
+    '注意：Mermaid 使用自动布局，无法保留画布上的精确位置和样式。\n\n' +
+    '导出的流程图可能与画布显示不同。\n\n' +
+    '如需保留精确布局，建议使用：\n' +
+    '• 导出 PNG（图片格式）\n' +
+    '• 导出 HTML（可在浏览器查看）\n' +
+    '• 导出 JSON（可重新导入编辑）\n\n' +
+    '是否继续导出 Mermaid？'
+  )
+
+  if (!userConfirm) return
+
+  // 确定流程图方向（根据节点布局自动判断）
+  let direction = 'TD' // 默认从上到下
+  let isHorizontal = false
+
+  if (nodes.value.length >= 2) {
+    // 计算所有节点的整体布局趋势
+    let totalHorizontalSpread = 0
+    let totalVerticalSpread = 0
+
+    nodes.value.forEach(node => {
+      totalHorizontalSpread += node.x
+      totalVerticalSpread += node.y
+    })
+
+    const avgX = totalHorizontalSpread / nodes.value.length
+    const avgY = totalVerticalSpread / nodes.value.length
+
+    // 计算方差来判断主要分布方向
+    let horizontalVariance = 0
+    let verticalVariance = 0
+
+    nodes.value.forEach(node => {
+      horizontalVariance += Math.pow(node.x - avgX, 2)
+      verticalVariance += Math.pow(node.y - avgY, 2)
+    })
+
+    // 如果水平方差明显大于垂直方差，说明是横向布局
+    if (horizontalVariance > verticalVariance * 1.2) {
+      direction = 'LR' // 从左到右
+      isHorizontal = true
+    }
+  }
+
+  // 识别结束节点（没有出边的节点，或者类型为 terminator 且文本包含"结束"）
+  const getOutgoingConnections = (nodeId: string) => {
+    return connections.value.filter(conn => conn.fromNode === nodeId)
+  }
+
+  const isEndNode = (node: Node) => {
+    const hasOutgoing = getOutgoingConnections(node.id).length > 0
+    const isTerminatorType = node.type === 'terminator'
+    const hasEndText = node.text.includes('结束') || node.text.includes('End') || node.text.includes('end')
+
+    // 如果是 terminator 类型且文本包含"结束"，或者没有出边，则认为是结束节点
+    return (isTerminatorType && hasEndText) || (!hasOutgoing && nodes.value.length > 1)
+  }
+
+  // 根据流程图方向对节点进行排序
+  const sortedNodes = [...nodes.value].sort((a, b) => {
+    // 结束节点始终排在最后
+    const aIsEnd = isEndNode(a)
+    const bIsEnd = isEndNode(b)
+
+    if (aIsEnd && !bIsEnd) return 1  // a 是结束节点，排在后面
+    if (!aIsEnd && bIsEnd) return -1 // b 是结束节点，排在后面
+    if (aIsEnd && bIsEnd) {
+      // 如果都是结束节点，按位置排序
+      return isHorizontal ? (a.x - b.x) : (a.y - b.y)
+    }
+
+    // 非结束节点按位置排序
+    if (isHorizontal) {
+      // 横向布局：先按 X 坐标排序（从左到右），X 相近时按 Y 排序
+      const xDiff = a.x - b.x
+      if (Math.abs(xDiff) > 50) { // X 坐标差距超过 50px 才认为是不同列
+        return xDiff
+      }
+      return a.y - b.y // 同一列内按 Y 坐标排序
+    } else {
+      // 纵向布局：先按 Y 坐标排序（从上到下），Y 相近时按 X 排序
+      const yDiff = a.y - b.y
+      if (Math.abs(yDiff) > 50) { // Y 坐标差距超过 50px 才认为是不同行
+        return yDiff
+      }
+      return a.x - b.x // 同一行内按 X 坐标排序
+    }
+  })
+
+  // 生成节点ID映射（使用简短的字母ID）
+  const nodeIdMap = new Map<string, string>()
+  sortedNodes.forEach((node, index) => {
+    nodeIdMap.set(node.id, String.fromCharCode(65 + index)) // A, B, C, ...
+  })
+
+  // 根据节点类型生成 Mermaid 节点语法
+  const getMermaidNodeSyntax = (node: Node, nodeId: string): string => {
+    const text = node.text || '节点'
+
+    switch (node.type) {
+      case 'rectangle':
+      case 'process':
+      case 'roundedRect':
+        return `${nodeId}[${text}]`
+      case 'circle':
+        return `${nodeId}((${text}))`
+      case 'diamond':
+      case 'decision':
+        return `${nodeId}{${text}}`
+      case 'terminator':
+        return `${nodeId}([${text}])`
+      case 'data':
+        return `${nodeId}[/${text}/]`
+      case 'hexagon':
+        return `${nodeId}{{${text}}}`
+      case 'triangle':
+        return `${nodeId}[${text}]` // Mermaid 没有三角形，用矩形代替
+      case 'document':
+        return `${nodeId}[${text}]` // Mermaid 没有文档形状，用矩形代替
+      case 'database':
+        return `${nodeId}[(${text})]`
+      default:
+        return `${nodeId}[${text}]`
+    }
+  }
+
+  // 根据连接线类型生成箭头语法
+  const getArrowSyntax = (conn: Connection): string => {
+    let arrow = '-->'
+
+    if (conn.dashed) {
+      arrow = '-.->'
+    }
+
+    if (conn.arrow === 'none') {
+      arrow = conn.dashed ? '-..-' : '---'
+    } else if (conn.arrow === 'both') {
+      arrow = conn.dashed ? '<-.->' : '<-->'
+    } else if (conn.arrow === 'start') {
+      arrow = conn.dashed ? '<-.-' : '<--'
+    }
+
+    return arrow
+  }
+
+  // 生成 Mermaid 代码
+  let mermaidCode = `flowchart ${direction}\n`
+  mermaidCode += `%% 注意：Mermaid 使用自动布局，无法保留原始画布的精确位置\n`
+  mermaidCode += `%% 如需保留精确布局，请使用"导出 HTML"或"导出 PNG"功能\n\n`
+
+  // 按照节点排序顺序输出连接（确保开始节点的连接在前面）
+  if (connections.value.length > 0) {
+    // 对连接线按照起始节点的排序顺序进行排序
+    const sortedConnections = [...connections.value].sort((a, b) => {
+      const fromIndexA = sortedNodes.findIndex(n => n.id === a.fromNode)
+      const fromIndexB = sortedNodes.findIndex(n => n.id === b.fromNode)
+
+      // 先按起始节点排序
+      if (fromIndexA !== fromIndexB) {
+        return fromIndexA - fromIndexB
+      }
+
+      // 如果起始节点相同，按目标节点排序
+      const toIndexA = sortedNodes.findIndex(n => n.id === a.toNode)
+      const toIndexB = sortedNodes.findIndex(n => n.id === b.toNode)
+      return toIndexA - toIndexB
+    })
+
+    sortedConnections.forEach(conn => {
+      const fromId = nodeIdMap.get(conn.fromNode)
+      const toId = nodeIdMap.get(conn.toNode)
+
+      if (fromId && toId) {
+        const fromNode = nodes.value.find(n => n.id === conn.fromNode)
+        const toNode = nodes.value.find(n => n.id === conn.toNode)
+
+        if (fromNode && toNode) {
+          const fromSyntax = getMermaidNodeSyntax(fromNode, fromId)
+          const toSyntax = getMermaidNodeSyntax(toNode, toId)
+          const arrow = getArrowSyntax(conn)
+
+          // 使用用户设置的标签
+          const label = conn.label || ''
+          const labelSyntax = label ? `|${label}|` : ''
+
+          mermaidCode += `    ${fromSyntax} ${arrow}${labelSyntax} ${toSyntax}\n`
+        }
+      }
+    })
+  } else {
+    // 如果没有连接线，单独列出所有节点
+    sortedNodes.forEach(node => {
+      const nodeId = nodeIdMap.get(node.id)
+      if (nodeId) {
+        mermaidCode += `    ${getMermaidNodeSyntax(node, nodeId)}\n`
+      }
+    })
+  }
+
+  // 添加样式（如果节点有自定义颜色，但排除透明样式）
+  sortedNodes.forEach(node => {
+    const nodeId = nodeIdMap.get(node.id)
+    if (!nodeId) return
+
+    const isTransparent = (node.fill === 'transparent' || node.fill === '#00000000') &&
+                         (node.stroke === 'transparent' || node.stroke === '#00000000')
+    const isDefaultStyle = node.fill === '#ffffff' && node.stroke === '#000000'
+
+    // 只导出非默认且非透明的样式
+    if (!isTransparent && !isDefaultStyle) {
+      const fillColor = node.fill.replace('#', '')
+      const strokeColor = node.stroke.replace('#', '')
+      mermaidCode += `    style ${nodeId} fill:#${fillColor},stroke:#${strokeColor}\n`
+    }
+  })
+
+  // 下载文件
+  const blob = new Blob([mermaidCode], { type: 'text/plain;charset=utf-8' })
+  const link = document.createElement('a')
+  link.download = `${canvasName.value || 'flowchart'}.mmd`
+  link.href = URL.createObjectURL(blob)
+  link.click()
+  URL.revokeObjectURL(link.href)
+
+  // 同时复制到剪贴板
+  navigator.clipboard.writeText(mermaidCode).then(() => {
+    console.log('Mermaid 代码已复制到剪贴板')
+  }).catch(err => {
+    console.error('复制到剪贴板失败:', err)
+  })
+}
+
 
 const exportHTML = () => {
   if (nodes.value.length === 0) {
@@ -2835,12 +3521,28 @@ const handleFileImport = (e: Event) => {
       const data = JSON.parse(event.target?.result as string)
       if (data.nodes && data.connections) {
         canvasName.value = data.name || '导入的流程图'
-        // 确保旧数据兼容性，为没有fontSize的节点添加默认值
+
+        // 确保节点数据兼容性，为缺失的字段添加默认值
         nodes.value = data.nodes.map((n: Node) => ({
           ...n,
-          fontSize: n.fontSize || 14
+          fontSize: n.fontSize || 14,
+          borderRadius: n.borderRadius ?? 4,
+          zIndex: n.zIndex ?? 0
         }))
-        connections.value = data.connections
+
+        // 确保连接线数据兼容性，为缺失的字段添加默认值
+        connections.value = data.connections.map((c: Connection) => ({
+          ...c,
+          bendOffset: c.bendOffset || { x: 0, y: 0 },
+          label: c.label || '',
+          labelOffset: c.labelOffset || { x: 0, y: 0 },
+          labelFontSize: c.labelFontSize || 14,
+          labelFontWeight: c.labelFontWeight || 'normal',
+          labelColor: c.labelColor || '#000000',
+          fromAnchorOffset: c.fromAnchorOffset || undefined,
+          toAnchorOffset: c.toAnchorOffset || undefined
+        }))
+
         clearSelection()
         saveHistory()
       }
@@ -2852,9 +3554,256 @@ const handleFileImport = (e: Event) => {
   if (fileInput.value) fileInput.value.value = ''
 }
 
+const importMermaid = () => {
+  mermaidFileInput.value?.click()
+}
+
+const handleMermaidImport = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    try {
+      const mermaidCode = event.target?.result as string
+      parseMermaidToCanvas(mermaidCode)
+    } catch (err) {
+      alert('导入失败：' + (err as Error).message)
+    }
+  }
+  reader.readAsText(file)
+  if (mermaidFileInput.value) mermaidFileInput.value.value = ''
+}
+
+// 解析 Mermaid 代码并转换为画布节点
+const parseMermaidToCanvas = (mermaidCode: string) => {
+  try {
+    // 提取流程图内容
+    const lines = mermaidCode.trim().split('\n')
+    const flowchartLine = lines.find(line => line.trim().startsWith('flowchart'))
+
+    if (!flowchartLine) {
+      throw new Error('不是有效的 Mermaid 流程图格式')
+    }
+
+    // 解析方向
+    const direction = flowchartLine.includes('LR') ? 'LR' : 'TD'
+    const isHorizontal = direction === 'LR'
+
+    // 存储节点和连接
+    const nodeMap = new Map<string, { text: string; type: string }>()
+    const connectionList: Array<{ from: string; to: string; label?: string }> = []
+
+    // 解析每一行
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('flowchart') || trimmed.startsWith('style')) continue
+
+      // 匹配连接线: A[文本] --> B[文本] 或 A -->|label| B
+      const connMatch = trimmed.match(/(\w+)((?:\[.+?\]|\(.+?\)|\(\(.+?\)\)|\{.+?\}|\[\(.+?\)\]))?[\s]*(-+>|<-+>|<-+|\.-+>|<\.-+>|<\.-+)(?:\|(.+?)\|)?[\s]*(\w+)((?:\[.+?\]|\(.+?\)|\(\(.+?\)\)|\{.+?\}|\[\(.+?\)\]))?/)
+
+      if (connMatch) {
+        const fromId = connMatch[1]
+        const fromDef = connMatch[2]
+        const label = connMatch[4]
+        const toId = connMatch[5]
+        const toDef = connMatch[6]
+
+        // 从连接线中提取节点定义
+        if (fromDef && !nodeMap.has(fromId)) {
+          const nodeInfo = parseNodeDefinition(fromId, fromDef)
+          if (nodeInfo) nodeMap.set(fromId, nodeInfo)
+        }
+        if (toDef && !nodeMap.has(toId)) {
+          const nodeInfo = parseNodeDefinition(toId, toDef)
+          if (nodeInfo) nodeMap.set(toId, nodeInfo)
+        }
+
+        connectionList.push({ from: fromId, to: toId, label })
+        continue
+      }
+
+      // 匹配单独的节点定义: A[文本] 或 A{文本} 等
+      const nodeMatch = trimmed.match(/^(\w+)([\[\(\{])(.+?)([\]\)\}])$/)
+      if (nodeMatch) {
+        const id = nodeMatch[1]
+        const nodeInfo = parseNodeDefinition(id, nodeMatch[0].substring(id.length))
+        if (nodeInfo) nodeMap.set(id, nodeInfo)
+      }
+    }
+
+    // 解析节点定义的辅助函数
+    function parseNodeDefinition(id: string, def: string): { text: string; type: string } | null {
+      // 匹配 [文本], (文本), ((文本)), {文本}, [(文本)]
+      let match = def.match(/^\[(.+?)\]$/)
+      if (match) return { text: match[1], type: 'rectangle' }
+
+      match = def.match(/^\[\((.+?)\)\]$/)
+      if (match) return { text: match[1], type: 'terminator' }
+
+      match = def.match(/^\(\((.+?)\)\)$/)
+      if (match) return { text: match[1], type: 'circle' }
+
+      match = def.match(/^\((.+?)\)$/)
+      if (match) return { text: match[1], type: 'terminator' }
+
+      match = def.match(/^\{(.+?)\}$/)
+      if (match) return { text: match[1], type: 'diamond' }
+
+      return null
+    }
+
+    // 检查是否解析到节点
+    if (nodeMap.size === 0) {
+      console.error('未能解析到任何节点')
+      console.log('Mermaid 代码:', mermaidCode)
+      throw new Error('未能解析到任何节点，请检查 Mermaid 代码格式')
+    }
+
+    console.log('解析到的节点:', Array.from(nodeMap.entries()))
+    console.log('解析到的连接:', connectionList)
+
+    // 创建节点
+    const newNodes: Node[] = []
+    const nodePositions = new Map<string, { x: number; y: number }>()
+
+    // 使用拓扑排序确定节点位置
+    const visited = new Set<string>()
+    const levels = new Map<string, number>()
+
+    // 计算每个节点的层级
+    const calculateLevel = (nodeId: string, level: number = 0) => {
+      if (visited.has(nodeId)) return
+      visited.add(nodeId)
+
+      const currentLevel = levels.get(nodeId) || 0
+      levels.set(nodeId, Math.max(currentLevel, level))
+
+      // 找到所有从这个节点出发的连接
+      const outgoing = connectionList.filter(c => c.from === nodeId)
+      outgoing.forEach(conn => {
+        calculateLevel(conn.to, level + 1)
+      })
+    }
+
+    // 从所有起始节点开始计算
+    const startNodes = Array.from(nodeMap.keys()).filter(id =>
+      !connectionList.some(c => c.to === id)
+    )
+
+    if (startNodes.length === 0 && nodeMap.size > 0) {
+      // 如果没有明确的起始节点，使用第一个节点
+      calculateLevel(Array.from(nodeMap.keys())[0])
+    } else {
+      startNodes.forEach(id => calculateLevel(id))
+    }
+
+    // 按层级组织节点
+    const levelGroups = new Map<number, string[]>()
+    levels.forEach((level, nodeId) => {
+      if (!levelGroups.has(level)) {
+        levelGroups.set(level, [])
+      }
+      levelGroups.get(level)!.push(nodeId)
+    })
+
+    // 生成节点位置
+    const spacing = isHorizontal ? { x: 200, y: 150 } : { x: 200, y: 150 }
+    const startPos = { x: 100, y: 100 }
+
+    levelGroups.forEach((nodeIds, level) => {
+      nodeIds.forEach((nodeId, index) => {
+        const nodeInfo = nodeMap.get(nodeId)
+        if (!nodeInfo) return
+
+        const x = isHorizontal
+          ? startPos.x + level * spacing.x
+          : startPos.x + index * spacing.x
+        const y = isHorizontal
+          ? startPos.y + index * spacing.y
+          : startPos.y + level * spacing.y
+
+        nodePositions.set(nodeId, { x, y })
+
+        const width = nodeInfo.type === 'circle' ? 100 : 120
+        const height = nodeInfo.type === 'circle' ? 100 : 60
+
+        newNodes.push({
+          id: generateId(),
+          type: nodeInfo.type,
+          x,
+          y,
+          width,
+          height,
+          text: nodeInfo.text,
+          fill: '#ffffff',
+          stroke: '#000000',
+          strokeWidth: 2,
+          textColor: '#000000',
+          borderRadius: nodeInfo.type === 'roundedRect' ? 12 : 4,
+          zIndex: newNodes.length,
+          fontSize: 14
+        })
+      })
+    })
+
+    // 创建连接线
+    const newConnections: Connection[] = []
+    connectionList.forEach(conn => {
+      const fromNode = newNodes.find(n => {
+        const fromPos = nodePositions.get(conn.from)
+        return fromPos && n.x === fromPos.x && n.y === fromPos.y
+      })
+      const toNode = newNodes.find(n => {
+        const toPos = nodePositions.get(conn.to)
+        return toPos && n.x === toPos.x && n.y === toPos.y
+      })
+
+      if (fromNode && toNode) {
+        newConnections.push({
+          id: generateId(),
+          fromNode: fromNode.id,
+          fromAnchor: isHorizontal ? 'right' : 'bottom',
+          toNode: toNode.id,
+          toAnchor: isHorizontal ? 'left' : 'top',
+          color: '#000000',
+          dashed: false,
+          arrow: 'end',
+          lineType: 'orthogonal',
+          label: conn.label || '',
+          bendOffset: { x: 0, y: 0 }
+        })
+      }
+    })
+
+    // 更新画布
+    nodes.value = newNodes
+    connections.value = newConnections
+    canvasName.value = '导入的 Mermaid 流程图'
+    clearSelection()
+    saveHistory()
+
+    // 居中显示
+    nextTick(() => {
+      centerContent()
+    })
+
+  } catch (err) {
+    console.error('解析 Mermaid 失败:', err)
+    throw new Error('解析 Mermaid 代码失败，请检查格式是否正确')
+  }
+}
+
 // ==================== 键盘快捷键 ====================
 const handleKeyDown = (e: KeyboardEvent) => {
+  // 如果正在编辑节点文字，不处理快捷键
   if (editingNode.value) return
+
+  // 如果焦点在输入框或文本区域，不处理删除快捷键
+  const target = e.target as HTMLElement
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+    return
+  }
 
   // 空格键临时启用拖动模式
   if (e.code === 'Space' && !e.repeat) {
