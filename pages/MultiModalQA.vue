@@ -260,38 +260,23 @@ import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
 
-// 初始化 marked 配置
-const initMarked = () => {
-  const renderer = new marked.Renderer()
-  renderer.code = function(code: string | { text: string; lang?: string }, lang?: string): string {
-    let codeText: string, language: string
-    if (typeof code === 'object') {
-      codeText = code.text || ''
-      language = code.lang || ''
-    } else {
-      codeText = code as string
-      language = lang || ''
-    }
-    let h: string
-    if (language && hljs.getLanguage(language)) { try { h = hljs.highlight(codeText, { language }).value } catch { h = hljs.highlightAuto(codeText).value } }
-    else { h = hljs.highlightAuto(codeText).value }
-    const codeId = 'code-' + Math.random().toString(36).substr(2, 9)
-    return `<div class="code-block-wrapper my-4 rounded-lg overflow-hidden border border-blue-100 shadow-sm"><div class="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100"><span class="text-xs font-bold text-blue-700">${language || 'text'}</span><button onclick="window.copyCode('${codeId}', this)" class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors" title="复制"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div><pre class="hljs-code-block m-0 p-4 bg-[#f8faff] overflow-x-auto"><code id="${codeId}" class="hljs language-${language}">${h}</code></pre></div>`
-  }
-  marked.setOptions({ renderer, breaks: true, gfm: true })
-}
-
 const overrideHljsStyles = () => {
   const style = document.createElement('style')
   style.textContent = `.hljs { background: #f8faff !important; color: #334155 !important; } .hljs-keyword, .hljs-selector-tag { color: #a626a4 !important; font-weight: bold; } .hljs-title, .hljs-section, .hljs-selector-id { color: #4078f2 !important; font-weight: bold; } .hljs-title.function_ { color: #4078f2 !important; } .hljs-title.class_ { color: #c18401 !important; } .hljs-string, .hljs-doctag { color: #50a14f !important; } .hljs-type, .hljs-number, .hljs-selector-class, .hljs-quote, .hljs-template-tag, .hljs-deletion { color: #986801 !important; } .hljs-comment, .hljs-meta { color: #a0a1a7 !important; font-style: italic; } .hljs-variable, .hljs-template-variable, .hljs-attr, .hljs-attribute { color: #e45649 !important; } .hljs-symbol, .hljs-bullet, .hljs-link, .hljs-selector-attr, .hljs-selector-pseudo { color: #0184bc !important; } .hljs-built_in, .hljs-builtin-name { color: #c18401 !important; } .hljs-literal { color: #0184bc !important; }`
   document.head.appendChild(style)
 }
+if (typeof window !== 'undefined') overrideHljsStyles()
 
-// 在客户端初始化
-if (typeof window !== 'undefined') {
-  overrideHljsStyles()
-  initMarked()
+const renderer = new marked.Renderer()
+renderer.code = function(code: string, lang?: string) {
+  const l = lang || ''
+  let h: string
+  if (l && hljs.getLanguage(l)) { try { h = hljs.highlight(code, { language: l }).value } catch { h = hljs.highlightAuto(code).value } }
+  else { h = hljs.highlightAuto(code).value }
+  const codeId = 'code-' + Math.random().toString(36).substr(2, 9)
+  return `<div class="code-block-wrapper my-4 rounded-lg overflow-hidden border border-blue-100 shadow-sm"><div class="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100"><span class="text-xs font-bold text-blue-700">${l || 'text'}</span><button onclick="window.copyCode('${codeId}', this)" class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors" title="复制"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div><pre class="hljs-code-block m-0 p-4 bg-[#f8faff] overflow-x-auto"><code id="${codeId}" class="hljs language-${l}">${h}</code></pre></div>`
 }
+marked.setOptions({ renderer, breaks: true, gfm: true })
 
 if (typeof window !== 'undefined') {
   (window as any).copyCode = (id: string, btn: HTMLElement) => {
@@ -345,7 +330,7 @@ let audioStream: MediaStream | null = null
 let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let silenceTimer: number | null = null
-let dataArray: Uint8Array | null = null
+let dataArray: Uint8Array<ArrayBufferLike> | null = null
 let recordingDelayTimer: number | null = null
 
 const isPressRecording = ref(false)

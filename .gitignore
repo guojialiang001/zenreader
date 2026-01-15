@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-.pnp
+.pnp/
 .pnp.js
 
 # Build outputs
@@ -14,16 +14,20 @@ build/
 .env.local
 .env.*.local
 
-# IDE
+# IDE / Editor
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Logs
 logs/
@@ -41,28 +45,17 @@ coverage/
 .cache/
 .parcel-cache/
 .eslintcache
+.stylelintcache
 *.tsbuildinfo
 
 # Vercel
 .vercel/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-
 # Temporary files
 *.tmp
 *.temp
-.tmp/
-.temp/
+temp/
+tmp/
 
-# Server copy file (backup)
-server/orchestrator_service copy.py
+# Claude AI
+.claude/

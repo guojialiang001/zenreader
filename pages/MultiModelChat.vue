@@ -471,10 +471,10 @@ const apis: Record<string, Api> = {
   geminiPro: { url: `${apiBase}/api/gemini/chat/completions`, key: env('VITE_GF5_TOKEN'), model: 'gemini-3-pro-preview', thinking: true },
   mimo: { url: `${apiBase}/api/chat/completions`, key: env('VITE_MZ3_TOKEN'), model: 'mimo-v2-flash' },
   glm: { url: `${apiBase}/api/claude/chat/completions`, key: env('VITE_XQ7_TOKEN'), model: 'glm-4.7' },
-  opus: { url: `${apiBase}/api/opus/chat/completions`, key: env('VITE_PK9_TOKEN'), model: 'claude-opus-4-5-20251101' },
+  opus: { url: `${apiBase}/api/opus/chat/completions`, key: env('VITE_CODE_RELAY_TOKEN'), model: 'claude-opus-4-5-20251101' },
   opusBackup: {
-    url: `${apiBase}/api/code-relay/chat/completions`,
-    key: env('VITE_CODE_RELAY_TOKEN'),
+    url: `${apiBase}/api/opus-backup/chat/completions`,
+    key: env('VITE_OPUS_BACKUP_TOKEN'),
     model: 'claude-opus-4-5-20251101'
   },
   grok: { url: `${apiBase}/api/claude/chat/completions`, key: env('VITE_XQ7_TOKEN'), model: 'grok-4.1', thinking: true },
@@ -484,10 +484,10 @@ const apis: Record<string, Api> = {
   qwen: { url: `${apiBase}/api/qwen/chat/completions`, key: env('VITE_QWEN_TOKEN'), model: 'Qwen3-235B-A22B' },
   deepseekV32: { url: `${apiBase}/api/deepseekv32/chat/completions`, key: env('VITE_DEEPSEEK_V32_TOKEN'), model: 'DeepSeek-V3.2' },
   deepseek: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },
-  sonnet: { url: `${apiBase}/api/sonnet/chat/completions`, key: env('VITE_SONNET_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
+  sonnet: { url: `${apiBase}/api/sonnet/chat/completions`, key: env('VITE_CODE_RELAY_TOKEN'), model: 'claude-sonnet-4-5-20250929' },
   sonnetBackup: {
     url: `${apiBase}/api/sonnet-backup/chat/completions`,
-    key: env('VITE_SONNET_TOKEN_BACKUP'),
+    key: env('VITE_OPUS_BACKUP_TOKEN'),
     model: 'claude-sonnet-4-5-20250929'
   },
   deepseekCard: { url: `${apiBase}/api/deepseek/chat/completions`, key: env('VITE_DS2_TOKEN'), model: 'deepseek-ai/deepseek-v3.1-terminus' },

@@ -46,7 +46,7 @@ const routes = [
   { path: '/token', name: 'token', component: TokenCounter },
   { path: '/humanizer', name: 'humanizer', component: TextHumanizer },
   { path: '/speech', name: 'speech', component: SpeechRecognition },
-  { path: '/sandbox-test', name: 'sandbox-test', component: SandboxTest }
+  { path: '/sandbox', name: 'sandbox', component: SandboxTest }
 ]
 
 export const router = createRouter({

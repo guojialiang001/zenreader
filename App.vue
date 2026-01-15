@@ -14,10 +14,10 @@ const showHeader = computed(() => route.name === 'home')
           <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform">
             <span class="w-2 h-2 rounded-full bg-white"></span>
           </div>
-          <h1 class="font-bold text-xl text-slate-900 tracking-tight">工具集</h1>
+          <h1 class="font-bold text-xl text-slate-900 tracking-tight">ZenReader</h1>
         </RouterLink>
         <nav class="hidden md:flex items-center gap-8 text-slate-500">
-          <RouterLink class="hover:text-brand-600 font-medium transition-colors relative after:absolute after:bottom-[-18px] after:left-0 after:w-0 after:h-0.5 after:bg-brand-500 hover:after:w-full after:transition-all" to="/">工具集</RouterLink>
+          <RouterLink class="hover:text-brand-600 font-medium transition-colors relative after:absolute after:bottom-[-18px] after:left-0 after:w-0 after:h-0.5 after:bg-brand-500 hover:after:w-full after:transition-all" to="/">主页</RouterLink>
           <RouterLink class="hover:text-brand-600 font-medium transition-colors" to="/json">JSON</RouterLink>
           <RouterLink class="hover:text-brand-600 font-medium transition-colors" to="/timestamp">时间戳</RouterLink>
           <RouterLink class="hover:text-brand-600 font-medium transition-colors" to="/case">转换</RouterLink>
