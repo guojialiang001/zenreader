@@ -1979,9 +1979,60 @@ const getConnectionPath = (conn: Connection) => {
       // 两端都是水平出口：先水平再垂直再水平
       return `M${start.x},${start.y} L${midX},${start.y} L${midX},${end.y} L${end.x},${end.y}`
     } else if (!isStartHorizontal && !isEndHorizontal) {
-      // 两端都是垂直出口：先垂直再水平再垂直
-      const midY = (start.y + end.y) / 2 + offset.y
-      return `M${start.x},${start.y} L${start.x},${midY} L${end.x},${midY} L${end.x},${end.y}`
+      // 两端都是垂直出口
+      // 屏幕坐标系：Y轴向下增长，上方节点Y值小，下方节点Y值大
+      //
+      // 回溯判断逻辑：锚点的出口方向与目标节点的相对位置相反时需要绕行
+      // - top 锚点出口方向向上，如果目标在下方（end.y > start.y）需要绕行
+      // - bottom 锚点出口方向向下，如果目标在上方（end.y < start.y）需要绕行
+      // - 同侧出口（top->top 或 bottom->bottom）也需要绕行
+      //
+      // 注意：这里只看起始锚点的出口方向，不管终点锚点
+      const needsDetour =
+        (conn.fromAnchor === 'top' && end.y > start.y) ||
+        (conn.fromAnchor === 'bottom' && end.y < start.y)
+
+      // 同侧出口也需要特殊处理
+      const sameSideAnchors =
+        (conn.fromAnchor === 'top' && conn.toAnchor === 'top') ||
+        (conn.fromAnchor === 'bottom' && conn.toAnchor === 'bottom')
+
+      if (needsDetour || sameSideAnchors) {
+        // 回溯连接：需要绕到侧边形成循环视觉效果
+        // 计算绕行的方向和距离
+        const loopOffset = 50 + offset.x // 默认向右绕行50px，可通过拖动调整
+
+        // 判断绕行方向：默认向右，如果起点在终点右侧则向左
+        const goRight = start.x <= end.x + fromNode.width / 2
+        const sideX = goRight
+          ? Math.max(fromNode.x + fromNode.width, toNode.x + toNode.width) + loopOffset
+          : Math.min(fromNode.x, toNode.x) - loopOffset
+
+        // 计算垂直延伸距离
+        const verticalExtend = 30 + Math.abs(offset.y)
+
+        if (conn.fromAnchor === 'top' && conn.toAnchor === 'bottom') {
+          // 从下方节点顶部到上方节点底部（向上回溯）
+          const topY = Math.min(start.y, end.y) - verticalExtend
+          return `M${start.x},${start.y} L${start.x},${topY} L${sideX},${topY} L${sideX},${end.y + verticalExtend} L${end.x},${end.y + verticalExtend} L${end.x},${end.y}`
+        } else if (conn.fromAnchor === 'bottom' && conn.toAnchor === 'top') {
+          // 从上方节点底部到下方节点顶部（向下回溯，但需要绕行）
+          const bottomY = Math.max(start.y, end.y) + verticalExtend
+          return `M${start.x},${start.y} L${start.x},${bottomY} L${sideX},${bottomY} L${sideX},${end.y - verticalExtend} L${end.x},${end.y - verticalExtend} L${end.x},${end.y}`
+        } else if (conn.fromAnchor === 'top' && conn.toAnchor === 'top') {
+          // 两个都是顶部出口
+          const topY = Math.min(start.y, end.y) - verticalExtend
+          return `M${start.x},${start.y} L${start.x},${topY} L${end.x},${topY} L${end.x},${end.y}`
+        } else {
+          // 两个都是底部出口
+          const bottomY = Math.max(start.y, end.y) + verticalExtend
+          return `M${start.x},${start.y} L${start.x},${bottomY} L${end.x},${bottomY} L${end.x},${end.y}`
+        }
+      } else {
+        // 正常的垂直连接：先垂直再水平再垂直
+        const midY = (start.y + end.y) / 2 + offset.y
+        return `M${start.x},${start.y} L${start.x},${midY} L${end.x},${midY} L${end.x},${end.y}`
+      }
     } else if (isStartHorizontal) {
       // 起点水平，终点垂直
       return `M${start.x},${start.y} L${end.x},${start.y} L${end.x},${end.y}`
@@ -2011,10 +2062,30 @@ const getBendControlPoint = (conn: Connection) => {
     const midY = (start.y + end.y) / 2
     return { x: midX, y: midY, direction: 'horizontal' }
   } else if (!isStartHorizontal && !isEndHorizontal) {
-    // 控制点在中间水平线上
-    const midX = (start.x + end.x) / 2
-    const midY = (start.y + end.y) / 2 + offset.y
-    return { x: midX, y: midY, direction: 'vertical' }
+    // 检测是否需要绕行（与 getConnectionPath 保持一致）
+    const needsDetour =
+      (conn.fromAnchor === 'top' && end.y > start.y) ||
+      (conn.fromAnchor === 'bottom' && end.y < start.y)
+
+    const sameSideAnchors =
+      (conn.fromAnchor === 'top' && conn.toAnchor === 'top') ||
+      (conn.fromAnchor === 'bottom' && conn.toAnchor === 'bottom')
+
+    if (needsDetour || sameSideAnchors) {
+      // 回溯连接：控制点在侧边线上，可以水平拖动调整绕行距离
+      const loopOffset = 50 + offset.x
+      const goRight = start.x <= end.x + fromNode.width / 2
+      const sideX = goRight
+        ? Math.max(fromNode.x + fromNode.width, toNode.x + toNode.width) + loopOffset
+        : Math.min(fromNode.x, toNode.x) - loopOffset
+      const midY = (start.y + end.y) / 2
+      return { x: sideX, y: midY, direction: 'horizontal' }
+    } else {
+      // 正常垂直连接：控制点在中间水平线上
+      const midX = (start.x + end.x) / 2
+      const midY = (start.y + end.y) / 2 + offset.y
+      return { x: midX, y: midY, direction: 'vertical' }
+    }
   }
   return null
 }
@@ -2356,28 +2427,13 @@ const onCanvasMouseUp = (e: MouseEvent) => {
     }
 
     if (targetNode && targetEdgePoint) {
-      // 起始节点使用中心点（不使用自定义偏移）
-      const startNode = connectionStart.value.node
-      const startCenterX = startNode.x + startNode.width / 2
-      const startCenterY = startNode.y + startNode.height / 2
-      const targetCenterX = targetNode.x + targetNode.width / 2
-      const targetCenterY = targetNode.y + targetNode.height / 2
-      const dx = targetCenterX - startCenterX
-      const dy = targetCenterY - startCenterY
-
-      // 根据方向确定起始锚点（中心点的哪个方向）
-      let startAnchor: string
-      if (Math.abs(dx) > Math.abs(dy)) {
-        startAnchor = dx > 0 ? 'right' : 'left'
-      } else {
-        startAnchor = dy > 0 ? 'bottom' : 'top'
-      }
+      // 使用用户选择的起始锚点，而不是重新计算
+      const startAnchor = connectionStart.value.anchor.position
 
       const newConn: Connection = {
         id: generateId(),
         fromNode: connectionStart.value.node.id,
-        fromAnchor: startAnchor,
-        // 起始点不使用自定义偏移，使用固定中心点
+        fromAnchor: startAnchor,  // 保留用户选择的起始锚点
         toNode: targetNode.id,
         toAnchor: targetEdgePoint.position,
         toAnchorOffset: targetEdgePoint.offset,  // 终点使用自定义偏移
