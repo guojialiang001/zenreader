@@ -13,6 +13,41 @@
         </button>
       </div>
     </div>
+
+    <!-- Remote file editor modal -->
+    <div v-if="fileEditorOpen" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div class="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-full max-w-4xl overflow-hidden">
+        <div class="px-4 py-3 bg-slate-900 border-b border-slate-700 flex items-center justify-between gap-3">
+          <div class="text-slate-200 text-sm truncate">Edit: {{ fileEditorName }}</div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="fileEditorOpen = false"
+              class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              @click="saveFileEditor"
+              :disabled="fileEditorSaving"
+              :class="[
+                'px-3 py-1.5 rounded text-sm transition-colors',
+                fileEditorSaving ? 'bg-slate-600 text-slate-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-white'
+              ]"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+        <div class="p-4">
+          <textarea
+            v-model="fileEditorContent"
+            class="w-full h-96 bg-slate-900 border border-slate-700 rounded text-slate-200 font-mono text-sm p-3 focus:outline-none focus:border-blue-500"
+            spellcheck="false"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+
     <div class="max-w-6xl mx-auto">
       <!-- 头部 -->
       <div class="flex items-center justify-between mb-6">
@@ -39,6 +74,19 @@
             断开连接
           </button>
           <button
+              v-if="isConnected || fileManagerOpen"
+              @click="toggleFileManager"
+              class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
+          >
+            {{ fileManagerOpen ? 'Hide Files' : 'Files' }}
+          </button>
+          <button
+              @click="showNewSessionForm = true"
+              class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
+          >
+            New Session
+          </button>
+          <button
               @click="clearTerminal"
               class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
           >
@@ -47,8 +95,31 @@
         </div>
       </div>
 
+      <!-- Session tabs -->
+      <div v-if="sessions.length" class="mb-4 flex flex-wrap gap-2">
+        <div v-for="s in sessions" :key="s.id" class="flex items-center">
+          <button
+            @click="setActiveSession(s.id)"
+            :class="[
+              'px-3 py-1.5 rounded text-sm transition-colors border flex items-center gap-2 max-w-xs',
+              activeSessionId === s.id ? 'bg-white/20 text-white border-slate-500' : 'bg-white/10 text-slate-300 border-slate-700 hover:bg-white/15'
+            ]"
+          >
+            <span class="truncate">{{ s.label }}</span>
+            <span :class="['text-xs', s.connected ? 'text-green-400' : 'text-slate-500']">●</span>
+          </button>
+          <button
+            @click="closeSession(s.id)"
+            class="ml-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300"
+            title="Close session"
+          >
+            x
+          </button>
+        </div>
+      </div>
+
       <!-- 连接配置表单 -->
-      <div v-if="!isConnected" class="mb-6">
+      <div v-if="showNewSessionForm" class="mb-6">
         <div class="bg-slate-800/50 backdrop-blur rounded-lg p-4 md:p-6 border border-slate-700">
           <h2 class="text-xl md:text-2xl font-bold text-white mb-4 md:mb-6">SSH 连接配置</h2>
 
@@ -95,7 +166,7 @@
                   class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
               />
             </div>
-            <div>
+            <div v-if="connectionConfig.authType === 'password'">
               <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">密码</label>
               <input
                   v-model="connectionConfig.password"
@@ -105,9 +176,127 @@
               />
             </div>
           </div>
+
+          <!-- Auth selection (password / key) -->
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <div>
+              <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Auth Type</label>
+              <select
+                v-model="connectionConfig.authType"
+                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              >
+                <option value="password">Password</option>
+                <option value="key">Private Key</option>
+              </select>
+            </div>
+            <div v-if="connectionConfig.authType === 'key'" class="md:col-span-2 lg:col-span-3">
+              <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Passphrase (optional)</label>
+              <input
+                v-model="connectionConfig.passphrase"
+                type="password"
+                placeholder="Passphrase"
+                class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+              />
+            </div>
+          </div>
+          <div v-if="connectionConfig.authType === 'key'" class="mt-4">
+            <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Private Key</label>
+            <textarea
+              v-model="connectionConfig.keyContent"
+              placeholder="Paste your private key here (OpenSSH format)"
+              class="w-full h-40 px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm font-mono"
+              spellcheck="false"
+            ></textarea>
+          </div>
+
+          <!-- Jump host (bastion) -->
+          <div class="mt-6 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-slate-200 font-medium">Jump Host (Bastion)</div>
+              <label class="flex items-center gap-2 text-slate-300 text-sm">
+                <input type="checkbox" v-model="connectionConfig.jump.enabled" class="accent-blue-500" />
+                Enable
+              </label>
+            </div>
+
+            <div v-if="connectionConfig.jump.enabled" class="mt-4 space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Host</label>
+                  <input
+                    v-model="connectionConfig.jump.hostname"
+                    type="text"
+                    placeholder="jump.example.com"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  />
+                </div>
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Port</label>
+                  <input
+                    v-model="connectionConfig.jump.port"
+                    type="number"
+                    placeholder="22"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  />
+                </div>
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">User</label>
+                  <input
+                    v-model="connectionConfig.jump.username"
+                    type="text"
+                    placeholder="root"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  />
+                </div>
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Auth Type</label>
+                  <select
+                    v-model="connectionConfig.jump.authType"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  >
+                    <option value="password">Password</option>
+                    <option value="key">Private Key</option>
+                  </select>
+                </div>
+              </div>
+
+              <div v-if="connectionConfig.jump.authType === 'password'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                <div class="md:col-span-2 lg:col-span-2">
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Password</label>
+                  <input
+                    v-model="connectionConfig.jump.password"
+                    type="password"
+                    placeholder="Password"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  />
+                </div>
+              </div>
+
+              <div v-else class="space-y-4">
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Passphrase (optional)</label>
+                  <input
+                    v-model="connectionConfig.jump.passphrase"
+                    type="password"
+                    placeholder="Passphrase"
+                    class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-base md:text-lg"
+                  />
+                </div>
+                <div>
+                  <label class="block text-base md:text-lg font-medium text-slate-300 mb-3">Private Key</label>
+                  <textarea
+                    v-model="connectionConfig.jump.keyContent"
+                    placeholder="Paste jump host private key here"
+                    class="w-full h-32 px-4 py-3 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm font-mono"
+                    spellcheck="false"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="mt-6 flex flex-col sm:flex-row gap-3 md:gap-4">
             <button
-                v-if="!isConnected"
                 @click="connect"
                 :disabled="!canConnect"
                 :class="['px-6 py-3 md:px-8 md:py-4 rounded-lg font-bold text-lg md:text-xl transition-colors', canConnect ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-slate-600 text-slate-400 cursor-not-allowed']"
@@ -120,12 +309,19 @@
             >
               重置
             </button>
+            <button
+                v-if="sessions.length"
+                @click="showNewSessionForm = false"
+                class="px-6 py-3 md:px-8 md:py-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors text-lg md:text-xl font-bold"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
 
       <!-- 终端容器 -->
-      <div v-if="isConnected" class="bg-black rounded-lg shadow-2xl border border-slate-700 overflow-hidden">
+      <div v-if="activeSessionId" class="bg-black rounded-lg shadow-2xl border border-slate-700 overflow-hidden">
         <!-- 终端标题栏 -->
         <div class="flex items-center justify-between px-4 py-2 bg-slate-800 border-b border-slate-700">
           <div class="flex items-center gap-2">
@@ -135,7 +331,7 @@
               <div class="w-3 h-3 rounded-full bg-green-500"></div>
             </div>
             <span class="text-sm text-slate-300">
-              ssh {{ connectionConfig.username }}@{{ connectionConfig.hostname }}:{{ connectionConfig.port }}
+              ssh {{ activeSession?.config.username }}@{{ activeSession?.config.hostname }}:{{ activeSession?.config.port }}
             </span>
           </div>
           <div class="text-sm md:text-base text-slate-500">
@@ -143,8 +339,61 @@
           </div>
         </div>
 
-        <!-- 交互式终端内容 -->
-        <div ref="terminalContainer" class="h-96 w-full text-sm font-mono overflow-hidden"></div>
+        <!-- Terminal + optional SFTP file manager -->
+        <div class="flex h-96 w-full">
+          <div v-if="fileManagerOpen" class="w-80 bg-slate-900 border-r border-slate-700 flex flex-col">
+            <div class="p-2 border-b border-slate-700 flex flex-wrap items-center gap-2">
+              <button @click="fileManagerGoUp" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Up</button>
+              <button @click="refreshFileManager" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Refresh</button>
+              <button @click="openUploadDialog" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Upload</button>
+              <button @click="createFolder" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">New Folder</button>
+              <button @click="createFile" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">New File</button>
+            </div>
+            <div class="p-2 border-b border-slate-700">
+              <input
+                v-model="fileManagerPath"
+                @keyup.enter="refreshFileManager"
+                class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-slate-200 text-xs"
+              />
+            </div>
+            <div class="flex-1 overflow-auto">
+              <div v-if="fileManagerLoading" class="p-3 text-xs text-slate-400">Loading...</div>
+              <div v-else>
+                <div
+                  v-for="entry in fileManagerEntries"
+                  :key="entry.path"
+                  @click="openFileEntry(entry)"
+                  @contextmenu.prevent="selectFileEntry(entry)"
+                  :class="[
+                    'px-2 py-1 text-xs cursor-pointer flex items-center justify-between gap-2',
+                    fileManagerSelected && fileManagerSelected.path === entry.path ? 'bg-slate-700/60' : 'hover:bg-slate-800'
+                  ]"
+                >
+                  <span class="truncate text-slate-200">
+                    {{ entry.is_dir ? '[DIR]' : '[FILE]' }} {{ entry.name }}
+                  </span>
+                  <span class="text-slate-400 whitespace-nowrap">
+                    {{ entry.is_dir ? '' : formatBytes(entry.size) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="p-2 border-t border-slate-700 flex items-center gap-2">
+              <button @click="downloadSelectedEntry" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Download</button>
+              <button @click="openEditorForSelected" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Edit</button>
+              <button @click="renameSelectedEntry" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">Rename</button>
+              <button @click="deleteSelectedEntry" class="px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-xs">Delete</button>
+            </div>
+            <input ref="fileUploadInput" type="file" class="hidden" multiple @change="handleUploadChange" />
+          </div>
+          <div
+            v-for="s in sessions"
+            :key="s.id"
+            v-show="activeSessionId === s.id"
+            :ref="(el) => setTerminalContainerEl(s.id, el)"
+            class="flex-1 text-sm font-mono overflow-hidden"
+          ></div>
+        </div>
         
         <!-- VIM模式状态栏 -->
         <div v-if="vimModeActive" class="px-4 py-1 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
@@ -224,10 +473,121 @@ declare global {
 }
 
 const terminalContainer = ref<HTMLElement>()
+const terminalContainers = new Map<string, HTMLElement>()
+
+function setTerminalContainerEl(sessionId: string, el: any): void {
+  if (!sessionId) return
+  const node = el as HTMLElement | null
+  if (node) terminalContainers.set(sessionId, node)
+  else terminalContainers.delete(sessionId)
+}
 const currentTime = ref('')
 const isConnected = ref(false)
 const errorMessage = ref('')
 const showError = ref(false)
+
+// Keep a local reference to the active terminal manager instance.
+// (window.sshTerminalManager is still set for backward compatibility)
+const activeTerminalManager = ref<any | null>(null)
+
+type SessionConfig = {
+  hostname: string
+  port: number
+  username: string
+  password?: string
+  authType?: 'password' | 'key'
+  keyContent?: string
+  passphrase?: string
+  jump?: {
+    enabled: boolean
+    hostname: string
+    port: number
+    username: string
+    password?: string
+    authType?: 'password' | 'key'
+    keyContent?: string
+    passphrase?: string
+  }
+}
+
+type FileManagerEntry = {
+  name: string
+  path: string
+  is_dir: boolean
+  size?: number
+  mtime?: number
+  mode?: number
+  uid?: number
+  gid?: number
+}
+
+type FileManagerState = {
+  path: string
+  entries: FileManagerEntry[]
+  loading: boolean
+  selected: FileManagerEntry | null
+}
+
+type SshSession = {
+  id: string
+  label: string
+  config: SessionConfig
+  connected: boolean
+  manager: any | null
+  fileManager: FileManagerState
+}
+
+const sessions = ref<SshSession[]>([])
+const activeSessionId = ref<string>('')
+const showNewSessionForm = ref(true)
+
+const activeSession = computed(() => {
+  return sessions.value.find(s => s.id === activeSessionId.value) || null
+})
+
+// File manager visibility is per-page; state is stored per session/tab.
+const fileManagerOpen = ref(false)
+const fileManagerPath = computed({
+  get: () => activeSession.value?.fileManager.path ?? '~',
+  set: (v: any) => {
+    if (activeSession.value) activeSession.value.fileManager.path = String(v ?? '')
+  }
+})
+const fileManagerEntries = computed({
+  get: () => activeSession.value?.fileManager.entries ?? [],
+  set: (v: any) => {
+    if (!activeSession.value) return
+    activeSession.value.fileManager.entries = Array.isArray(v) ? v : []
+  }
+})
+const fileManagerLoading = computed({
+  get: () => activeSession.value?.fileManager.loading ?? false,
+  set: (v: any) => {
+    if (activeSession.value) activeSession.value.fileManager.loading = !!v
+  }
+})
+const fileManagerSelected = computed({
+  get: () => activeSession.value?.fileManager.selected ?? null,
+  set: (v: any) => {
+    if (activeSession.value) activeSession.value.fileManager.selected = v
+  }
+})
+const fileUploadInput = ref<HTMLInputElement | null>(null)
+const fileUploadSessionId = ref<string>('')
+
+// Simple remote text editor (optional convenience)
+const fileEditorOpen = ref(false)
+const fileEditorSessionId = ref<string>('')
+const fileEditorPath = ref('')
+const fileEditorName = ref('')
+const fileEditorContent = ref('')
+const fileEditorSaving = ref(false)
+
+watch(fileEditorOpen, (open) => {
+  if (!open) {
+    fileEditorSessionId.value = ''
+  }
+})
 
 // VIM模式类型定义
 type VimModeType = 'NORMAL' | 'INSERT' | 'COMMAND' | 'VISUAL' | 'VISUAL_LINE' | 'VISUAL_BLOCK' | 'REPLACE'
@@ -272,7 +632,20 @@ const connectionConfig = ref({
   hostname: '',
   port: 22,
   username: '',
-  password: ''
+  authType: 'password' as 'password' | 'key',
+  password: '',
+  keyContent: '',
+  passphrase: '',
+  jump: {
+    enabled: false,
+    hostname: '',
+    port: 22,
+    username: '',
+    authType: 'password' as 'password' | 'key',
+    password: '',
+    keyContent: '',
+    passphrase: ''
+  }
 })
 
 
@@ -301,9 +674,24 @@ const envConfig = computed(() => {
 
 // 计算属性：检查是否可以连接
 const canConnect = computed(() => {
-  return connectionConfig.value.hostname.trim() !== '' &&
-      connectionConfig.value.username.trim() !== '' &&
-      connectionConfig.value.password.trim() !== ''
+  const cfg: any = connectionConfig.value
+  const baseOk = (cfg.hostname || '').trim() !== '' && (cfg.username || '').trim() !== ''
+
+  const authOk =
+    cfg.authType === 'key'
+      ? (cfg.keyContent || '').trim() !== ''
+      : (cfg.password || '').trim() !== ''
+
+  const jump = cfg.jump
+  const jumpOk = !jump?.enabled || (
+    (jump.hostname || '').trim() !== '' &&
+    (jump.username || '').trim() !== '' &&
+    (jump.authType === 'key'
+      ? (jump.keyContent || '').trim() !== ''
+      : (jump.password || '').trim() !== '')
+  )
+
+  return baseOk && authOk && jumpOk
 })
 
 
@@ -344,65 +732,519 @@ function showErrorMessage(message: string) {
   }, 3000)
 }
 
-// 连接方法
-async function connect() {
-  if (!canConnect.value) {
-    showErrorMessage('请填写所有必填字段（服务器地址、用户名、密码）')
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = bytes
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64 || '')
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
+function toggleFileManager(): void {
+  fileManagerOpen.value = !fileManagerOpen.value
+  nextTick(() => {
+    try {
+      activeTerminalManager.value?.fitTerminal?.()
+    } catch {
+      // ignore
+    }
+  })
+  if (fileManagerOpen.value) {
+    refreshFileManager()
+  }
+}
+
+async function refreshFileManager(): Promise<void> {
+  const session = activeSession.value
+  if (!session) return
+  await refreshFileManagerForSession(session)
+}
+
+async function refreshFileManagerForSession(session: SshSession): Promise<void> {
+  const tm = session.manager
+  if (!tm) return
+
+  const state = session.fileManager
+  state.loading = true
+  try {
+    const result = await tm.sftpList(state.path)
+    state.path = result.path
+    state.entries = result.entries || []
+    state.selected = null
+  } catch (e: any) {
+    showErrorMessage(`SFTP list failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+function fileManagerGoUp(): void {
+  const session = activeSession.value
+  if (!session) return
+  const state = session.fileManager
+
+  const p = (state.path || '').trim()
+  if (!p || p === '/' ) return
+  const normalized = p.endsWith('/') && p !== '/' ? p.slice(0, -1) : p
+  const idx = normalized.lastIndexOf('/')
+  state.path = idx <= 0 ? '/' : normalized.slice(0, idx)
+  refreshFileManagerForSession(session)
+}
+
+function selectFileEntry(entry: any): void {
+  const session = activeSession.value
+  if (!session) return
+  session.fileManager.selected = entry
+}
+
+async function openFileEntry(entry: any): Promise<void> {
+  const session = activeSession.value
+  if (!session || !entry) return
+
+  session.fileManager.selected = entry
+  if (entry.is_dir) {
+    session.fileManager.path = entry.path
+    await refreshFileManagerForSession(session)
+  }
+}
+
+function posixDirname(p: string): string {
+  const s = String(p || '').replace(/\/+$/, '')
+  const idx = s.lastIndexOf('/')
+  if (idx <= 0) return '/'
+  return s.slice(0, idx)
+}
+
+function posixJoin(baseDir: string, name: string): string {
+  const base = String(baseDir || '').trim()
+  const n = String(name || '').trim()
+  if (!base) return n
+  if (!n) return base
+  if (n.startsWith('/') || n.startsWith('~')) return n
+  if (base === '~') return `~/${n.replace(/^\/+/, '')}`
+  return `${base.replace(/\/+$/, '')}/${n.replace(/^\/+/, '')}`
+}
+
+async function createFolder(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const name = window.prompt('New folder name')
+  if (!name) return
+
+  const state = session.fileManager
+  const target = posixJoin(state.path, name)
+  try {
+    state.loading = true
+    await tm.sftpMkdir(target, true)
+    await refreshFileManagerForSession(session)
+  } catch (e: any) {
+    showErrorMessage(`mkdir failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function createFile(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const name = window.prompt('New file name')
+  if (!name) return
+
+  const state = session.fileManager
+  const target = posixJoin(state.path, name)
+  try {
+    state.loading = true
+    await tm.sftpWrite(target, 0, '', true)
+    await refreshFileManagerForSession(session)
+    const created = state.entries.find(e => e.name === name || e.path === target)
+    if (created) state.selected = created
+  } catch (e: any) {
+    showErrorMessage(`create file failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function renameSelectedEntry(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const state = session.fileManager
+  const entry = state.selected
+  if (!entry) return
+
+  const newNameOrPath = window.prompt('Rename to', entry.name || '')
+  if (!newNameOrPath) return
+
+  const parent = posixDirname(entry.path)
+  const newPath = posixJoin(parent, newNameOrPath)
+  if (!newPath || newPath === entry.path) return
+
+  try {
+    state.loading = true
+    await tm.sftpRename(entry.path, newPath)
+    await refreshFileManagerForSession(session)
+    const renamed = state.entries.find(e => e.path === newPath)
+    if (renamed) state.selected = renamed
+  } catch (e: any) {
+    showErrorMessage(`rename failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function deleteSelectedEntry(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const state = session.fileManager
+  const entry = state.selected
+  if (!entry) return
+
+  const ok = window.confirm(
+    entry.is_dir
+      ? `Delete folder recursively?\n${entry.path}`
+      : `Delete file?\n${entry.path}`
+  )
+  if (!ok) return
+
+  try {
+    state.loading = true
+    await tm.sftpRm(entry.path, !!entry.is_dir)
+    await refreshFileManagerForSession(session)
+  } catch (e: any) {
+    showErrorMessage(`delete failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function downloadSelectedEntry(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const state = session.fileManager
+  const entry = state.selected
+  if (!entry || entry.is_dir) return
+
+  try {
+    state.loading = true
+    const chunks: Uint8Array[] = []
+    let offset = 0
+    const chunkSize = 65536
+    while (true) {
+      const res = await tm.sftpRead(entry.path, offset, chunkSize)
+      const bytes = base64ToUint8Array(res.chunk_base64 || '')
+      if (bytes.length) chunks.push(bytes)
+      offset += bytes.length
+      if (res.eof || bytes.length === 0) break
+    }
+
+    const blob = new Blob(chunks, { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = entry.name || 'download'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    showErrorMessage(`Download failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+function openUploadDialog(): void {
+  // Bind the upload dialog to the session that opened it.
+  fileUploadSessionId.value = activeSessionId.value
+  fileUploadInput.value?.click()
+}
+
+async function handleUploadChange(evt: Event): Promise<void> {
+  const input = evt.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) {
+    fileUploadSessionId.value = ''
     return
   }
 
-  // 保存当前配置
-  saveConfig()
+  const sessionId = fileUploadSessionId.value || activeSessionId.value
+  const session = sessions.value.find(s => s.id === sessionId) || null
+  const tm = session?.manager
+  if (!session || !tm) {
+    showErrorMessage('Upload failed: session is not connected')
+    fileUploadSessionId.value = ''
+    input.value = ''
+    return
+  }
 
   try {
-    // 交互式终端模式 - 先设置连接状态，让终端容器渲染
-    isConnected.value = true
+    const state = session.fileManager
+    state.loading = true
+    for (const file of Array.from(input.files)) {
+      const buffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+      const remotePath = posixJoin(state.path, file.name)
 
-    // 等待DOM更新，确保终端容器已渲染
+      const chunkSize = 48 * 1024
+      let offset = 0
+      while (offset < bytes.length) {
+        const chunk = bytes.subarray(offset, offset + chunkSize)
+        const b64 = uint8ArrayToBase64(chunk)
+        await tm.sftpWrite(remotePath, offset, b64, offset === 0)
+        offset += chunk.length
+      }
+    }
+
+    await refreshFileManagerForSession(session)
+  } catch (e: any) {
+    showErrorMessage(`Upload failed: ${e?.message || String(e)}`)
+  } finally {
+    session.fileManager.loading = false
+    // Allow re-uploading the same file
+    input.value = ''
+    fileUploadSessionId.value = ''
+  }
+}
+
+async function openEditorForSelected(): Promise<void> {
+  const session = activeSession.value
+  const tm = session?.manager
+  if (!session || !tm) return
+
+  const state = session.fileManager
+  const entry = state.selected
+  if (!entry || entry.is_dir) return
+
+  try {
+    state.loading = true
+    const stat = await tm.sftpStat(entry.path)
+    if (stat?.size > 1024 * 1024) {
+      showErrorMessage('File too large to edit in browser (limit 1MB). Use vim in terminal or download it.')
+      return
+    }
+
+    const chunks: Uint8Array[] = []
+    let offset = 0
+    const chunkSize = 65536
+    while (true) {
+      const res = await tm.sftpRead(entry.path, offset, chunkSize)
+      const bytes = base64ToUint8Array(res.chunk_base64 || '')
+      if (bytes.length) chunks.push(bytes)
+      offset += bytes.length
+      if (res.eof || bytes.length === 0) break
+    }
+
+    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0)
+    const merged = new Uint8Array(totalLen)
+    let pos = 0
+    for (const c of chunks) {
+      merged.set(c, pos)
+      pos += c.length
+    }
+
+    const text = new TextDecoder('utf-8').decode(merged)
+    fileEditorSessionId.value = session.id
+    fileEditorPath.value = entry.path
+    fileEditorName.value = entry.name || entry.path
+    fileEditorContent.value = text
+    fileEditorOpen.value = true
+  } catch (e: any) {
+    showErrorMessage(`Open editor failed: ${e?.message || String(e)}`)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function saveFileEditor(): Promise<void> {
+  const session = sessions.value.find(s => s.id === fileEditorSessionId.value) || null
+  const tm = session?.manager
+  if (!fileEditorOpen.value || !fileEditorPath.value) return
+  if (!session || !tm) {
+    showErrorMessage('Save failed: editor session is not connected')
+    return
+  }
+
+  try {
+    fileEditorSaving.value = true
+    const bytes = new TextEncoder().encode(fileEditorContent.value || '')
+
+    const chunkSize = 48 * 1024
+    let offset = 0
+    while (offset < bytes.length) {
+      const chunk = bytes.subarray(offset, offset + chunkSize)
+      const b64 = uint8ArrayToBase64(chunk)
+      await tm.sftpWrite(fileEditorPath.value, offset, b64, offset === 0)
+      offset += chunk.length
+    }
+
+    fileEditorOpen.value = false
+    fileEditorSessionId.value = ''
+    await refreshFileManagerForSession(session)
+  } catch (e: any) {
+    showErrorMessage(`Save failed: ${e?.message || String(e)}`)
+  } finally {
+    fileEditorSaving.value = false
+  }
+}
+
+function setActiveSession(id: string): void {
+  activeSessionId.value = id
+  const session = sessions.value.find(s => s.id === id) || null
+
+  activeTerminalManager.value = session?.manager || null
+  // Backward-compat handle for existing code paths
+  window.sshTerminalManager = activeTerminalManager.value
+
+  isConnected.value = !!session?.connected
+
+  // File manager targets the active session's SSH connection
+  if (fileManagerOpen.value && activeTerminalManager.value) {
+    // Avoid spamming SFTP list on every tab switch; refresh on-demand.
+    if (!session?.fileManager.entries?.length) {
+      refreshFileManager()
+    }
+  }
+
+  nextTick(() => {
+    try {
+      session?.manager?.fitTerminal?.()
+      session?.manager?.focusTerminal?.()
+    } catch {
+      // ignore
+    }
+  })
+}
+
+function closeSession(id: string): void {
+  const idx = sessions.value.findIndex(s => s.id === id)
+  if (idx === -1) return
+
+  const session = sessions.value[idx]
+  try {
+    session.manager?.disconnect?.()
+  } catch {
+    // ignore
+  }
+
+  sessions.value.splice(idx, 1)
+
+  if (activeSessionId.value === id) {
+    const next = sessions.value[idx] || sessions.value[idx - 1] || sessions.value[0] || null
+    setActiveSession(next?.id || '')
+  }
+
+  if (sessions.value.length === 0) {
+    showNewSessionForm.value = true
+  }
+}
+
+// 连接方法
+async function connect() {
+  if (!canConnect.value) {
+    showErrorMessage('请填写所有必填字段（服务器地址、用户名、密码或私钥；如启用跳板机也需填写）')
+    return
+  }
+
+  saveConfig()
+
+  const uiCfg: any = connectionConfig.value
+  const authType: 'password' | 'key' = uiCfg.authType === 'key' ? 'key' : 'password'
+
+  const cfg: SessionConfig = {
+    hostname: uiCfg.hostname.trim(),
+    port: Number(uiCfg.port) || 22,
+    username: uiCfg.username.trim(),
+    authType,
+    password: authType === 'password' ? uiCfg.password : undefined,
+    keyContent: authType === 'key' ? uiCfg.keyContent : undefined,
+    passphrase: authType === 'key' ? (uiCfg.passphrase || undefined) : undefined
+  }
+
+  const jumpCfg = uiCfg.jump
+  if (jumpCfg?.enabled) {
+    const jumpAuth: 'password' | 'key' = jumpCfg.authType === 'key' ? 'key' : 'password'
+    cfg.jump = {
+      enabled: true,
+      hostname: (jumpCfg.hostname || '').trim(),
+      port: Number(jumpCfg.port) || 22,
+      username: (jumpCfg.username || '').trim(),
+      authType: jumpAuth,
+      password: jumpAuth === 'password' ? jumpCfg.password : undefined,
+      keyContent: jumpAuth === 'key' ? jumpCfg.keyContent : undefined,
+      passphrase: jumpAuth === 'key' ? (jumpCfg.passphrase || undefined) : undefined
+    }
+  }
+
+  const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const label = `${cfg.username}@${cfg.hostname}:${cfg.port}`
+
+  const session: SshSession = {
+    id,
+    label,
+    config: cfg,
+    connected: false,
+    manager: null,
+    fileManager: {
+      path: '~',
+      entries: [],
+      loading: false,
+      selected: null
+    }
+  }
+
+  sessions.value.push(session)
+  activeSessionId.value = id
+  showNewSessionForm.value = false
+
+  // Active-session UI mirrors the selected session
+  isConnected.value = false
+  activeTerminalManager.value = null
+  window.sshTerminalManager = null
+
+  try {
     await nextTick()
-
-    // 检查终端容器是否已准备好
-    if (!terminalContainer.value) {
-      console.error('终端容器未找到')
-      throw new Error('终端容器未找到，请确保终端界面已加载')
-    }
-
-    // 建立SSH连接，SSHTerminal类会自动初始化终端
-    await connectRealSSH()
-  } catch (error) {
+    await connectSession(session)
+    setActiveSession(id)
+  } catch (error: any) {
     console.error('SSH连接失败:', error)
-    // 重置连接状态
-    isConnected.value = false
-
-    // 显示用户友好的错误消息
-    let userFriendlyMessage = 'SSH连接失败'
-
-    if (error.message.includes('hostname')) {
-      userFriendlyMessage = '连接失败：服务器地址格式错误'
-    } else if (error.message.includes('username')) {
-      userFriendlyMessage = '连接失败：用户名格式错误'
-    } else if (error.message.includes('password')) {
-      userFriendlyMessage = '连接失败：密码格式错误'
-    } else if (error.message.includes('Field required')) {
-      userFriendlyMessage = '连接失败：缺少必填字段，请检查服务器地址、用户名和密码'
-    } else if (error.message.includes('连接超时')) {
-      userFriendlyMessage = '连接失败：连接超时，请检查服务器地址和端口'
-    } else if (error.message.includes('WebSocket')) {
-      userFriendlyMessage = '连接失败：无法连接到服务器，请检查服务器状态'
-    } else {
-      userFriendlyMessage = `连接失败：${error.message}`
+    sessions.value = sessions.value.filter(s => s.id !== id)
+    if (activeSessionId.value === id) {
+      activeSessionId.value = sessions.value[0]?.id || ''
+    }
+    if (!activeSessionId.value) {
+      showNewSessionForm.value = true
     }
 
-    showErrorMessage(userFriendlyMessage)
-
-    // 尝试通过终端管理器显示错误信息
-    const terminal = window.sshTerminalManager?.getTerminal()
-    if (terminal) {
-      terminal.write(`\r\n\x1b[31m${userFriendlyMessage}\x1b[0m\r\n`)
-    } else {
-      // 如果没有终端，在控制台显示错误
-      console.error('连接失败详情:', error.message)
-    }
+    showErrorMessage(`连接失败：${error?.message || String(error)}`)
   }
 }
 
@@ -1032,6 +1874,17 @@ class SSHTerminal {
   private websocketDomains: string[] = []
   private currentDomainIndex = 0
 
+  // When enabled, xterm sends every keystroke to the backend PTY (full interactive terminal).
+  // This is required for vim/nano/top and proper shell line-editing.
+  private useRawInput = (import.meta.env.VITE_SSH_RAW_INPUT || 'true') !== 'false'
+
+  // Generic request/response helper for non-terminal actions (SFTP, etc).
+  private pendingRequests = new Map<string, {
+    resolve: (value: any) => void
+    reject: (reason?: any) => void
+    timer: ReturnType<typeof setTimeout>
+  }>()
+
   // 命令历史相关
   private commandHistory: string[] = []
   private historyIndex = -1
@@ -1088,8 +1941,7 @@ class SSHTerminal {
       this.websocketDomains.push(import.meta.env.VITE_SSH_WEBSOCKET_URL || 'ws://localhost:8002/ws/ssh')
     }
 
-    // 自动连接
-    this.connect()
+    // NOTE: Do not auto-connect from constructor; caller controls connect() lifecycle.
   }
 
   // 设置VIM回调函数的方法
@@ -1306,6 +2158,16 @@ class SSHTerminal {
           return
         }
 
+        // Raw PTY passthrough mode: forward every keystroke to the backend.
+        // This enables full interactive SSH (vim/nano/top, shell readline, etc).
+        if (this.useRawInput) {
+          this.ws.send(JSON.stringify({
+            type: 'input',
+            data: { input: data }
+          }))
+          return
+        }
+
         // ==================== VIM模式输入处理 ====================
         // 如果处于VIM模式，将所有输入路由到VIM编辑器
         if (this.isVimMode && this.vimEditor) {
@@ -1518,10 +2380,6 @@ class SSHTerminal {
       }
     })
 
-    // 处理窗口大小调整
-    window.addEventListener('resize', () => {
-      this.resizeTerminal()
-    })
   }
 
   private resizeTerminal(): void {
@@ -1736,6 +2594,78 @@ class SSHTerminal {
     }
   }
 
+  private createRequestId(): string {
+    try {
+      // Modern browsers
+      // @ts-ignore
+      if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+        // @ts-ignore
+        return crypto.randomUUID()
+      }
+    } catch {
+      // ignore
+    }
+    return `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  }
+
+  public request(type: string, data: any, timeoutMs: number = 15000): Promise<any> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('WebSocket not connected'))
+    }
+
+    const requestId = this.createRequestId()
+    this.ws.send(JSON.stringify({
+      type,
+      request_id: requestId,
+      data
+    }))
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(requestId)
+        reject(new Error('Request timeout'))
+      }, timeoutMs)
+
+      this.pendingRequests.set(requestId, { resolve, reject, timer })
+    })
+  }
+
+  // ---- SFTP helpers (request/response over the same WS) ----
+  public async sftpList(path: string): Promise<{ path: string; entries: any[] }> {
+    const resp = await this.request('sftp_list', { path })
+    return resp.data
+  }
+
+  public async sftpStat(path: string): Promise<any> {
+    const resp = await this.request('sftp_stat', { path })
+    return resp.data
+  }
+
+  public async sftpMkdir(path: string, parents: boolean = true): Promise<any> {
+    const resp = await this.request('sftp_mkdir', { path, parents })
+    return resp.data
+  }
+
+  public async sftpRename(oldPath: string, newPath: string): Promise<any> {
+    const resp = await this.request('sftp_rename', { oldPath, newPath })
+    return resp.data
+  }
+
+  public async sftpRm(path: string, recursive: boolean = false): Promise<any> {
+    const resp = await this.request('sftp_rm', { path, recursive })
+    return resp.data
+  }
+
+  public async sftpRead(path: string, offset: number, length: number): Promise<any> {
+    const resp = await this.request('sftp_read', { path, offset, length })
+    return resp.data
+  }
+
+  public async sftpWrite(path: string, offset: number, chunkBase64: string, truncate: boolean = false): Promise<any> {
+    const resp = await this.request('sftp_write', { path, offset, chunk_base64: chunkBase64, truncate })
+    return resp.data
+  }
+
   public async connect(): Promise<void> {
     if (this.isConnecting) return
     this.isConnecting = true
@@ -1796,6 +2726,21 @@ class SSHTerminal {
             console.debug('WebSocket message received:', message)
             console.debug('Message type:', message.type)
             console.debug('Message data:', message.data)
+
+            // Generic request/response handling (SFTP, etc).
+            const reqId = message.request_id || message.requestId
+            if (reqId && this.pendingRequests.has(reqId)) {
+              const pending = this.pendingRequests.get(reqId)!
+              clearTimeout(pending.timer)
+              this.pendingRequests.delete(reqId)
+
+              if (message.success === false) {
+                pending.reject(new Error(message.error || message.message || 'Request failed'))
+              } else {
+                pending.resolve(message)
+              }
+              return
+            }
 
             switch (message.type) {
               // ========== VIM相关消息处理 ==========
@@ -2097,6 +3042,17 @@ class SSHTerminal {
         this.ws = null
       }
 
+      // Reject any pending request/response promises (SFTP, etc).
+      for (const [, pending] of this.pendingRequests) {
+        try {
+          clearTimeout(pending.timer)
+          pending.reject(new Error('Disconnected'))
+        } catch {
+          // ignore
+        }
+      }
+      this.pendingRequests.clear()
+
       // 清理终端
       if (this.terminal) {
         this.terminal.dispose()
@@ -2111,6 +3067,22 @@ class SSHTerminal {
 
   public getTerminal(): Terminal | null {
     return this.terminal
+  }
+
+  public focusTerminal(): void {
+    try {
+      this.terminal?.focus()
+    } catch {
+      // ignore
+    }
+  }
+
+  public fitTerminal(): void {
+    try {
+      this.resizeTerminal()
+    } catch {
+      // ignore
+    }
   }
 
   public getCurrentWorkingDirectory(): string {
@@ -2261,18 +3233,26 @@ class SSHTerminal {
 
 
 
-// 建立真实SSH连接
-async function connectRealSSH() {
-  if (!terminalContainer.value) {
-    throw new Error('终端容器未找到')
+// Connect a specific session (creates its own xterm + WS connection)
+async function connectSession(session: SshSession) {
+  const container = terminalContainers.get(session.id)
+  if (!container) {
+    throw new Error('Terminal container not ready')
   }
 
   const terminalManager = new SSHTerminal(
-      terminalContainer.value,
-      connectionConfig.value,
+      container,
+      session.config,
       (connected) => {
-        isConnected.value = connected
-        // 断开连接时重置VIM状态
+        session.connected = connected
+
+        if (activeSessionId.value === session.id) {
+          isConnected.value = connected
+          activeTerminalManager.value = connected ? terminalManager : null
+          window.sshTerminalManager = connected ? terminalManager : null
+        }
+
+        // Reset global VIM UI state on disconnect (UI-only)
         if (!connected) {
           vimModeActive.value = false
           vimMode.value = 'NORMAL'
@@ -2333,51 +3313,74 @@ async function connectRealSSH() {
   )
 
   try {
+    session.manager = terminalManager
     await terminalManager.connect()
-    // 保存终端管理器实例供后续使用
-    window.sshTerminalManager = terminalManager
+
+    if (activeSessionId.value === session.id) {
+      window.sshTerminalManager = terminalManager
+      activeTerminalManager.value = terminalManager
+    }
+
+    if (fileManagerOpen.value && activeSessionId.value === session.id) {
+      refreshFileManager()
+    }
   } catch (error) {
     console.error('SSH连接失败:', error)
+    try {
+      terminalManager.disconnect()
+    } catch {
+      // ignore
+    }
+    session.manager = null
+    session.connected = false
     throw error
   }
 }
 
 // 断开连接方法
 function disconnect() {
-  // 使用新的终端管理器断开连接
-  if (window.sshTerminalManager) {
-    window.sshTerminalManager.disconnect()
-    window.sshTerminalManager = null
+  const session = activeSession.value
+  try {
+    session?.manager?.disconnect?.()
+  } catch {
+    // ignore
   }
 
+  if (session) {
+    session.connected = false
+    session.manager = null
+  }
+
+  window.sshTerminalManager = null
+  activeTerminalManager.value = null
   isConnected.value = false
 }
 
 // 重置配置方法
 function resetConfig() {
-  // 如果当前已连接，先断开连接
-  if (isConnected.value) {
-    disconnect()
-  }
-
-  // 重置连接配置（使用正确的属性名hostname）
+  // Reset only the new-session form fields (do not affect existing sessions)
   connectionConfig.value = {
     hostname: '',
     port: 22,
     username: '',
-    password: ''
+    authType: 'password',
+    password: '',
+    keyContent: '',
+    passphrase: '',
+    jump: {
+      enabled: false,
+      hostname: '',
+      port: 22,
+      username: '',
+      authType: 'password',
+      password: '',
+      keyContent: '',
+      passphrase: ''
+    }
   }
 
-  // 重置状态
-  isConnected.value = false
   errorMessage.value = ''
   showError.value = false
-
-  // 清理终端管理器实例
-  if (window.sshTerminalManager) {
-    window.sshTerminalManager.disconnect()
-    window.sshTerminalManager = null
-  }
 }
 
 
