@@ -2462,6 +2462,101 @@ const applyConnectionUpdate = (conn: Connection, edge: AiEdge) => {
   if (edge.props?.labelColor) conn.labelColor = edge.props?.labelColor
 }
 
+const readSseContent = async (res: Response, onChunk: (text: string) => void) => {
+  const reader = res.body?.getReader()
+  if (!reader) return ''
+  const dec = new TextDecoder()
+  let buf = ''
+  let content = ''
+
+  const pushChunk = (chunk: string) => {
+    if (!chunk) return
+    content += chunk
+    onChunk(chunk)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+
+    // SSE format parsing (same as MultiModelChat)
+    if (buf.includes('\n')) {
+      const lines = buf.split('\n')
+      buf = lines.pop() || ''
+
+      for (const raw of lines) {
+        const line = raw.trim()
+        if (!line) continue
+        if (line.startsWith('event: ')) continue
+        if (line.startsWith('data:')) {
+          const d = line.startsWith('data: ') ? line.slice(6).trim() : line.slice(5).trim()
+          if (d === '[DONE]') continue
+          try {
+            const p = JSON.parse(d)
+            if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
+              pushChunk(p.choices[0].delta.content)
+            } else if (p.type === 'content_block_delta' && p.delta?.text) {
+              pushChunk(p.delta.text)
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // Raw JSON stream parsing (same as MultiModelChat)
+    while (buf.length > 0) {
+      const trimStart = buf.trimStart()
+      if (trimStart.length === 0) break
+      if (!trimStart.startsWith('{')) break
+
+      let depth = 0
+      let inString = false
+      let escape = false
+      let i = 0
+
+      for (; i < trimStart.length; i++) {
+        const ch = trimStart[i]
+
+        if (escape) {
+          escape = false
+          continue
+        }
+        if (ch === '\\') {
+          escape = true
+          continue
+        }
+        if (ch === '"') {
+          inString = !inString
+          continue
+        }
+        if (inString) continue
+
+        if (ch === '{') {
+          depth++
+        } else if (ch === '}') {
+          depth--
+          if (depth === 0) {
+            const jsonStr = trimStart.substring(0, i + 1)
+            try {
+              const p = JSON.parse(jsonStr)
+              if (p.choices && p.choices.length > 0 && p.choices[0].delta && p.choices[0].delta.content) {
+                pushChunk(p.choices[0].delta.content)
+              }
+            } catch {}
+            buf = trimStart.substring(i + 1)
+            break
+          }
+        }
+      }
+
+      if (depth !== 0) break
+    }
+  }
+
+  return content
+}
+
 const runAiRequest = async (payload: { system: string; user: string; displayPrompt: string }) => {
   if (aiStatus.value === 'loading') return
 
@@ -2484,6 +2579,7 @@ const runAiRequest = async (payload: { system: string; user: string; displayProm
     }
     if (flowAiApi.key) headers['Authorization'] = `Bearer ${flowAiApi.key}`
 
+    aiRawResponse.value = ''
     const res = await fetch(flowAiApi.url, {
       method: 'POST',
       headers,
@@ -2494,17 +2590,25 @@ const runAiRequest = async (payload: { system: string; user: string; displayProm
           { role: 'user', content: payload.user }
         ],
         temperature: flowAiTemperature,
-        stream: false,
+        stream: true,
         web_search: false
       })
     })
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content || ''
+    const contentType = res.headers.get('content-type') || ''
+    let content = ''
+    if (contentType.includes('text/event-stream')) {
+      content = await readSseContent(res, (chunk) => {
+        aiRawResponse.value += chunk
+      })
+    } else {
+      const data = await res.json()
+      content = data?.choices?.[0]?.message?.content || ''
+      aiRawResponse.value = content
+    }
     if (!content) throw new Error('AI 返回为空')
 
-    aiRawResponse.value = content
     const changeSet = parseChangeSetFromContent(content)
     if (!changeSet) throw new Error('AI 返回的 JSON 无法解析')
 
