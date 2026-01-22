@@ -13,6 +13,7 @@ const tools = [
   { name: '多模型问答', desc: '支持多种 AI 模型的智能对话，流式响应', route: '/chat', icon: 'chat', tags: ['AI', '对话', '问答'], features: ['多模型选择', '流式响应', '上下文记忆'], usageCount: '0.1k+' },
   { name: 'Markdown 编辑器', desc: '左右分栏实时预览，支持快捷键和格式工具栏', route: '/markdown', icon: 'markdown', tags: ['编辑', '预览', 'Markdown'], features: ['实时预览', '快捷键支持', '自动保存'], usageCount: '0k+' },
   { name: 'Markdown 阅读器', desc: '导入阅读 Markdown，优雅排版', route: '/reader', icon: 'file', tags: ['阅读', '预览', '文档'], features: ['实时渲染', '多主题支持', '暗黑模式'], usageCount: '12.5k+' },
+  { name: '文档预览', desc: '浏览器内预览 PDF、Word、Excel、PPT', route: '/doc-preview', icon: 'doc-preview', tags: ['文档', '预览', 'PDF', 'Office'], features: ['拖拽上传', 'PDF 预览', '原文件下载'], usageCount: '0k+' },
   { name: '代码编辑器', desc: '基于Monaco的在线代码编辑器，支持多种语言', route: '/editor', icon: 'editor', tags: ['代码', '编辑', '开发'], features: ['语法高亮', '多语言支持', '本地保存'], usageCount: '0k+' },
   { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces', tags: ['格式', '验证', '开发'], features: ['语法高亮', '错误检查', '压缩/美化'], usageCount: '9.3k+' },
   { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock', tags: ['时间', '时区', '计算'], features: ['时区转换', '倒计时', '时间差计算'], usageCount: '7.8k+' },
@@ -51,6 +52,7 @@ const getIcon = (icon: string) => {
     case 'humanizer': return Wand2
     case 'speech': return Mic
     case 'sandbox': return FlaskConical
+    case 'doc-preview': return LayoutTemplate
     default: return FileText
   }
 }

@@ -52,6 +52,13 @@
         >
           <MessageSquare class="w-4 h-4" />
         </button>
+        <button
+          @click="toggleAiPanel"
+          :class="[toolbarBtnClass, aiPanelOpen ? 'bg-blue-100 text-blue-600' : '']"
+          title="AI 问答改图 (Ctrl+Shift+K)"
+        >
+          <Sparkles class="w-4 h-4" />
+        </button>
         <span class="w-px h-6 bg-slate-200 mx-2"></span>
 
         <!-- 撤销/重做 -->
@@ -713,6 +720,185 @@
       </aside>
     </div>
 
+    <!-- AI 问答改图面板 -->
+    <div
+      v-if="aiPanelOpen"
+      class="fixed right-2 sm:right-4 top-14 sm:top-16 bottom-4 w-[90vw] sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+    >
+      <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+            <Sparkles class="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-slate-800">AI 问答改图</p>
+            <p class="text-xs text-slate-500">结构化变更 · 确认后应用</p>
+          </div>
+        </div>
+        <button @click="toggleAiPanel" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+
+      <div class="px-4 py-3 border-b border-slate-100 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs text-slate-600">
+            <span :class="['w-2 h-2 rounded-full', aiStatusDotClass]"></span>
+            <span>{{ aiStatusText }}</span>
+          </div>
+          <button
+            v-if="aiChangeSet"
+            @click="clearAiPreview"
+            class="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            清空预览
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="aiUseFlowContext" class="rounded" />
+            基于当前流程
+          </label>
+          <label class="flex items-center gap-2" :class="selectedNodes.length === 0 ? 'opacity-50' : ''">
+            <input type="checkbox" v-model="aiUseSelectionOnly" :disabled="selectedNodes.length === 0" class="rounded" />
+            仅对选中节点
+          </label>
+          <label class="flex items-center gap-2" :class="aiUseSelectionOnly ? 'opacity-50' : ''">
+            <input type="checkbox" v-model="aiReplaceAll" :disabled="aiUseSelectionOnly" class="rounded" />
+            推倒重来
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="preset in aiPromptPresets"
+            :key="preset.label"
+            @click="applyAiPreset(preset)"
+            class="px-2.5 py-1 rounded-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+          >
+            {{ preset.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div v-if="aiMessages.length === 0" class="text-sm text-slate-400 text-center py-6">
+          请输入需求，AI 将生成结构化改图建议
+        </div>
+        <div class="flex flex-col gap-3">
+          <div
+            v-for="msg in aiMessages"
+            :key="msg.id"
+            :class="[
+              'max-w-[85%] rounded-xl border px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap',
+              msg.role === 'user'
+                ? 'ml-auto bg-blue-50 border-blue-100 text-blue-700'
+                : msg.state === 'error'
+                  ? 'bg-red-50 border-red-200 text-red-600'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+            ]"
+          >
+            <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
+              {{ msg.role === 'user' ? '我' : 'AI' }}
+            </p>
+            <p>{{ msg.content }}</p>
+          </div>
+        </div>
+
+        <div v-if="aiChangeSet" class="space-y-3">
+          <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <p class="text-xs text-slate-500 mb-1">变更摘要</p>
+            <p class="text-sm text-slate-700">{{ aiChangeSet.summary || 'AI 未返回摘要' }}</p>
+          </div>
+          <div v-if="aiShouldReplaceAll" class="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs">
+            将清空当前流程并重建，请确认后再应用。
+          </div>
+
+          <div v-if="aiValidationErrors.length > 0" class="p-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-xs space-y-1">
+            <p class="font-semibold">校验失败</p>
+            <p v-for="err in aiValidationErrors" :key="err">{{ err }}</p>
+          </div>
+
+          <div v-if="aiWarnings.length > 0" class="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-600 text-xs space-y-1">
+            <p class="font-semibold">风险提示</p>
+            <p v-for="warn in aiWarnings" :key="warn">{{ warn }}</p>
+          </div>
+
+          <div v-if="aiAssumptions.length > 0" class="p-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-600 space-y-1">
+            <p class="font-semibold text-slate-500">假设</p>
+            <p v-for="a in aiAssumptions" :key="a">{{ a }}</p>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>变更清单</span>
+              <span>{{ aiSelectedChangeKeys.length }}/{{ aiChangeItems.length }}</span>
+            </div>
+            <div v-if="aiChangeItems.length === 0" class="text-xs text-slate-400">无可应用的变更</div>
+            <label
+              v-for="item in aiChangeItems"
+              :key="item.key"
+              class="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+            >
+              <input type="checkbox" :value="item.key" v-model="aiSelectedChangeKeys" class="mt-0.5 rounded" />
+              <span :class="['px-2 py-0.5 rounded-full text-[10px] font-semibold', getAiActionBadgeClass(item.action)]">
+                {{ aiActionLabel(item.action) }}
+              </span>
+              <span class="flex-1 leading-relaxed">{{ item.label }}</span>
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              @click="selectAllAiChanges"
+              class="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              全选
+            </button>
+            <button
+              @click="clearAiSelection"
+              class="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              清空
+            </button>
+            <button
+              @click="confirmApplyAiChanges"
+              :disabled="aiSelectedChangeKeys.length === 0 || aiValidationErrors.length > 0"
+              class="ml-auto px-3 py-1.5 text-xs text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              应用所选
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 bg-white space-y-2">
+        <textarea
+          v-model="aiPrompt"
+          @keydown.enter.ctrl.prevent="submitAiRequest"
+          @keydown.enter.meta.prevent="submitAiRequest"
+          class="w-full h-24 p-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="描述你想如何修改流程图，例如：新增一个审批节点并在通过后通知人事..."
+        ></textarea>
+        <div class="flex items-center justify-between">
+          <button
+            @click="submitAiRequest"
+            :disabled="!aiPrompt.trim() || aiStatus === 'loading'"
+            class="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+          >
+            <Send class="w-3.5 h-3.5" />
+            发送
+          </button>
+          <button
+            v-if="aiStatus === 'error'"
+            @click="retryAiRequest"
+            class="text-xs text-red-600 hover:text-red-700 transition-colors"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 右键菜单 -->
     <div
       v-if="contextMenu.show"
@@ -850,7 +1036,8 @@ import {
   Copy, Clipboard, CopyPlus, ArrowUpToLine, ArrowDownToLine,
   AlignLeft, AlignRight, AlignCenterHorizontal,
   AlignStartVertical, AlignEndVertical, AlignCenterVertical,
-  Hand, FolderOpen, Plus, Download
+  Hand, FolderOpen, Plus, Download,
+  Sparkles, X, Send
 } from 'lucide-vue-next'
 
 // ==================== 类型定义 ====================
@@ -900,6 +1087,71 @@ interface Anchor {
   position: string
   x: number
   y: number
+}
+
+interface AiNode {
+  id?: string
+  type?: string
+  name?: string
+  text?: string
+  props?: Record<string, any>
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+  textColor?: string
+  borderRadius?: number
+  fontSize?: number
+}
+
+interface AiEdge {
+  id?: string
+  from?: string
+  to?: string
+  source?: string
+  target?: string
+  fromNode?: string
+  toNode?: string
+  condition?: string
+  label?: string
+  lineType?: string
+  dashed?: boolean
+  arrow?: 'none' | 'start' | 'end' | 'both'
+  color?: string
+  fromAnchor?: string
+  toAnchor?: string
+  fromAnchorOffset?: { x: number; y: number }
+  toAnchorOffset?: { x: number; y: number }
+  props?: Record<string, any>
+}
+
+interface ChangeSet {
+  adds: { nodes: AiNode[]; edges: AiEdge[] }
+  updates: { nodes: AiNode[]; edges: AiEdge[] }
+  deletes: { nodes: Array<AiNode | string>; edges: Array<AiEdge | string> }
+  summary: string
+  replaceAll?: boolean
+  warnings?: string[]
+  assumptions?: string[]
+  layoutHints?: Record<string, any>
+}
+
+interface AiMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  state?: 'error' | 'ok'
+}
+
+interface AiChangeItem {
+  key: string
+  action: 'add' | 'update' | 'delete'
+  entity: 'node' | 'edge'
+  label: string
+  data: AiNode | AiEdge | string
 }
 
 // ==================== 历史文件管理 ====================
@@ -1338,6 +1590,67 @@ const setLineType = (type: string) => {
   currentLineType.value = type
 }
 
+// ==================== AI 问答改图 ====================
+const aiPanelOpen = ref(false)
+const aiPrompt = ref('')
+const aiUseFlowContext = ref(true)
+const aiUseSelectionOnly = ref(false)
+const aiReplaceAll = ref(false)
+const aiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle')
+const aiMessages = ref<AiMessage[]>([])
+const aiChangeSet = ref<ChangeSet | null>(null)
+const aiChangeItems = ref<AiChangeItem[]>([])
+const aiSelectedChangeKeys = ref<string[]>([])
+const aiValidationErrors = ref<string[]>([])
+const aiValidationWarnings = ref<string[]>([])
+const aiRawResponse = ref('')
+const aiLastRequest = ref<{ system: string; user: string } | null>(null)
+
+const aiPromptPresets = [
+  { label: '生成审批流程', prompt: '生成一个请假审批流程，包含提交、主管审批、HR备案和通知。' },
+  { label: '新增审批节点', prompt: '在现有流程中新增一个复核节点，并在通过后通知负责人。' },
+  { label: '优化异常处理', prompt: '把异常处理移动到流程末尾，并增加通知步骤。' }
+]
+
+const allowedNodeTypes = computed(() => {
+  const types = [...basicShapes.map(s => s.type), ...flowShapes.map(s => s.type)]
+  return Array.from(new Set(types))
+})
+
+const aiStatusText = computed(() => {
+  switch (aiStatus.value) {
+    case 'loading':
+      return '处理中'
+    case 'error':
+      return '失败可重试'
+    case 'ready':
+      return '已生成'
+    default:
+      return '可用'
+  }
+})
+
+const aiStatusDotClass = computed(() => {
+  switch (aiStatus.value) {
+    case 'loading':
+      return 'bg-blue-500 animate-pulse'
+    case 'error':
+      return 'bg-red-500'
+    case 'ready':
+      return 'bg-emerald-500'
+    default:
+      return 'bg-slate-400'
+  }
+})
+
+const aiWarnings = computed(() => [
+  ...(aiChangeSet.value?.warnings || []),
+  ...aiValidationWarnings.value
+])
+
+const aiAssumptions = computed(() => aiChangeSet.value?.assumptions || [])
+const aiShouldReplaceAll = computed(() => aiReplaceAll.value)
+
 // ==================== 交互状态 ====================
 const isDragging = ref(false)
 const isPanning = ref(false)
@@ -1628,6 +1941,22 @@ watch(selectedNodes, (ids) => {
       })
     }
   }
+  if (ids.length === 0 && aiUseSelectionOnly.value) {
+    aiUseSelectionOnly.value = false
+  }
+})
+
+watch(aiReplaceAll, (value) => {
+  if (value && aiUseSelectionOnly.value) {
+    aiUseSelectionOnly.value = false
+  }
+  if (aiChangeSet.value) {
+    aiChangeSet.value.replaceAll = value
+    const { errors, warnings } = validateChangeSet(aiChangeSet.value)
+    aiValidationErrors.value = errors
+    aiValidationWarnings.value = warnings
+    aiStatus.value = errors.length > 0 ? 'error' : 'ready'
+  }
 })
 
 watch(selectedConnection, (conn) => {
@@ -1664,6 +1993,717 @@ const getMousePosition = (e: MouseEvent) => {
 const clearSelection = () => {
   selectedNodes.value = []
   selectedConnection.value = null
+}
+
+// ==================== AI 问答改图辅助 ====================
+const getEnv = (key: string, fallback = '') => (import.meta as any).env?.[key] || fallback
+const flowAiApiBase = getEnv('VITE_PROXY_BASE_URL', getEnv('VITE_API_BASE_URL', '')).replace(/\/$/, '')
+const flowAiApiUrl = `${flowAiApiBase}/api/qwen/chat/completions`
+const flowAiModel = getEnv('VITE_FLOW_AI_MODEL', 'Qwen3-235B-A22B')
+const flowAiToken = getEnv('VITE_QWEN_TOKEN', getEnv('VITE_QWEN_MAX_TOKEN', ''))
+const flowAiTemperature = 0.2
+
+const toggleAiPanel = () => {
+  aiPanelOpen.value = !aiPanelOpen.value
+}
+
+const applyAiPreset = (preset: { label: string; prompt: string }) => {
+  aiPrompt.value = preset.prompt
+}
+
+const clearAiPreview = (options?: { keepStatus?: boolean }) => {
+  aiChangeSet.value = null
+  aiChangeItems.value = []
+  aiSelectedChangeKeys.value = []
+  aiValidationErrors.value = []
+  aiValidationWarnings.value = []
+  aiRawResponse.value = ''
+  if (!options?.keepStatus) {
+    aiStatus.value = 'idle'
+  }
+}
+
+const aiActionLabel = (action: AiChangeItem['action']) => {
+  if (action === 'add') return '新增'
+  if (action === 'update') return '更新'
+  return '删除'
+}
+
+const getAiActionBadgeClass = (action: AiChangeItem['action']) => {
+  if (action === 'add') return 'bg-emerald-100 text-emerald-700'
+  if (action === 'update') return 'bg-amber-100 text-amber-700'
+  return 'bg-red-100 text-red-600'
+}
+
+const selectAllAiChanges = () => {
+  aiSelectedChangeKeys.value = aiChangeItems.value.map(item => item.key)
+}
+
+const clearAiSelection = () => {
+  aiSelectedChangeKeys.value = []
+}
+
+const getFlowSummary = () => {
+  const maxItems = 80
+  const summaryNodes = nodes.value.slice(0, maxItems).map(n => ({
+    id: n.id,
+    type: n.type,
+    text: n.text
+  }))
+  const summaryEdges = connections.value.slice(0, maxItems).map(c => ({
+    id: c.id,
+    from: c.fromNode,
+    to: c.toNode,
+    label: c.label
+  }))
+
+  return {
+    nodeCount: nodes.value.length,
+    edgeCount: connections.value.length,
+    nodes: summaryNodes,
+    edges: summaryEdges,
+    truncated: nodes.value.length > maxItems || connections.value.length > maxItems
+  }
+}
+
+const getSelectionScope = () => {
+  const selectedSet = new Set(selectedNodes.value)
+  const scopedEdges = connections.value.filter(c => selectedSet.has(c.fromNode) && selectedSet.has(c.toNode))
+  return {
+    nodes: selectedNodes.value,
+    edges: scopedEdges.map(c => c.id)
+  }
+}
+
+const buildAiSystemPrompt = () => {
+  return [
+    '你是流程图编辑助手，只能输出 JSON，不要输出任何解释文字。',
+    '严格遵循 changeSet 结构，必须包含 adds/updates/deletes/summary 字段。',
+    '禁止生成非法节点类型或无效连线。',
+    '如果需要推倒重来，请在 changeSet 顶层增加 replaceAll: true，并在 adds 中给出完整节点与连线。'
+  ].join('\n')
+}
+
+const buildAiUserMessage = (prompt: string) => {
+  const flowSummary = aiUseFlowContext.value ? JSON.stringify(getFlowSummary()) : '无'
+  const selectionScope = aiUseSelectionOnly.value ? JSON.stringify(getSelectionScope()) : '全部'
+  const allowedTypes = allowedNodeTypes.value.join(', ')
+  return [
+    `需求: ${prompt}`,
+    `当前流程摘要: ${flowSummary}`,
+    `选中范围: ${selectionScope}`,
+    `允许节点类型: ${allowedTypes}`,
+    `重建全部: ${aiReplaceAll.value ? '是' : '否'}`
+  ].join('\n')
+}
+
+const extractJsonFromContent = (content: string) => {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]+?)\s*```/i)
+  if (fenced?.[1]) return fenced[1].trim()
+  const first = content.indexOf('{')
+  const last = content.lastIndexOf('}')
+  if (first >= 0 && last > first) return content.slice(first, last + 1).trim()
+  return ''
+}
+
+const normalizeChangeSet = (raw: any): ChangeSet => {
+  const safeArray = (value: any) => Array.isArray(value) ? value : []
+  const safeObj = (value: any) => value && typeof value === 'object' ? value : {}
+
+  const adds = safeObj(raw?.adds)
+  const updates = safeObj(raw?.updates)
+  const deletes = safeObj(raw?.deletes)
+
+  return {
+    adds: { nodes: safeArray(adds.nodes), edges: safeArray(adds.edges) },
+    updates: { nodes: safeArray(updates.nodes), edges: safeArray(updates.edges) },
+    deletes: { nodes: safeArray(deletes.nodes), edges: safeArray(deletes.edges) },
+    summary: typeof raw?.summary === 'string' ? raw.summary : '',
+    replaceAll: Boolean(raw?.replaceAll),
+    warnings: safeArray(raw?.warnings).map((w: any) => String(w)),
+    assumptions: safeArray(raw?.assumptions).map((a: any) => String(a)),
+    layoutHints: raw?.layoutHints || undefined
+  }
+}
+
+const parseChangeSetFromContent = (content: string): ChangeSet | null => {
+  const jsonText = extractJsonFromContent(content)
+  if (!jsonText) return null
+  try {
+    const raw = JSON.parse(jsonText)
+    return normalizeChangeSet(raw)
+  } catch {
+    return null
+  }
+}
+
+const getAiNodeId = (node: AiNode | string) => typeof node === 'string' ? node : (node.id || '')
+const getAiNodeLabel = (node: AiNode | string) => {
+  if (typeof node === 'string') return node
+  return node.name || node.text || node.id || node.type || '未命名节点'
+}
+
+const getAiEdgeId = (edge: AiEdge | string) => typeof edge === 'string' ? edge : (edge.id || '')
+const getAiEdgeFrom = (edge: AiEdge | string) => {
+  if (typeof edge === 'string') return ''
+  return edge.from || edge.source || edge.fromNode || edge.props?.from || edge.props?.source || edge.props?.fromNode || ''
+}
+const getAiEdgeTo = (edge: AiEdge | string) => {
+  if (typeof edge === 'string') return ''
+  return edge.to || edge.target || edge.toNode || edge.props?.to || edge.props?.target || edge.props?.toNode || ''
+}
+
+const getAiEdgeLabel = (edge: AiEdge | string) => {
+  if (typeof edge === 'string') return edge
+  const from = getAiEdgeFrom(edge)
+  const to = getAiEdgeTo(edge)
+  const label = edge.condition || edge.label || edge.props?.condition || edge.props?.label || ''
+  return `${from || '未知'} → ${to || '未知'}${label ? ` (${label})` : ''}`
+}
+
+const buildChangeItems = (changeSet: ChangeSet) => {
+  const items: AiChangeItem[] = []
+
+  changeSet.adds.nodes.forEach((node, index) => {
+    const id = getAiNodeId(node) || `add-node-${index}`
+    items.push({
+      key: `add-node-${id}-${index}`,
+      action: 'add',
+      entity: 'node',
+      label: `新增节点：${getAiNodeLabel(node)}`,
+      data: node
+    })
+  })
+
+  changeSet.updates.nodes.forEach((node, index) => {
+    const id = getAiNodeId(node) || `update-node-${index}`
+    items.push({
+      key: `update-node-${id}-${index}`,
+      action: 'update',
+      entity: 'node',
+      label: `更新节点：${getAiNodeLabel(node)}`,
+      data: node
+    })
+  })
+
+  changeSet.deletes.nodes.forEach((node, index) => {
+    const id = getAiNodeId(node) || `delete-node-${index}`
+    items.push({
+      key: `delete-node-${id}-${index}`,
+      action: 'delete',
+      entity: 'node',
+      label: `删除节点：${getAiNodeLabel(node)}`,
+      data: node
+    })
+  })
+
+  changeSet.adds.edges.forEach((edge, index) => {
+    const id = getAiEdgeId(edge) || `add-edge-${index}`
+    items.push({
+      key: `add-edge-${id}-${index}`,
+      action: 'add',
+      entity: 'edge',
+      label: `新增连线：${getAiEdgeLabel(edge)}`,
+      data: edge
+    })
+  })
+
+  changeSet.updates.edges.forEach((edge, index) => {
+    const id = getAiEdgeId(edge) || `update-edge-${index}`
+    items.push({
+      key: `update-edge-${id}-${index}`,
+      action: 'update',
+      entity: 'edge',
+      label: `更新连线：${getAiEdgeLabel(edge)}`,
+      data: edge
+    })
+  })
+
+  changeSet.deletes.edges.forEach((edge, index) => {
+    const id = getAiEdgeId(edge) || `delete-edge-${index}`
+    items.push({
+      key: `delete-edge-${id}-${index}`,
+      action: 'delete',
+      entity: 'edge',
+      label: `删除连线：${getAiEdgeLabel(edge)}`,
+      data: edge
+    })
+  })
+
+  return items
+}
+
+const validateChangeSet = (changeSet: ChangeSet) => {
+  const errors: string[] = []
+  const warnings: string[] = []
+  const allowedTypes = new Set(allowedNodeTypes.value)
+  const existingNodeIds = new Set(nodes.value.map(n => n.id))
+  const addedNodeIds = new Set<string>()
+  const replaceAll = Boolean(changeSet.replaceAll)
+
+  if (!changeSet.summary) {
+    errors.push('变更摘要为空')
+  }
+
+  changeSet.adds.nodes.forEach(node => {
+    const id = getAiNodeId(node)
+    if (id && existingNodeIds.has(id)) {
+      warnings.push(`节点 ID ${id} 已存在，将自动重新编号`)
+    }
+    if (id) addedNodeIds.add(id)
+    const type = node.type || node.props?.type
+    if (type && !allowedTypes.has(type)) {
+      errors.push(`节点类型 ${type} 不在允许范围内`)
+    }
+  })
+
+  changeSet.updates.nodes.forEach(node => {
+    const type = node.type || node.props?.type
+    if (type && !allowedTypes.has(type)) {
+      errors.push(`更新节点类型 ${type} 不在允许范围内`)
+    }
+  })
+
+  if (aiUseSelectionOnly.value) {
+    const selectedSet = new Set(selectedNodes.value)
+    changeSet.updates.nodes.forEach(node => {
+      const id = getAiNodeId(node)
+      if (id && !selectedSet.has(id)) {
+        errors.push(`更新节点 ${id} 不在选中范围内`)
+      }
+    })
+    changeSet.deletes.nodes.forEach(node => {
+      const id = getAiNodeId(node)
+      if (id && !selectedSet.has(id)) {
+        errors.push(`删除节点 ${id} 不在选中范围内`)
+      }
+    })
+
+    const edgeInScope = (edge: AiEdge | string) => {
+      const from = getAiEdgeFrom(edge)
+      const to = getAiEdgeTo(edge)
+      if (!from || !to) return true
+      return selectedSet.has(from) && selectedSet.has(to)
+    }
+
+    changeSet.adds.edges.forEach(edge => {
+      if (!edgeInScope(edge)) {
+        errors.push('新增连线不在选中范围内')
+      }
+    })
+    changeSet.updates.edges.forEach(edge => {
+      if (!edgeInScope(edge)) {
+        errors.push('更新连线不在选中范围内')
+      }
+    })
+  }
+
+  const allNodeIds = new Set([...existingNodeIds, ...addedNodeIds])
+  const checkEdgeEndpoints = (edge: AiEdge | string, label: string, requireBoth: boolean) => {
+    const from = getAiEdgeFrom(edge)
+    const to = getAiEdgeTo(edge)
+    if (!from && !to && !requireBoth) return
+    if (!from || !to) {
+      errors.push(`${label} 缺少 from/to`)
+      return
+    }
+    if (!allNodeIds.has(from) && !addedNodeIds.has(from)) {
+      errors.push(`${label} 的起点 ${from} 不存在`)
+    }
+    if (!allNodeIds.has(to) && !addedNodeIds.has(to)) {
+      errors.push(`${label} 的终点 ${to} 不存在`)
+    }
+  }
+
+  changeSet.adds.edges.forEach(edge => checkEdgeEndpoints(edge, '新增连线', true))
+  changeSet.updates.edges.forEach(edge => checkEdgeEndpoints(edge, '更新连线', false))
+
+  if (replaceAll) {
+    warnings.push('将清空当前流程并重建')
+    if (changeSet.updates.nodes.length || changeSet.deletes.nodes.length || changeSet.updates.edges.length || changeSet.deletes.edges.length) {
+      warnings.push('重建模式仅应用新增项，更新/删除将被忽略')
+    }
+    if (changeSet.adds.nodes.length === 0) {
+      warnings.push('重建模式未新增任何节点')
+    }
+  }
+
+  const totalChanges = aiChangeItems.value.length || (
+    changeSet.adds.nodes.length + changeSet.updates.nodes.length + changeSet.deletes.nodes.length +
+    changeSet.adds.edges.length + changeSet.updates.edges.length + changeSet.deletes.edges.length
+  )
+  if (totalChanges > 20) {
+    warnings.push('变更较多，建议拆分需求以降低风险')
+  }
+
+  return { errors, warnings }
+}
+
+const getShapeDefaults = (type: string) => {
+  const shape = basicShapes.find(s => s.type === type) || flowShapes.find(s => s.type === type)
+  return {
+    width: shape?.defaultWidth || 120,
+    height: shape?.defaultHeight || 60
+  }
+}
+
+const resolveAiValue = <T>(node: AiNode, key: keyof AiNode, fallback: T) => {
+  const direct = node[key]
+  const fromProps = node.props?.[key as string]
+  return (direct ?? fromProps ?? fallback) as T
+}
+
+const getDefaultNodePosition = (index: number) => {
+  const viewportCenterX = (canvasWrapper.value?.clientWidth || 800) / 2 / zoom.value
+  const viewportCenterY = (canvasWrapper.value?.clientHeight || 600) / 2 / zoom.value
+  const offset = index * 32
+  return {
+    x: snapValue(viewportCenterX - panOffset.x + offset),
+    y: snapValue(viewportCenterY - panOffset.y + offset)
+  }
+}
+
+const buildNodeFromAi = (aiNode: AiNode, id: string, index: number): Node => {
+  const type = resolveAiValue(aiNode, 'type', 'process') as string
+  const defaults = getShapeDefaults(type)
+  const width = Number(resolveAiValue(aiNode, 'width', defaults.width)) || defaults.width
+  const height = Number(resolveAiValue(aiNode, 'height', defaults.height)) || defaults.height
+  const pos = {
+    x: Number(resolveAiValue(aiNode, 'x', NaN)),
+    y: Number(resolveAiValue(aiNode, 'y', NaN))
+  }
+  const fallbackPos = getDefaultNodePosition(index)
+
+  return {
+    id,
+    type,
+    x: Number.isFinite(pos.x) ? snapValue(pos.x) : fallbackPos.x,
+    y: Number.isFinite(pos.y) ? snapValue(pos.y) : fallbackPos.y,
+    width,
+    height,
+    text: aiNode.text || aiNode.name || aiNode.props?.text || aiNode.props?.name || '',
+    fill: resolveAiValue(aiNode, 'fill', '#ffffff'),
+    stroke: resolveAiValue(aiNode, 'stroke', '#000000'),
+    strokeWidth: Number(resolveAiValue(aiNode, 'strokeWidth', 2)) || 2,
+    textColor: resolveAiValue(aiNode, 'textColor', '#000000'),
+    borderRadius: Number(resolveAiValue(aiNode, 'borderRadius', 4)) || 4,
+    zIndex: nodes.value.length + index,
+    fontSize: Number(resolveAiValue(aiNode, 'fontSize', 14)) || 14
+  }
+}
+
+const applyNodeUpdate = (node: Node, aiNode: AiNode) => {
+  const maybeUpdate = <K extends keyof Node>(key: K, value: any) => {
+    if (value !== undefined && value !== null && value !== '') {
+      (node[key] as any) = value
+    }
+  }
+
+  maybeUpdate('type', aiNode.type || aiNode.props?.type)
+  maybeUpdate('x', resolveAiValue(aiNode, 'x', undefined))
+  maybeUpdate('y', resolveAiValue(aiNode, 'y', undefined))
+  maybeUpdate('width', resolveAiValue(aiNode, 'width', undefined))
+  maybeUpdate('height', resolveAiValue(aiNode, 'height', undefined))
+  maybeUpdate('fill', resolveAiValue(aiNode, 'fill', undefined))
+  maybeUpdate('stroke', resolveAiValue(aiNode, 'stroke', undefined))
+  maybeUpdate('strokeWidth', resolveAiValue(aiNode, 'strokeWidth', undefined))
+  maybeUpdate('textColor', resolveAiValue(aiNode, 'textColor', undefined))
+  maybeUpdate('borderRadius', resolveAiValue(aiNode, 'borderRadius', undefined))
+  maybeUpdate('fontSize', resolveAiValue(aiNode, 'fontSize', undefined))
+  if (aiNode.text || aiNode.name || aiNode.props?.text || aiNode.props?.name) {
+    node.text = aiNode.text || aiNode.name || aiNode.props?.text || aiNode.props?.name || node.text
+  }
+}
+
+const buildConnectionFromAi = (edge: AiEdge, id: string, fromNode: string, toNode: string): Connection => {
+  const lineType = edge.lineType || edge.props?.lineType || currentLineType.value
+  return {
+    id,
+    fromNode,
+    fromAnchor: edge.fromAnchor || edge.props?.fromAnchor || 'right',
+    toNode,
+    toAnchor: edge.toAnchor || edge.props?.toAnchor || 'left',
+    color: edge.color || edge.props?.color || '#000000',
+    dashed: Boolean(edge.dashed ?? edge.props?.dashed ?? false),
+    arrow: edge.arrow || edge.props?.arrow || 'end',
+    lineType,
+    label: edge.condition || edge.label || edge.props?.condition || edge.props?.label || '',
+    bendOffset: edge.props?.bendOffset,
+    labelOffset: edge.props?.labelOffset,
+    labelFontSize: edge.props?.labelFontSize,
+    labelFontWeight: edge.props?.labelFontWeight,
+    labelColor: edge.props?.labelColor,
+    fromAnchorOffset: edge.fromAnchorOffset || edge.props?.fromAnchorOffset,
+    toAnchorOffset: edge.toAnchorOffset || edge.props?.toAnchorOffset
+  }
+}
+
+const applyConnectionUpdate = (conn: Connection, edge: AiEdge) => {
+  if (edge.lineType || edge.props?.lineType) conn.lineType = edge.lineType || edge.props?.lineType
+  if (edge.color || edge.props?.color) conn.color = edge.color || edge.props?.color
+  if (edge.dashed !== undefined || edge.props?.dashed !== undefined) {
+    conn.dashed = Boolean(edge.dashed ?? edge.props?.dashed)
+  }
+  if (edge.arrow || edge.props?.arrow) conn.arrow = edge.arrow || edge.props?.arrow
+  if (edge.condition || edge.label || edge.props?.condition || edge.props?.label) {
+    conn.label = edge.condition || edge.label || edge.props?.condition || edge.props?.label
+  }
+  if (edge.fromAnchor || edge.props?.fromAnchor) conn.fromAnchor = edge.fromAnchor || edge.props?.fromAnchor
+  if (edge.toAnchor || edge.props?.toAnchor) conn.toAnchor = edge.toAnchor || edge.props?.toAnchor
+  if (edge.fromAnchorOffset || edge.props?.fromAnchorOffset) conn.fromAnchorOffset = edge.fromAnchorOffset || edge.props?.fromAnchorOffset
+  if (edge.toAnchorOffset || edge.props?.toAnchorOffset) conn.toAnchorOffset = edge.toAnchorOffset || edge.props?.toAnchorOffset
+  if (edge.props?.labelOffset) conn.labelOffset = edge.props?.labelOffset
+  if (edge.props?.labelFontSize) conn.labelFontSize = edge.props?.labelFontSize
+  if (edge.props?.labelFontWeight) conn.labelFontWeight = edge.props?.labelFontWeight
+  if (edge.props?.labelColor) conn.labelColor = edge.props?.labelColor
+}
+
+const runAiRequest = async (payload: { system: string; user: string; displayPrompt: string }) => {
+  if (aiStatus.value === 'loading') return
+
+  aiMessages.value.push({
+    id: generateId(),
+    role: 'user',
+    content: payload.displayPrompt
+  })
+  aiStatus.value = 'loading'
+  aiLastRequest.value = payload
+  clearAiPreview({ keepStatus: true })
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (flowAiToken) headers['Authorization'] = `Bearer ${flowAiToken}`
+
+    const res = await fetch(flowAiApiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: flowAiModel,
+        messages: [
+          { role: 'system', content: payload.system },
+          { role: 'user', content: payload.user }
+        ],
+        temperature: flowAiTemperature,
+        stream: false,
+        web_search: false
+      })
+    })
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const content = data?.choices?.[0]?.message?.content || ''
+    if (!content) throw new Error('AI 返回为空')
+
+    aiRawResponse.value = content
+    const changeSet = parseChangeSetFromContent(content)
+    if (!changeSet) throw new Error('AI 返回的 JSON 无法解析')
+
+    if (changeSet.replaceAll) {
+      aiReplaceAll.value = true
+    }
+    changeSet.replaceAll = aiReplaceAll.value
+    const { errors, warnings } = validateChangeSet(changeSet)
+    aiValidationErrors.value = errors
+    aiValidationWarnings.value = warnings
+    aiChangeSet.value = changeSet
+    aiChangeItems.value = buildChangeItems(changeSet)
+    aiSelectedChangeKeys.value = aiChangeItems.value.map(item => item.key)
+    aiStatus.value = errors.length > 0 ? 'error' : 'ready'
+
+    aiMessages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: errors.length > 0 ? '生成完成，但校验失败，请查看错误。' : (changeSet.summary || '已生成改图建议'),
+      state: errors.length > 0 ? 'error' : 'ok'
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '请求失败'
+    aiStatus.value = 'error'
+    aiValidationErrors.value = [message]
+    aiMessages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: `生成失败：${message}`,
+      state: 'error'
+    })
+  }
+}
+
+const submitAiRequest = async () => {
+  const prompt = aiPrompt.value.trim()
+  if (!prompt) return
+  const payload = {
+    system: buildAiSystemPrompt(),
+    user: buildAiUserMessage(prompt),
+    displayPrompt: prompt
+  }
+  aiPrompt.value = ''
+  await runAiRequest(payload)
+}
+
+const retryAiRequest = async () => {
+  if (!aiLastRequest.value) return
+  await runAiRequest(aiLastRequest.value)
+}
+
+const confirmApplyAiChanges = () => {
+  if (!aiChangeSet.value) return
+  const replaceAll = aiShouldReplaceAll.value
+  openConfirmDialog({
+    title: '应用 AI 变更',
+    message: replaceAll
+      ? '将清空当前流程并应用所选变更，此操作可撤销。是否继续？'
+      : '确认将所选变更应用到画布？此操作可撤销。',
+    confirmText: '应用',
+    cancelText: '取消',
+    onConfirm: () => {
+      applyAiChanges()
+    }
+  })
+}
+
+const applyAiChanges = () => {
+  if (!aiChangeSet.value) return
+  const selectedSet = new Set(aiSelectedChangeKeys.value)
+  if (selectedSet.size === 0) return
+
+  const snapshotNodes = JSON.parse(JSON.stringify(nodes.value))
+  const snapshotConnections = JSON.parse(JSON.stringify(connections.value))
+  const replaceAll = aiShouldReplaceAll.value
+
+  const pickItems = (action: AiChangeItem['action'], entity: AiChangeItem['entity']) =>
+    aiChangeItems.value.filter(item => item.action === action && item.entity === entity && selectedSet.has(item.key))
+
+  const addNodes = pickItems('add', 'node').map(item => item.data as AiNode)
+  const updateNodes = replaceAll ? [] : pickItems('update', 'node').map(item => item.data as AiNode)
+  const deleteNodes = replaceAll ? [] : pickItems('delete', 'node').map(item => item.data)
+  const addEdges = pickItems('add', 'edge').map(item => item.data as AiEdge)
+  const updateEdges = replaceAll ? [] : pickItems('update', 'edge').map(item => item.data as AiEdge)
+  const deleteEdges = replaceAll ? [] : pickItems('delete', 'edge').map(item => item.data)
+
+  const errors: string[] = []
+  if (replaceAll) {
+    nodes.value = []
+    connections.value = []
+  }
+  const existingNodeIds = new Set(nodes.value.map(n => n.id))
+  const existingEdgeIds = new Set(connections.value.map(c => c.id))
+  const nodeIdMap = new Map<string, string>()
+  const edgeIdMap = new Map<string, string>()
+
+  const ensureUniqueId = (candidate: string, existing: Set<string>) => {
+    let id = candidate || generateId()
+    while (existing.has(id)) {
+      id = generateId()
+    }
+    existing.add(id)
+    return id
+  }
+
+  const addedNodes: Node[] = []
+  addNodes.forEach((node, index) => {
+    const rawId = getAiNodeId(node)
+    const uniqueId = ensureUniqueId(rawId, existingNodeIds)
+    if (rawId) nodeIdMap.set(rawId, uniqueId)
+    addedNodes.push(buildNodeFromAi(node, uniqueId, index))
+  })
+  if (addedNodes.length > 0) {
+    nodes.value.push(...addedNodes)
+  }
+
+  addEdges.forEach((edge, index) => {
+    const from = nodeIdMap.get(getAiEdgeFrom(edge)) || getAiEdgeFrom(edge)
+    const to = nodeIdMap.get(getAiEdgeTo(edge)) || getAiEdgeTo(edge)
+    if (!from || !to) {
+      errors.push(`新增连线缺少 from/to：${getAiEdgeLabel(edge)}`)
+      return
+    }
+    if (!existingNodeIds.has(from) || !existingNodeIds.has(to)) {
+      errors.push(`新增连线节点不存在：${getAiEdgeLabel(edge)}`)
+      return
+    }
+    const rawId = getAiEdgeId(edge)
+    const id = ensureUniqueId(rawId, existingEdgeIds)
+    if (rawId) edgeIdMap.set(rawId, id)
+    connections.value.push(buildConnectionFromAi(edge, id, from, to))
+  })
+
+  updateNodes.forEach(node => {
+    const rawId = getAiNodeId(node)
+    const id = nodeIdMap.get(rawId) || rawId
+    if (!id) {
+      errors.push('更新节点缺少 ID')
+      return
+    }
+    const target = nodes.value.find(n => n.id === id)
+    if (!target) {
+      errors.push(`更新节点 ${id} 不存在`)
+      return
+    }
+    applyNodeUpdate(target, node)
+  })
+
+  updateEdges.forEach(edge => {
+    const rawId = getAiEdgeId(edge)
+    const id = edgeIdMap.get(rawId) || rawId
+    if (!id) {
+      errors.push('更新连线缺少 ID')
+      return
+    }
+    const target = connections.value.find(c => c.id === id)
+    if (!target) {
+      errors.push(`更新连线 ${id} 不存在`)
+      return
+    }
+    applyConnectionUpdate(target, edge)
+  })
+
+  const deleteNodeIds = deleteNodes
+    .map(node => {
+      const rawId = getAiNodeId(node as AiNode | string)
+      return nodeIdMap.get(rawId) || rawId
+    })
+    .filter(Boolean)
+  if (deleteNodeIds.length > 0) {
+    nodes.value = nodes.value.filter(n => !deleteNodeIds.includes(n.id))
+    connections.value = connections.value.filter(
+      c => !deleteNodeIds.includes(c.fromNode) && !deleteNodeIds.includes(c.toNode)
+    )
+  }
+
+  const deleteEdgeIds = deleteEdges
+    .map(edge => {
+      const rawId = getAiEdgeId(edge as AiEdge | string)
+      return edgeIdMap.get(rawId) || rawId
+    })
+    .filter(Boolean)
+  if (deleteEdgeIds.length > 0) {
+    connections.value = connections.value.filter(c => !deleteEdgeIds.includes(c.id))
+  }
+
+  if (errors.length > 0) {
+    nodes.value = snapshotNodes
+    connections.value = snapshotConnections
+    aiStatus.value = 'error'
+    aiValidationErrors.value = errors
+    aiMessages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: `应用失败：${errors[0]}`,
+      state: 'error'
+    })
+    return
+  }
+
+  saveHistory()
+  clearSelection()
+  aiMessages.value.push({
+    id: generateId(),
+    role: 'assistant',
+    content: '已应用所选变更。',
+    state: 'ok'
+  })
+  clearAiPreview()
 }
 
 // ==================== 节点样式 ====================
@@ -3858,6 +4898,12 @@ const handleKeyDown = (e: KeyboardEvent) => {
   // 如果焦点在输入框或文本区域，不处理删除快捷键
   const target = e.target as HTMLElement
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+    return
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    toggleAiPanel()
     return
   }
 
