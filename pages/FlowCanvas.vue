@@ -1996,11 +1996,15 @@ const clearSelection = () => {
 }
 
 // ==================== AI 问答改图辅助 ====================
+type FlowAiApi = { url: string; key: string; model: string; headers?: Record<string, string> }
+
 const getEnv = (key: string, fallback = '') => (import.meta as any).env?.[key] || fallback
 const flowAiApiBase = getEnv('VITE_PROXY_BASE_URL', getEnv('VITE_API_BASE_URL', '')).replace(/\/$/, '')
-const flowAiApiUrl = `${flowAiApiBase}/api/qwen/chat/completions`
-const flowAiModel = getEnv('VITE_FLOW_AI_MODEL', 'Qwen3-235B-A22B')
-const flowAiToken = getEnv('VITE_QWEN_TOKEN', getEnv('VITE_QWEN_MAX_TOKEN', ''))
+const flowAiApi: FlowAiApi = {
+  url: `${flowAiApiBase}/api/qwenCoderPlus/chat/completions`,
+  key: getEnv('VITE_FLOW_AI_TOKEN', getEnv('VITE_QWEN_TOKEN', getEnv('VITE_QWEN_MAX_TOKEN', ''))),
+  model: getEnv('VITE_FLOW_AI_MODEL', 'qwen3-coder-plus')
+}
 const flowAiTemperature = 0.2
 
 const toggleAiPanel = () => {
@@ -2471,14 +2475,20 @@ const runAiRequest = async (payload: { system: string; user: string; displayProm
   clearAiPreview({ keepStatus: true })
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (flowAiToken) headers['Authorization'] = `Bearer ${flowAiToken}`
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'origin': 'https://www.toproject.cloud',
+      'priority': 'u=1, i',
+      'referer': 'https://www.toproject.cloud/',
+      ...flowAiApi.headers
+    }
+    if (flowAiApi.key) headers['Authorization'] = `Bearer ${flowAiApi.key}`
 
-    const res = await fetch(flowAiApiUrl, {
+    const res = await fetch(flowAiApi.url, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: flowAiModel,
+        model: flowAiApi.model,
         messages: [
           { role: 'system', content: payload.system },
           { role: 'user', content: payload.user }
