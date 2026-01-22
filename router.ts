@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from './pages/Home.vue'
 import Reader from './pages/Reader.vue'
+import DocPreview from './pages/DocPreview.vue'
 import JsonTool from './pages/JsonTool.vue'
 import TimestampTool from './pages/TimestampTool.vue'
 import CalculatorTool from './pages/CalculatorTool.vue'
@@ -27,6 +28,7 @@ import SandboxTest from './pages/SandboxTest.vue'
 const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/reader', name: 'reader', component: Reader },
+  { path: '/doc-preview', name: 'doc-preview', component: DocPreview },
   { path: '/json', name: 'json', component: JsonTool },
   { path: '/timestamp', name: 'timestamp', component: TimestampTool },
   { path: '/calculator', name: 'calculator', component: CalculatorTool },
