@@ -2081,6 +2081,7 @@ const getSelectionScope = () => {
 
 const buildAiSystemPrompt = () => {
   return [
+    'The summary field must be a non-empty string. Always include a short summary even if there are no changes.',
     '你是流程图编辑助手，只能输出 JSON，不要输出任何解释文字。',
     '严格遵循 changeSet 结构，必须包含 adds/updates/deletes/summary 字段。',
     '禁止生成非法节点类型或无效连线。',
@@ -2110,6 +2111,30 @@ const extractJsonFromContent = (content: string) => {
   return ''
 }
 
+const buildAutoSummary = (
+  adds: { nodes: any[]; edges: any[] },
+  updates: { nodes: any[]; edges: any[] },
+  deletes: { nodes: any[]; edges: any[] }
+) => {
+  const parts: string[] = []
+  const addNodes = adds.nodes.length
+  const addEdges = adds.edges.length
+  const updateNodes = updates.nodes.length
+  const updateEdges = updates.edges.length
+  const deleteNodes = deletes.nodes.length
+  const deleteEdges = deletes.edges.length
+
+  if (addNodes) parts.push(`+${addNodes} node${addNodes === 1 ? '' : 's'}`)
+  if (addEdges) parts.push(`+${addEdges} edge${addEdges === 1 ? '' : 's'}`)
+  if (updateNodes) parts.push(`~${updateNodes} node${updateNodes === 1 ? '' : 's'}`)
+  if (updateEdges) parts.push(`~${updateEdges} edge${updateEdges === 1 ? '' : 's'}`)
+  if (deleteNodes) parts.push(`-${deleteNodes} node${deleteNodes === 1 ? '' : 's'}`)
+  if (deleteEdges) parts.push(`-${deleteEdges} edge${deleteEdges === 1 ? '' : 's'}`)
+
+  if (parts.length === 0) return 'Auto summary: no changes.'
+  return `Auto summary: ${parts.join(', ')}`
+}
+
 const normalizeChangeSet = (raw: any): ChangeSet => {
   const safeArray = (value: any) => Array.isArray(value) ? value : []
   const safeObj = (value: any) => value && typeof value === 'object' ? value : {}
@@ -2117,14 +2142,22 @@ const normalizeChangeSet = (raw: any): ChangeSet => {
   const adds = safeObj(raw?.adds)
   const updates = safeObj(raw?.updates)
   const deletes = safeObj(raw?.deletes)
+  const warnings = safeArray(raw?.warnings).map((w: any) => String(w))
+  const summaryRaw = typeof raw?.summary === 'string' ? raw.summary.trim() : ''
+  const summary = summaryRaw || buildAutoSummary(
+    { nodes: safeArray(adds.nodes), edges: safeArray(adds.edges) },
+    { nodes: safeArray(updates.nodes), edges: safeArray(updates.edges) },
+    { nodes: safeArray(deletes.nodes), edges: safeArray(deletes.edges) }
+  )
+  if (!summaryRaw) warnings.push('summary missing; auto-generated')
 
   return {
     adds: { nodes: safeArray(adds.nodes), edges: safeArray(adds.edges) },
     updates: { nodes: safeArray(updates.nodes), edges: safeArray(updates.edges) },
     deletes: { nodes: safeArray(deletes.nodes), edges: safeArray(deletes.edges) },
-    summary: typeof raw?.summary === 'string' ? raw.summary : '',
+    summary,
     replaceAll: Boolean(raw?.replaceAll),
-    warnings: safeArray(raw?.warnings).map((w: any) => String(w)),
+    warnings,
     assumptions: safeArray(raw?.assumptions).map((a: any) => String(a)),
     layoutHints: raw?.layoutHints || undefined
   }
