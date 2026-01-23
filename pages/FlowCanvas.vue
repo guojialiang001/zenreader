@@ -732,7 +732,7 @@
           </div>
           <div>
             <p class="text-sm font-semibold text-slate-800">AI 问答改图</p>
-            <p class="text-xs text-slate-500">结构化变更 · 确认后应用</p>
+            <p class="text-xs text-slate-500">{{ aiPanelSubtitle }}</p>
           </div>
         </div>
         <button @click="toggleAiPanel" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
@@ -744,33 +744,58 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-xs text-slate-600">
             <span :class="['w-2 h-2 rounded-full', aiStatusDotClass]"></span>
+            <Loader2 v-if="aiStatus === 'loading'" class="w-3.5 h-3.5 text-blue-500 animate-spin" />
             <span>{{ aiStatusText }}</span>
           </div>
-          <button
-            v-if="aiChangeSet"
-            @click="clearAiPreview"
-            class="text-xs text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            清空预览
-          </button>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center rounded-lg bg-slate-100 p-1 text-[11px]">
+              <button
+                @click="aiMode = 'flow'"
+                :class="[
+                  'px-2 py-1 rounded-md transition-colors',
+                  aiMode === 'flow' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                ]"
+              >
+                改图
+              </button>
+              <button
+                @click="aiMode = 'general'"
+                :class="[
+                  'px-2 py-1 rounded-md transition-colors',
+                  aiMode === 'general' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                ]"
+              >
+                通用问答
+              </button>
+            </div>
+            <button
+              v-if="aiChangeSet && aiMode === 'flow'"
+              @click="clearAiPreview"
+              class="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              清空预览
+            </button>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
           <label class="flex items-center gap-2">
             <input type="checkbox" v-model="aiUseFlowContext" class="rounded" />
             基于当前流程
           </label>
-          <label class="flex items-center gap-2" :class="selectedNodes.length === 0 ? 'opacity-50' : ''">
-            <input type="checkbox" v-model="aiUseSelectionOnly" :disabled="selectedNodes.length === 0" class="rounded" />
-            仅对选中节点
-          </label>
-          <label class="flex items-center gap-2" :class="aiUseSelectionOnly ? 'opacity-50' : ''">
-            <input type="checkbox" v-model="aiReplaceAll" :disabled="aiUseSelectionOnly" class="rounded" />
-            推倒重来
-          </label>
+          <template v-if="aiMode === 'flow'">
+            <label class="flex items-center gap-2" :class="selectedNodes.length === 0 ? 'opacity-50' : ''">
+              <input type="checkbox" v-model="aiUseSelectionOnly" :disabled="selectedNodes.length === 0" class="rounded" />
+              仅对选中节点
+            </label>
+            <label class="flex items-center gap-2" :class="aiUseSelectionOnly ? 'opacity-50' : ''">
+              <input type="checkbox" v-model="aiReplaceAll" :disabled="aiUseSelectionOnly" class="rounded" />
+              推倒重来
+            </label>
+          </template>
         </div>
         <div class="flex flex-wrap gap-2">
           <button
-            v-for="preset in aiPromptPresets"
+            v-for="preset in aiActivePresets"
             :key="preset.label"
             @click="applyAiPreset(preset)"
             class="px-2.5 py-1 rounded-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
@@ -782,7 +807,7 @@
 
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
         <div v-if="aiMessages.length === 0" class="text-sm text-slate-400 text-center py-6">
-          请输入需求，AI 将生成结构化改图建议
+          {{ aiEmptyHint }}
         </div>
         <div class="flex flex-col gap-3">
           <div
@@ -804,7 +829,7 @@
           </div>
         </div>
 
-        <div v-if="aiChangeSet" class="space-y-3">
+        <div v-if="aiChangeSet && aiMode === 'flow'" class="space-y-3">
           <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
             <p class="text-xs text-slate-500 mb-1">变更摘要</p>
             <p class="text-sm text-slate-700">{{ aiChangeSet.summary || 'AI 未返回摘要' }}</p>
@@ -877,7 +902,7 @@
           @keydown.enter.ctrl.prevent="submitAiRequest"
           @keydown.enter.meta.prevent="submitAiRequest"
           class="w-full h-24 p-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          placeholder="描述你想如何修改流程图，例如：新增一个审批节点并在通过后通知人事..."
+          :placeholder="aiPromptPlaceholder"
         ></textarea>
         <div class="flex items-center justify-between">
           <button
@@ -885,8 +910,9 @@
             :disabled="!aiPrompt.trim() || aiStatus === 'loading'"
             class="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
-            <Send class="w-3.5 h-3.5" />
-            发送
+            <Loader2 v-if="aiStatus === 'loading'" class="w-3.5 h-3.5 animate-spin" />
+            <Send v-else class="w-3.5 h-3.5" />
+            {{ aiStatus === 'loading' ? '生成中' : '发送' }}
           </button>
           <button
             v-if="aiStatus === 'error'"
@@ -1037,7 +1063,7 @@ import {
   AlignLeft, AlignRight, AlignCenterHorizontal,
   AlignStartVertical, AlignEndVertical, AlignCenterVertical,
   Hand, FolderOpen, Plus, Download,
-  Sparkles, X, Send
+  Sparkles, X, Send, Loader2
 } from 'lucide-vue-next'
 
 // ==================== 类型定义 ====================
@@ -1596,6 +1622,8 @@ const aiPrompt = ref('')
 const aiUseFlowContext = ref(true)
 const aiUseSelectionOnly = ref(false)
 const aiReplaceAll = ref(false)
+type AiMode = 'flow' | 'general'
+const aiMode = ref<AiMode>('flow')
 const aiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle')
 const aiMessages = ref<AiMessage[]>([])
 const aiChangeSet = ref<ChangeSet | null>(null)
@@ -1604,7 +1632,8 @@ const aiSelectedChangeKeys = ref<string[]>([])
 const aiValidationErrors = ref<string[]>([])
 const aiValidationWarnings = ref<string[]>([])
 const aiRawResponse = ref('')
-const aiLastRequest = ref<{ system: string; user: string } | null>(null)
+type AiRequestPayload = { mode: AiMode; system: string; user: string; displayPrompt: string }
+const aiLastRequest = ref<AiRequestPayload | null>(null)
 
 const aiPromptPresets = [
   { label: '生成审批流程', prompt: '生成一个请假审批流程，包含提交、主管审批、HR备案和通知。' },
@@ -1612,10 +1641,36 @@ const aiPromptPresets = [
   { label: '优化异常处理', prompt: '把异常处理移动到流程末尾，并增加通知步骤。' }
 ]
 
+const aiGeneralPromptPresets = [
+  { label: '我能做什么', prompt: '你能帮我做什么？' },
+  { label: '怎么描述改图', prompt: '我应该怎么描述一个改图需求，才能让你生成正确的 changeSet？' },
+  { label: '快捷键/操作', prompt: '流程画布有哪些常用操作和快捷键？' }
+]
+
+const aiActivePresets = computed(() => aiMode.value === 'flow' ? aiPromptPresets : aiGeneralPromptPresets)
+
 const allowedNodeTypes = computed(() => {
   const types = [...basicShapes.map(s => s.type), ...flowShapes.map(s => s.type)]
   return Array.from(new Set(types))
 })
+
+const aiPanelSubtitle = computed(() =>
+  aiMode.value === 'flow'
+    ? '结构化变更 · 确认后应用'
+    : '通用问答 · 不会直接改图'
+)
+
+const aiEmptyHint = computed(() =>
+  aiMode.value === 'flow'
+    ? '请输入改图需求，AI 将生成结构化改图建议'
+    : '输入通用问题（例如“怎么新增节点/怎么描述改图需求”）。需要改图时切到“改图”。'
+)
+
+const aiPromptPlaceholder = computed(() =>
+  aiMode.value === 'flow'
+    ? '描述你想如何修改流程图，例如：新增一个审批节点并在通过后通知人事...'
+    : '输入你的问题，例如：这个画布怎么用？如何描述一个改图需求？'
+)
 
 const aiStatusText = computed(() => {
   switch (aiStatus.value) {
@@ -2100,6 +2155,30 @@ const buildAiUserMessage = (prompt: string) => {
     `允许节点类型: ${allowedTypes}`,
     `重建全部: ${aiReplaceAll.value ? '是' : '否'}`
   ].join('\n')
+}
+
+const buildAiGeneralSystemPrompt = () => {
+  return [
+    '你是流程画布助手，用简洁中文回答用户的通用问题。',
+    '你可以解释：如何使用画布、如何建模流程、如何写清楚改图需求、常见问题排查。',
+    '不要输出 changeSet JSON；当用户明确要改图时，提示他切换到“改图”模式或直接提出具体改图需求。'
+  ].join('\n')
+}
+
+const buildAiGeneralUserMessage = (prompt: string) => {
+  const flowSummary = aiUseFlowContext.value ? JSON.stringify(getFlowSummary()) : '无'
+  return [
+    `问题: ${prompt}`,
+    `当前流程摘要: ${flowSummary}`
+  ].join('\n')
+}
+
+const isGreetingPrompt = (prompt: string) => {
+  const normalized = prompt.trim().replace(/\s+/g, ' ')
+  if (!normalized) return false
+  if (/^[!?.,，。！？]+$/.test(normalized)) return true
+  const lower = normalized.toLowerCase()
+  return /^(hi|hello|hey|yo|sup|hola|bonjour|你好|您好|嗨|哈喽|在吗|喂|早上好|下午好|晚上好)([!！。.，, ]*)$/.test(lower)
 }
 
 const extractJsonFromContent = (content: string) => {
@@ -2590,56 +2669,55 @@ const readSseContent = async (res: Response, onChunk: (text: string) => void) =>
   return content
 }
 
-const runAiRequest = async (payload: { system: string; user: string; displayPrompt: string }) => {
+const fetchAiContent = async (payload: { system: string; user: string }) => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'origin': 'https://www.toproject.cloud',
+    'priority': 'u=1, i',
+    'referer': 'https://www.toproject.cloud/',
+    ...flowAiApi.headers
+  }
+  if (flowAiApi.key) headers['Authorization'] = `Bearer ${flowAiApi.key}`
+
+  aiRawResponse.value = ''
+  const res = await fetch(flowAiApi.url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: flowAiApi.model,
+      messages: [
+        { role: 'system', content: payload.system },
+        { role: 'user', content: payload.user }
+      ],
+      temperature: flowAiTemperature,
+      stream: true,
+      web_search: false
+    })
+  })
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const contentType = res.headers.get('content-type') || ''
+  if (contentType.includes('text/event-stream')) {
+    return await readSseContent(res, (chunk) => {
+      aiRawResponse.value += chunk
+    })
+  }
+  const data = await res.json()
+  const content = data?.choices?.[0]?.message?.content || ''
+  aiRawResponse.value = content
+  return content
+}
+
+const runAiFlowRequest = async (payload: AiRequestPayload) => {
   if (aiStatus.value === 'loading') return
 
-  aiMessages.value.push({
-    id: generateId(),
-    role: 'user',
-    content: payload.displayPrompt
-  })
+  aiMessages.value.push({ id: generateId(), role: 'user', content: payload.displayPrompt })
   aiStatus.value = 'loading'
   aiLastRequest.value = payload
   clearAiPreview({ keepStatus: true })
 
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'origin': 'https://www.toproject.cloud',
-      'priority': 'u=1, i',
-      'referer': 'https://www.toproject.cloud/',
-      ...flowAiApi.headers
-    }
-    if (flowAiApi.key) headers['Authorization'] = `Bearer ${flowAiApi.key}`
-
-    aiRawResponse.value = ''
-    const res = await fetch(flowAiApi.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: flowAiApi.model,
-        messages: [
-          { role: 'system', content: payload.system },
-          { role: 'user', content: payload.user }
-        ],
-        temperature: flowAiTemperature,
-        stream: true,
-        web_search: false
-      })
-    })
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const contentType = res.headers.get('content-type') || ''
-    let content = ''
-    if (contentType.includes('text/event-stream')) {
-      content = await readSseContent(res, (chunk) => {
-        aiRawResponse.value += chunk
-      })
-    } else {
-      const data = await res.json()
-      content = data?.choices?.[0]?.message?.content || ''
-      aiRawResponse.value = content
-    }
+    const content = await fetchAiContent(payload)
     if (!content) throw new Error('AI 返回为空')
 
     const changeSet = parseChangeSetFromContent(content)
@@ -2667,24 +2745,66 @@ const runAiRequest = async (payload: { system: string; user: string; displayProm
     const message = err instanceof Error ? err.message : '请求失败'
     aiStatus.value = 'error'
     aiValidationErrors.value = [message]
-    aiMessages.value.push({
-      id: generateId(),
-      role: 'assistant',
-      content: `生成失败：${message}`,
-      state: 'error'
-    })
+    aiMessages.value.push({ id: generateId(), role: 'assistant', content: `生成失败：${message}`, state: 'error' })
   }
+}
+
+const runAiTextRequest = async (payload: AiRequestPayload) => {
+  if (aiStatus.value === 'loading') return
+
+  aiMessages.value.push({ id: generateId(), role: 'user', content: payload.displayPrompt })
+  aiStatus.value = 'loading'
+  aiLastRequest.value = payload
+  clearAiPreview({ keepStatus: true })
+
+  try {
+    const content = await fetchAiContent(payload)
+    if (!content) throw new Error('AI 返回为空')
+    aiStatus.value = 'ready'
+    aiMessages.value.push({ id: generateId(), role: 'assistant', content, state: 'ok' })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '请求失败'
+    aiStatus.value = 'error'
+    aiValidationErrors.value = [message]
+    aiMessages.value.push({ id: generateId(), role: 'assistant', content: `生成失败：${message}`, state: 'error' })
+  }
+}
+
+const runAiRequest = async (payload: AiRequestPayload) => {
+  if (payload.mode === 'general') return await runAiTextRequest(payload)
+  return await runAiFlowRequest(payload)
 }
 
 const submitAiRequest = async () => {
   const prompt = aiPrompt.value.trim()
   if (!prompt) return
-  const payload = {
-    system: buildAiSystemPrompt(),
-    user: buildAiUserMessage(prompt),
-    displayPrompt: prompt
-  }
   aiPrompt.value = ''
+
+  if (isGreetingPrompt(prompt)) {
+    clearAiPreview({ keepStatus: true })
+    aiMessages.value.push({ id: generateId(), role: 'user', content: prompt })
+    aiStatus.value = 'ready'
+    aiMessages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      state: 'ok',
+      content: [
+        '你好！这里可以处理两类问题：',
+        '1) 通用问答：画布怎么用/怎么描述需求/常见问题排查（切到“通用问答”）',
+        '2) 专业改图：生成或修改流程图（切到“改图”，会输出结构化 changeSet，需你确认后应用）',
+        '',
+        '你现在更想做哪一种？可以直接输入：',
+        '- “我想生成一个请假审批流程……”（改图）',
+        '- “怎么新增节点/怎么连线/有哪些快捷键？”（通用问答）'
+      ].join('\n')
+    })
+    return
+  }
+
+  const payload: AiRequestPayload = aiMode.value === 'flow'
+    ? { mode: 'flow', system: buildAiSystemPrompt(), user: buildAiUserMessage(prompt), displayPrompt: prompt }
+    : { mode: 'general', system: buildAiGeneralSystemPrompt(), user: buildAiGeneralUserMessage(prompt), displayPrompt: prompt }
+
   await runAiRequest(payload)
 }
 
