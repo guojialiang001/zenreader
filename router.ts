@@ -24,6 +24,8 @@ import TokenCounter from './pages/TokenCounter.vue'
 import TextHumanizer from './pages/TextHumanizer.vue'
 import SpeechRecognition from './pages/SpeechRecognition.vue'
 import SandboxTest from './pages/SandboxTest.vue'
+import Translator from './pages/Translator.vue'
+import HttpTestTool from './pages/HttpTestTool.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home },
@@ -50,6 +52,8 @@ const routes = [
   { path: '/token', name: 'token', component: TokenCounter },
   { path: '/humanizer', name: 'humanizer', component: TextHumanizer },
   { path: '/speech', name: 'speech', component: SpeechRecognition },
+  { path: '/translate', name: 'translate', component: Translator },
+  { path: '/http/:encodedUrl(.*)?', name: 'http', component: HttpTestTool },
   { path: '/sandbox', name: 'sandbox', component: SandboxTest }
 ]
 
