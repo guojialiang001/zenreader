@@ -18,7 +18,7 @@ const tools = [
   { name: 'JSON 工具', desc: '校验与优美格式化，支持展开收起与行号', route: '/json', icon: 'braces', tags: ['格式', '验证', '开发'], features: ['语法高亮', '错误检查', '压缩/美化'], usageCount: '9.3k+' },
   { name: '时间戳工具', desc: '时间与时间戳互转，实时展示当前时间', route: '/timestamp', icon: 'clock', tags: ['时间', '时区', '计算'], features: ['时区转换', '倒计时', '时间差计算'], usageCount: '7.8k+' },
   { name: '计算器', desc: '支持表达式、科学函数与BigInt超大整数计算，带溢出/精度提示', route: '/calculator', icon: 'calculator', tags: ['计算', '表达式', 'BigInt'], features: ['函数与常量', '历史记录', '溢出/精度提示'], usageCount: '0k+' },
-  { name: '大小写转换', desc: '快速转换文本大小写，支持批量操作', route: '/case', icon: 'case', tags: ['文本', '转换', '编辑'], features: ['大小写转换', '文本清洗', '字数统计'], usageCount: '5.2k+' },
+  { name: '命名/大小写转换', desc: '驼峰/蛇形/短横线/常量/Slug 按行批量互转', route: '/case', icon: 'case', tags: ['命名', 'slug', '文本', '转换'], features: ['命名格式互转', '按行批量', '一键复制'], usageCount: '5.2k+' },
   // { name: 'AI编剧工具', desc: '基于AI生成完整剧本，包括章纲和详细章节内容', route: '/script-writer', icon: 'file', tags: ['剧本', 'AI', '生成'], features: ['智能生成', '章节管理', '一键复制'], usageCount: '0.8k+' },
   // { name: '3D动作生成器', desc: '输入提示词生成3D动作，支持关节调节和动画播放', route: '/3d-action', icon: 'image', tags: ['3D', '动作', 'AI'], features: ['提示词生成', '关节调节', '动画播放', '截图保存'], usageCount: '0.5k+' },
   { name: 'SSH终端', desc: '前端SSH终端模拟器', route: '/ssh', icon: 'string', tags: ['SSH', '终端', '连接'], features: ['终端模拟', '命令执行', '安全连接'], usageCount: '0k+' },
