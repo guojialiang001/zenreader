@@ -123,9 +123,9 @@ const colorClass = (text: string) => {
           </button>
         </div>
       </div>
-      <div>
-        <div v-for="line in visibleLines" :key="line.id + '-c'" class="h-7 leading-7">
-          <span :style="{ marginLeft: (line.depth * 20) + 'px' }" :class="colorClass(line.text)" class="font-mono text-sm whitespace-pre-wrap break-words">
+      <div class="overflow-x-auto min-w-0">
+        <div v-for="line in visibleLines" :key="line.id + '-c'" class="h-7 leading-7 pr-4">
+          <span :style="{ marginLeft: (line.depth * 20) + 'px' }" :class="colorClass(line.text)" class="font-mono text-sm whitespace-nowrap">
             {{ line.text }}
           </span>
         </div>
